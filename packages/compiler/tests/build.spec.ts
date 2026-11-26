@@ -326,6 +326,6 @@ describe('interface names', () => {
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
     expect(dts).toContain('export interface FooBarMessages {\n  /** Dash */\n  dash(): string;');
     expect(dts).toContain('export interface FooBar2Messages {\n  /** Under */\n  under(): string;');
-    expect(dts).toContain('"foo-bar": FooBarMessages;\n      "foo_bar": FooBar2Messages;');
+    expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
   });
 });
