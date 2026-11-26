@@ -67,6 +67,17 @@ describe(createRuntime, () => {
     expect(rt.pick([], [['a']])).toBe(0);
   });
 
+  it('lets the first differing key decide between variants, then the earlier variant', () => {
+    const variants = [
+      ['one', null],
+      [null, 'x'],
+      [null, null],
+      ['one', null],
+    ];
+    expect(rt.pick([rt.sn(1), rt.ss('x')], variants)).toBe(0);
+    expect(rt.pick([rt.sn(2), rt.ss('x')], variants)).toBe(1);
+  });
+
   it('keeps a bounded formatter cache, dropping the oldest', () => {
     const fresh = createRuntime('en');
     const made = vi.spyOn(Intl, 'NumberFormat');
