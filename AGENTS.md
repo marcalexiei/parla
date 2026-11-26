@@ -20,8 +20,9 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 | `packages/format-icu` | ICU → MF2 data model                                       |
 | `packages/format-mf2` | MF2 → MF2 data model                                       |
 | `scripts/`            | Repo tooling (`check-all.ts`), via `tsconfig.scripts.json` |
+| `bench/`              | Benchmarks against `main`, via `vitest.config.bench.ts`    |
 
-The benchmark lives in `parla-benchmark`, keeping its dependencies out of here.
+Comparisons with other libraries live in `parla-benchmark`, keeping their dependencies out of here.
 
 ## Design
 
@@ -48,6 +49,7 @@ The benchmark lives in `parla-benchmark`, keeping its dependencies out of here.
 ```sh
 pnpm test             # vitest, once (`pnpm exec vitest` watches)
 pnpm test:coverage    # fails under a floor in vitest.config.coverage.ts
+pnpm bench            # PARLA_BASE=<main checkout> fails a branch 25% slower or 2% bigger
 pnpm typecheck        # builds, then tsc
 pnpm lint             # oxlint (`lint:fix`, `lint:knip`, `lint:publish`, `lint:lib-check`)
 pnpm format           # oxfmt
@@ -55,7 +57,8 @@ pnpm pack:all         # tarballs in .packs/
 pnpm check-all        # every CI check, cheapest first (`-k` keeps going)
 ```
 
-- **Keep `scripts/check-all.ts` in step with `.github/workflows/ci.yml`.**
+- **Keep `scripts/check-all.ts` in step with `.github/workflows/ci.yml`**, all but `bench`: CI runs it
+  against the base on one runner, and CI OK does not need it, so a deliberate trade-off can merge.
 - **`typecheck` builds first**: packages resolve siblings through their `.d.ts`.
 - **The source condition is `@parlajs/source`**; vitest needs it in `ssr.resolve.conditions` too.
 

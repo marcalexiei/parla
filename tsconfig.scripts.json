@@ -1,10 +1,12 @@
 {
   "extends": "./tsconfig.base.json",
   "include": [
+    "bench",
     "scripts",
     "oxfmt.config.ts",
     "oxlint.config.ts",
     "vitest.config.ts",
+    "vitest.config.bench.ts",
     "vitest.config.coverage.ts"
   ],
   "compilerOptions": {
