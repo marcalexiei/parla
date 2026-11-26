@@ -42,6 +42,6 @@
     "isolatedModules": true,
 
     // Completeness
-    "skipLibCheck": true
+    "skipLibCheck": false
   }
 }

@@ -50,6 +50,7 @@
     "messageformat": "^4.1.0"
   },
   "devDependencies": {
+    "@types/moo": "0.5.10",
     "vitest": "catalog:default"
   },
   "engines": {

@@ -96,6 +96,10 @@ jobs:
       - name: Lint (packaging and published types)
         run: pnpm run lint:publish
 
+      # A consumer keeping `skipLibCheck: false` type-checks the published and generated `.d.ts`.
+      - name: Lint (published types with lib check)
+        run: pnpm run lint:lib-check
+
   github-actions-audit:
     name: GitHub Actions audit
     runs-on: ubuntu-26.04
