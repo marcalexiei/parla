@@ -1,5 +1,13 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join, relative } from 'node:path';
 
 import { icu } from '@parlajs/format-icu';
 import { mf2 } from '@parlajs/format-mf2';
@@ -189,12 +197,18 @@ const registry = (name: string, members: ReadonlyArray<[key: string, type: strin
     ? ''
     : `  interface ${name} {\n${members.map(([k, t]) => `    ${JSON.stringify(k)}: ${t};`).join('\n')}\n  }\n`;
 
+/**
+ * Writes through a dotted temp file and a rename: builds run at once (one per app of a monorepo, the
+ * dev server beside `tsc --watch`) must never read a half-written chunk.
+ */
 function writeIfChanged(file: string, content: string, written: Array<string>): void {
   if (existsSync(file) && readFileSync(file, 'utf8') === content) {
     return;
   }
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, content);
+  const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.tmp`);
+  writeFileSync(tmp, content);
+  renameSync(tmp, file);
   written.push(file);
 }
 
@@ -408,8 +422,9 @@ export function build(options: BuildOptions = {}): BuildResult {
       const messagesDir = join(out, 'messages');
       for (const locale of existsSync(messagesDir) ? readdirSync(messagesDir) : []) {
         for (const file of readdirSync(join(messagesDir, locale))) {
-          if (!chunks.has(join('messages', locale, file))) {
-            rmSync(join(messagesDir, locale, file));
+          // a dotted file is another build's write in progress; a parallel build may remove first
+          if (!file.startsWith('.') && !chunks.has(join('messages', locale, file))) {
+            rmSync(join(messagesDir, locale, file), { force: true });
           }
         }
       }
