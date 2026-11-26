@@ -76,62 +76,49 @@ function useParlaContext(): ParlaContextValue {
   return value;
 }
 
-/** One namespace, or several. */
-export type NamespaceInput = Namespace | ReadonlyArray<Namespace>;
+/** Accessors keyed by namespace: `t.checkout.title()`. */
+export type Translations<NS extends ReadonlyArray<Namespace>> = {
+  readonly [K in NS[number]]: Namespaces[K];
+};
 
-/** One namespace's accessor, or an object of accessors keyed by namespace. */
-export type Translations<NS extends NamespaceInput> =
-  NS extends ReadonlyArray<Namespace>
-    ? { readonly [K in NS[number]]: Namespaces[K] }
-    : NS extends Namespace
-      ? Namespaces[NS]
-      : never;
-
-export interface SuspenseParlaResult<NS extends NamespaceInput> {
+export interface SuspenseParlaResult<NS extends ReadonlyArray<Namespace>> {
   readonly parla: Parla;
   readonly t: Translations<NS>;
 }
 
 /** `t` exists only once `ready` is checked. */
-export type ParlaResult<NS extends NamespaceInput> =
+export type ParlaResult<NS extends ReadonlyArray<Namespace>> =
   | { readonly ready: true; readonly parla: Parla; readonly t: Translations<NS> }
   | { readonly ready: false; readonly parla: Parla; readonly t: undefined };
 
-const toList = (namespaces: NamespaceInput): ReadonlyArray<Namespace> =>
-  typeof namespaces === 'string' ? [namespaces] : namespaces;
-
-// Keyed objects are cached so `t` keeps its identity across renders, as a single accessor does.
+// Cached so `t` keeps its identity across renders while the locale stays.
 const keyedCache = new WeakMap<Parla, Map<string, object>>();
 
-function shape(
+function keyed(
   parla: Parla,
   locale: Locale,
-  namespaces: NamespaceInput,
+  namespaces: ReadonlyArray<Namespace>,
   accessors: ReadonlyArray<unknown>,
 ): unknown {
-  if (typeof namespaces === 'string') {
-    return accessors[0];
-  }
-  const list = toList(namespaces);
-  const key = `${locale}\u0000${list.join('\u0000')}`;
+  const key = `${locale}\u0000${namespaces.join('\u0000')}`;
   let byKey = keyedCache.get(parla);
   if (!byKey) {
     byKey = new Map();
     keyedCache.set(parla, byKey);
   }
-  let keyed = byKey.get(key);
-  if (!keyed) {
-    keyed = Object.fromEntries(list.map((ns, i) => [ns, accessors[i]]));
-    byKey.set(key, keyed);
+  let t = byKey.get(key);
+  if (!t) {
+    t = Object.fromEntries(namespaces.map((ns, i) => [ns, accessors[i]]));
+    byKey.set(key, t);
   }
-  return keyed;
+  return t;
 }
 
 /**
- * Typed messages for one namespace or several, suspending until they load for the current
- * locale. Switching locale does not suspend: `setLocale` loads first.
+ * Typed messages for the namespaces, suspending until they load for the current locale.
+ * Switching locale does not suspend: `setLocale` loads first.
  */
-export function useSuspenseParla<const NS extends NamespaceInput>(
+export function useSuspenseParla<const NS extends ReadonlyArray<Namespace>>(
   namespaces: NS,
 ): SuspenseParlaResult<NS> {
   const { parla } = useParlaContext();
@@ -139,7 +126,7 @@ export function useSuspenseParla<const NS extends NamespaceInput>(
   // Every load starts before the first `use()` can suspend, so they download in parallel.
   // A loop, not an `async` callback: `use()` needs Parla's cached promise itself.
   const pending: Array<Promise<unknown>> = [];
-  for (const ns of toList(namespaces)) {
+  for (const ns of namespaces) {
     pending.push(parla.load(ns, locale));
   }
   const accessors: Array<unknown> = [];
@@ -147,19 +134,20 @@ export function useSuspenseParla<const NS extends NamespaceInput>(
     // Called on every render: React forbids skipping a `use()` that suspended before.
     accessors.push(use(promise));
   }
-  return { parla, t: shape(parla, locale, namespaces, accessors) as Translations<NS> };
+  return { parla, t: keyed(parla, locale, namespaces, accessors) as Translations<NS> };
 }
 
 /**
- * Typed messages for one namespace or several, without suspending: `ready` is false until they
- * load for the current locale, then the component re-renders. Loaded ones are ready at once.
+ * Typed messages for the namespaces, without suspending: `ready` is false until they load for
+ * the current locale, then the component re-renders. Loaded ones are ready at once.
  */
-export function useParla<const NS extends NamespaceInput>(namespaces: NS): ParlaResult<NS> {
+export function useParla<const NS extends ReadonlyArray<Namespace>>(
+  namespaces: NS,
+): ParlaResult<NS> {
   const { parla } = useParlaContext();
   const { locale } = useSyncExternalStore(parla.subscribe, parla.getSnapshot, parla.getSnapshot);
-  const list = toList(namespaces);
-  const key = list.join('\u0000');
-  const accessors = list.map((ns) => parla.getT(ns));
+  const key = namespaces.join('\u0000');
+  const accessors = namespaces.map((ns) => parla.getT(ns));
   const ready = accessors.every((accessor) => accessor !== undefined);
   const [failure, setFailure] = useState<{ readonly error: unknown }>();
   const [, loaded] = useReducer((count: number) => count + 1, 0);
@@ -192,7 +180,7 @@ export function useParla<const NS extends NamespaceInput>(namespaces: NS): Parla
   if (!ready) {
     return { ready, parla, t: undefined };
   }
-  return { ready, parla, t: shape(parla, locale, namespaces, accessors) as Translations<NS> };
+  return { ready, parla, t: keyed(parla, locale, namespaces, accessors) as Translations<NS> };
 }
 
 /** Current locale and a setter that loads the namespaces in use before switching. */

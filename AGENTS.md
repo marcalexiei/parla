@@ -40,8 +40,8 @@ its dependencies stay out of this workspace.
   package may not resolve `@parlajs/core` itself.
 - **Each namespace has exactly one owner package**; a second owner is a build error, not a merge.
 - **React has one API in two hooks**: `useSuspenseParla` suspends, `useParla` returns `ready`.
-  Both take a namespace or a list and return an object, so fields can join later; tooling such as
-  the x18n scanner recognises only these two.
+  Both take a list of namespaces, even for one, key `t` by namespace and return an object, so
+  fields can join later; tooling such as the x18n scanner recognises only these two.
 
 ## Changesets
 

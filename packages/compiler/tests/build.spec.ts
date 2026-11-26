@@ -181,20 +181,19 @@ describe('types for a package that depends on an adapter only', () => {
       `import type { ReactNode } from 'react';
 import { useParla, useSuspenseParla } from '@parlajs/react';
 import './parla/catalog.js';
-const { t } = useSuspenseParla('widget');
-export const title: string = t.title();
-export const terms: ReactNode = t.terms({ link: (children) => children });
+const { t } = useSuspenseParla(['widget']);
+export const title: string = t.widget.title();
+export const terms: ReactNode = t.widget.terms({ link: (children) => children });
 // @ts-expect-error a ReactNode is not a number, so the adapter's RichNode reached the types
-export const wrong: number = t.terms({ link: (children) => children });
-export const keyed: string = useSuspenseParla(['widget']).t.widget.title();
-const lazy = useParla('widget');
-export const ready: string | undefined = lazy.ready ? lazy.t.title() : undefined;
+export const wrong: number = t.widget.terms({ link: (children) => children });
+const lazy = useParla(['widget']);
+export const ready: string | undefined = lazy.ready ? lazy.t.widget.title() : undefined;
 // @ts-expect-error \`t\` is undefined until \`ready\` is checked
-lazy.t.title();
+lazy.t.widget.title();
 // @ts-expect-error the namespace is registered, so an unknown one is rejected
-useSuspenseParla('missing');
-// @ts-expect-error in a list too
 useParla(['widget', 'missing']);
+// @ts-expect-error always a list, even for one namespace
+useSuspenseParla('widget');
 `,
     );
     const reactTypes = join(repo, 'packages/react/node_modules/@types/react');

@@ -82,12 +82,12 @@ const catalog: Catalog = {
 const link = (children: ReactNode): ReactNode => <a href="/terms">{children}</a>;
 
 function Shop(): ReactNode {
-  const { t } = useSuspenseParla('shop');
+  const { t } = useSuspenseParla(['shop']);
   const [locale, setLocale] = useLocale();
   return (
     <div>
-      <h1>{t.title()}</h1>
-      <p>{t.terms({ link })}</p>
+      <h1>{t.shop.title()}</h1>
+      <p>{t.shop.terms({ link })}</p>
       <button
         type="button"
         onClick={() => {
@@ -112,7 +112,7 @@ function Greeting(): ReactNode {
 }
 
 function Offline(): ReactNode {
-  const { ready } = useParla('broken');
+  const { ready } = useParla(['broken']);
   return <span>{ready ? 'ready' : 'not ready'}</span>;
 }
 
@@ -129,7 +129,7 @@ class Boundary extends Component<{ children: ReactNode }, { error?: Error }> {
 }
 
 function Broken(): ReactNode {
-  useSuspenseParla('shop');
+  useSuspenseParla(['shop']);
   return null;
 }
 
@@ -243,8 +243,8 @@ describe('@parlajs/react', () => {
     });
     expect(screen.getByRole('heading').textContent).toBe('Hello Shop');
 
-    const { result } = renderHook(() => useParla('extra'), { wrapper: wrapperFor(parla) });
-    expect(result.current.ready && result.current.t.hello()).toBe('Hello');
+    const { result } = renderHook(() => useParla(['extra']), { wrapper: wrapperFor(parla) });
+    expect(result.current.ready && result.current.t.extra.hello()).toBe('Hello');
   });
 
   it('hands a failed download to the error boundary', async () => {
@@ -261,6 +261,23 @@ describe('@parlajs/react', () => {
       await expect(parla.load('broken')).rejects.toThrow('offline');
     });
     await expect(screen.findByText('offline')).resolves.toBeDefined();
+  });
+
+  it('ignores a load that settles after unmounting', async () => {
+    const consoleError = vi.spyOn(console, 'error');
+    const parla = createParla({ catalog });
+    const { unmount } = render(
+      <ParlaProvider parla={parla}>
+        <Greeting />
+        <Offline />
+      </ParlaProvider>,
+    );
+    unmount();
+    await act(async () => {
+      await parla.preload(['shop', 'extra']);
+      await expect(parla.load('broken')).rejects.toThrow('offline');
+    });
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it('explains a missing provider', () => {

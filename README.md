@@ -7,11 +7,11 @@
 > **Status:** experimental (`0.0.0`). APIs will change; nothing is published to npm yet.
 
 ```tsx
-const { t } = useSuspenseParla('checkout');
+const { t } = useSuspenseParla(['checkout']);
 
-t.title(); // "Checkout"
-t.cart.items({ count: 3 }); // "3 items"       — count: number, required
-t.terms({ link: (c) => <a href="/terms">{c}</a> });
+t.checkout.title(); // "Checkout"
+t.checkout.cart.items({ count: 3 }); // "3 items"       — count: number, required
+t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 ```
 
 ## Why
@@ -92,7 +92,7 @@ createRoot(root).render(
 );
 ```
 
-Two hooks, as in TanStack Query, take one namespace or several:
+Two hooks, as in TanStack Query, take a list of namespaces and key `t` by namespace:
 
 ```tsx
 // Suspends until the chunks for the current locale load.
@@ -101,9 +101,9 @@ t.checkout.title();
 t.common.locale.label();
 
 // Never suspends: `t` is typed as present only once `ready` is checked.
-const { t, ready } = useParla('checkout');
+const { t, ready } = useParla(['checkout']);
 if (!ready) return <Spinner />;
-t.title();
+t.checkout.title();
 ```
 
 A namespace that is already loaded is ready on the first render. `useLocale()` returns the locale

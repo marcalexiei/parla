@@ -11,12 +11,12 @@ import { catalog } from './parla/catalog.js'; // written by `parla build`
 const parla = createParla({ catalog });
 
 function Cart({ count }: { count: number }) {
-  const { t } = useSuspenseParla('checkout'); // suspends until the chunk for the current locale loads
+  const { t } = useSuspenseParla(['checkout']); // suspends until the chunk for the current locale loads
   const [locale, setLocale] = useLocale();
   return (
     <>
-      <p>{t.cart.items({ count })}</p>
-      <p>{t.terms({ link: (children) => <a href="/terms">{children}</a> })}</p>
+      <p>{t.checkout.cart.items({ count })}</p>
+      <p>{t.checkout.terms({ link: (children) => <a href="/terms">{children}</a> })}</p>
       <button onClick={() => void setLocale(locale === 'en' ? 'it' : 'en')}>{locale}</button>
     </>
   );
@@ -33,10 +33,10 @@ createRoot(root).render(
 
 Switching locale never shows the Suspense fallback: `setLocale` loads first, then re-renders.
 
-Both hooks take one namespace or a list, and return `parla` alongside `t`:
+Both hooks take a list of namespaces, key `t` by namespace, and return `parla` alongside it:
 
 - `useSuspenseParla(['checkout', 'common'])` suspends; `t.checkout.…`, `t.common.…`.
-- `useParla('checkout')` never suspends: it returns `{ ready: false }` until the chunk loads, and
+- `useParla(['checkout'])` never suspends: it returns `{ ready: false }` until the chunk loads, and
   `t` is typed as present only once `ready` is checked.
 
 Requires React 19.
