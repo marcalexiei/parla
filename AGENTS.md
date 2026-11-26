@@ -33,8 +33,9 @@ its dependencies stay out of this workspace.
 - **A chunk exports `($) => accessor`**: called once per locale with its `MessageRuntime`, it
   returns the nested tree of `(p) => …` messages in one object literal. `$`'s member names are
   short on purpose: they are repeated in every chunk.
-- **Startup cost lives in the chunk factory**: a message that never reads `$` is hoisted to module
-  scope, and a group past 127 keys is split, since V8 builds larger literals ~100× slower.
+- **Startup cost lives in the chunk factory**: a group past 127 keys is split, since V8 builds
+  larger literals ~100× slower. Hoisting messages out of the factory was measured: no faster, and
+  40% more gzip.
 - **The runtime runs in browsers**: `core`, `react` and `format-*` read no Node globals
   (`no-restricted-globals` enforces it). Only `compiler` is Node-only.
 - **Types reach a consumer through `Register`**: generated `catalog.d.ts` augments it with `locale`

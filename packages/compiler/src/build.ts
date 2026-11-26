@@ -242,7 +242,6 @@ export function build(options: BuildOptions = {}): BuildResult {
     for (const locale of config.locales) {
       const scope = new ModuleScope();
       const messages: Array<[key: string, fn: string]> = [];
-      const hoisted: Array<string> = [];
       const own = catalogs.get(locale) ?? new Map<string, Entry>();
       const chain = fallbackChain(config, locale);
       const at = (d: Omit<Diagnostic, 'namespace' | 'locale'>): void => {
@@ -332,19 +331,10 @@ export function build(options: BuildOptions = {}): BuildResult {
         }
         // A message that never reads `p` takes no default, so a call without params allocates nothing.
         const param = /\bp\b/.test(compiled.body) ? 'p = {}' : 'p';
-        const fn = `(${param}) => ${compiled.body}`;
-        // One that never reads `$` is created once per module, not on every load.
-        if (compiled.body.includes('$.')) {
-          messages.push([key, fn]);
-        } else {
-          const name = `m${hoisted.length}`;
-          hoisted.push(`const ${name} = ${fn};`);
-          messages.push([key, name]);
-        }
+        messages.push([key, `(${param}) => ${compiled.body}`]);
       }
 
-      const declared = [...scope.consts, ...hoisted];
-      const consts = declared.length > 0 ? `${declared.join('\n')}\n` : '';
+      const consts = scope.consts.length > 0 ? `${scope.consts.join('\n')}\n` : '';
       chunks.set(
         join('messages', locale, `${ns.name}.js`),
         `${HEADER}${consts}export default ($) => (${emitGroup(treeOf(messages), '')});\n`,

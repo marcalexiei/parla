@@ -242,8 +242,7 @@ describe('chunks', () => {
     );
     build({ cwd: dir });
     const chunk = readFileSync(join(dir, 'src/parla/messages/en/app.js'), 'utf8');
-    // Plain text never reads `p` or `$`, so it is created once per module.
-    expect(chunk).toMatch(/const (?<name>m\d+) = \(p\) => "Plain";[\s\S]*"plain": \k<name>,/);
+    expect(chunk).toContain('"plain": (p) => "Plain",');
 
     const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
       catalog: Catalog;
@@ -266,9 +265,6 @@ describe('chunks', () => {
       | (() => string)
       | undefined;
     expect(bigProto?.()).toBe('Big proto');
-    const again = (await createParla({ catalog }).load('app')) as typeof t;
-    expect(again.plain).toBe(t.plain);
-    expect(again.terms).not.toBe(t.terms);
     // Markup without its callback keeps the children, as before.
     expect(t.terms()).toBe('Read the terms');
   });
