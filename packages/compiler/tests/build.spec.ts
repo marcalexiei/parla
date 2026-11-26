@@ -179,15 +179,22 @@ describe('types for a package that depends on an adapter only', () => {
     write(
       'src/usage.ts',
       `import type { ReactNode } from 'react';
-import { useT } from '@parlajs/react';
+import { useParla, useSuspenseParla } from '@parlajs/react';
 import './parla/catalog.js';
-const t = useT('widget');
+const { t } = useSuspenseParla('widget');
 export const title: string = t.title();
 export const terms: ReactNode = t.terms({ link: (children) => children });
 // @ts-expect-error a ReactNode is not a number, so the adapter's RichNode reached the types
 export const wrong: number = t.terms({ link: (children) => children });
+export const keyed: string = useSuspenseParla(['widget']).t.widget.title();
+const lazy = useParla('widget');
+export const ready: string | undefined = lazy.ready ? lazy.t.title() : undefined;
+// @ts-expect-error \`t\` is undefined until \`ready\` is checked
+lazy.t.title();
 // @ts-expect-error the namespace is registered, so an unknown one is rejected
-useT('missing');
+useSuspenseParla('missing');
+// @ts-expect-error in a list too
+useParla(['widget', 'missing']);
 `,
     );
     const reactTypes = join(repo, 'packages/react/node_modules/@types/react');

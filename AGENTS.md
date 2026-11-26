@@ -19,7 +19,7 @@ per-locale lazy loading, ICU and MessageFormat 2.
 | Path                  | What it is                                                            |
 | --------------------- | --------------------------------------------------------------------- |
 | `packages/core`       | Runtime: locale state, lazy loading, `Intl` formatting, type registry |
-| `packages/react`      | `ParlaProvider`, `useT`, `useLocale`; re-exports the core             |
+| `packages/react`      | `ParlaProvider`, `useSuspenseParla`, `useParla`, `useLocale`          |
 | `packages/compiler`   | `parla` CLI and Vite plugin: catalogs → per-locale chunks + `.d.ts`   |
 | `packages/format-icu` | ICU MessageFormat → MF2 data model                                    |
 | `packages/format-mf2` | MessageFormat 2 → MF2 data model                                      |
@@ -39,6 +39,9 @@ its dependencies stay out of this workspace.
   package depends on (`@parlajs/react` before `@parlajs/core`, or the `runtime` config), since a
   package may not resolve `@parlajs/core` itself.
 - **Each namespace has exactly one owner package**; a second owner is a build error, not a merge.
+- **React has one API in two hooks**: `useSuspenseParla` suspends, `useParla` returns `ready`.
+  Both take a namespace or a list and return an object, so fields can join later; tooling such as
+  the x18n scanner recognises only these two.
 
 ## Changesets
 

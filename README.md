@@ -7,7 +7,7 @@
 > **Status:** experimental (`0.0.0`). APIs will change; nothing is published to npm yet.
 
 ```tsx
-const t = useT('checkout');
+const { t } = useSuspenseParla('checkout');
 
 t.title(); // "Checkout"
 t.cart.items({ count: 3 }); // "3 items"       — count: number, required
@@ -28,7 +28,7 @@ t.terms({ link: (c) => <a href="/terms">{c}</a> });
 | Package               |                                                                       |
 | --------------------- | --------------------------------------------------------------------- |
 | `@parlajs/core`       | Runtime: locale state, lazy loading, `Intl` formatting, type registry |
-| `@parlajs/react`      | `ParlaProvider`, `useT`, `useLocale`; re-exports the core             |
+| `@parlajs/react`      | `ParlaProvider`, `useSuspenseParla`, `useParla`, `useLocale`          |
 | `@parlajs/compiler`   | `parla` CLI and Vite plugin: catalogs → chunks + `.d.ts`              |
 | `@parlajs/format-icu` | ICU MessageFormat parser (via `messageformat`)                        |
 | `@parlajs/format-mf2` | MessageFormat 2 parser (via `messageformat`)                          |
@@ -74,7 +74,7 @@ export default defineConfig({ plugins: [parla(), react()] });
 **4. App**
 
 ```tsx
-import { createParla, matchLocale, ParlaProvider, useLocale, useT } from '@parlajs/react';
+import { createParla, matchLocale, ParlaProvider } from '@parlajs/react';
 
 import { catalog } from './parla/catalog.js';
 
@@ -92,7 +92,22 @@ createRoot(root).render(
 );
 ```
 
-`useT(namespace)` suspends until that namespace's chunk for the current locale is loaded.
+Two hooks, as in TanStack Query, take one namespace or several:
+
+```tsx
+// Suspends until the chunks for the current locale load.
+const { t } = useSuspenseParla(['checkout', 'common']);
+t.checkout.title();
+t.common.locale.label();
+
+// Never suspends: `t` is typed as present only once `ready` is checked.
+const { t, ready } = useParla('checkout');
+if (!ready) return <Spinner />;
+t.title();
+```
+
+A namespace that is already loaded is ready on the first render. `useLocale()` returns the locale
+and a setter that loads the namespaces in use before switching.
 
 ## Monorepos and polyrepos
 
