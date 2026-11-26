@@ -358,7 +358,9 @@ describe('custom functions and default markup', () => {
       '"functions" cannot redefine the built-in :number',
     );
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
-    expect(dts).toContain('    functions: "capitalize";\n    markup: "strong";\n');
+    expect(dts).toContain(
+      '  interface FunctionRegistry {\n    "capitalize": true;\n  }\n  interface MarkupRegistry {\n    "strong": true;\n  }\n',
+    );
     expect(dts).toContain(
       'bold(params?: { strong?: (children: RichNode) => RichNode }): RichNode;',
     );
@@ -422,5 +424,67 @@ createParla({ catalog, functions: { capitalize: (v) => String(v) }, markup: {} }
     expect(() =>
       execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
     ).not.toThrow();
+  });
+});
+
+describe("a package's types beside the app's", () => {
+  const dir = join(repo, '.tmp', 'build-test-registries');
+  const write = (file: string, content: unknown): void => {
+    const path = join(dir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+  };
+
+  it('add up, whichever loads first and with or without skipLibCheck', () => {
+    rmSync(dir, { recursive: true, force: true });
+    const ui = 'node_modules/@acme/ui';
+    write(`${ui}/package.json`, {
+      name: '@acme/ui',
+      parla: { namespaces: { ui: { format: 'icu', path: 'locales/{locale}/ui.json' } } },
+    });
+    write(`${ui}/locales/en/ui.json`, { save: 'Save' });
+    write('parla.config.json', {
+      locales: ['en', 'it'],
+      namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      packages: ['@acme/ui'],
+    });
+    write('locales/en/app.json', { hi: 'Hi' });
+    write('locales/it/app.json', { hi: 'Ciao' });
+    build({ cwd: join(dir, ui), write: 'types' });
+    build({ cwd: dir });
+
+    const usage = `import type { Locale, Namespaces } from '@parlajs/core';
+declare const n: Namespaces;
+export const both: string[] = [n.app.hi(), n.ui.save()];
+export const it: Locale = 'it';
+// @ts-expect-error not a locale of the app or the package
+export const fr: Locale = 'fr';
+`;
+    const tsc = join(repo, 'node_modules/.bin/tsc');
+    for (const packageFirst of [true, false]) {
+      const imports = [`import '../${ui}/src/parla/catalog.js';`, "import './parla/catalog.js';"];
+      write(
+        'src/usage.ts',
+        `${(packageFirst ? imports : imports.toReversed()).join('\n')}\n${usage}`,
+      );
+      for (const skipLibCheck of [false, true]) {
+        write('tsconfig.json', {
+          compilerOptions: {
+            strict: true,
+            noEmit: true,
+            module: 'preserve',
+            moduleResolution: 'bundler',
+            skipLibCheck,
+            allowImportingTsExtensions: true,
+            types: [],
+            paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
+          },
+          include: ['src', `${ui}/src`],
+        });
+        expect(() =>
+          execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
+        ).not.toThrow();
+      }
+    }
   });
 });

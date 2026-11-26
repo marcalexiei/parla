@@ -11,23 +11,41 @@ export {
 } from './runtime.ts';
 
 /**
- * Augmented by generated code (`locale`, `namespaces`) and by framework adapters (`richNode`).
- * Do not augment it by hand.
+ * Augmented by framework adapters (`richNode`). Do not augment it by hand.
  */
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface Register {}
 
+/*
+ * Augmented by generated code, one member per name. Several generated files (a package's
+ * `parla types`, the app's `parla build`) add to the same registry instead of replacing it.
+ * Do not augment them by hand.
+ */
+// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
+export interface LocaleRegistry {}
+// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
+export interface NamespaceRegistry {}
+// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
+export interface FunctionRegistry {}
+// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
+export interface MarkupRegistry {}
+
 type Registered<K extends string, Fallback> = Register extends Record<K, infer V> ? V : Fallback;
 
-export type Locale = Registered<'locale', string>;
-export type Namespaces = Registered<'namespaces', Record<string, object>>;
+/** Every locale a generated catalog declares; `string` before any is registered. */
+export type Locale = [keyof LocaleRegistry] extends [never]
+  ? string
+  : Extract<keyof LocaleRegistry, string>;
+export type Namespaces = [keyof NamespaceRegistry] extends [never]
+  ? Record<string, object>
+  : NamespaceRegistry;
 export type Namespace = keyof Namespaces;
 /** What a message with markup returns: `ReactNode` with `@parlajs/react`. */
 export type RichNode = Registered<'richNode', unknown>;
 /** The config's `functions`: each needs an implementation in `createParla({ functions })`. */
-export type FunctionName = Registered<'functions', never>;
+export type FunctionName = Extract<keyof FunctionRegistry, string>;
 /** The config's `markup`: each needs a renderer in `createParla({ markup })`. */
-export type MarkupName = Registered<'markup', never>;
+export type MarkupName = Extract<keyof MarkupRegistry, string>;
 
 /** A compiled chunk: called once per locale with its runtime, it returns the namespace's accessor. */
 export type MessageFactory = (rt: MessageRuntime) => unknown;
