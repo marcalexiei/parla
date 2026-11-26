@@ -236,9 +236,15 @@ class MessageCompiler {
       throw new CompileError(`:${b.fn.name} cannot be used as a selector`);
     });
     const keys = msg.variants.map((v) => v.keys.map((k) => (k.type === '*' ? null : k.value)));
-    const variants = this.scope.hoist(JSON.stringify(keys));
-    const cases = msg.variants.map((v, i) => `case ${i}: return ${this.pattern(v.value).code};`);
-    return `{ switch ($.pick([${selectors.join(', ')}], ${variants})) { ${cases.join(' ')} } }`;
+    const pick = `$.pick([${selectors.join(', ')}], ${this.scope.hoist(JSON.stringify(keys))})`;
+    const codes = msg.variants.map((v) => this.pattern(v.value).code);
+    // `one`/`other` is the commonest select, and a ternary a fraction of a switch's size.
+    if (codes.length === 2) {
+      const [first, second] = codes as [string, string];
+      return `${pick} ? ${second} : ${first}`;
+    }
+    const cases = codes.map((code, i) => `case ${i}: return ${code};`);
+    return `{ switch (${pick}) { ${cases.join(' ')} } }`;
   }
 }
 
