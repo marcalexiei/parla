@@ -19,19 +19,21 @@ parla check [--json]    validate; exit 1 on errors
             [--strict]  warnings fail too
 ```
 
-`parla.config.json`, or a `parla` field in `package.json`:
+`parla.config.ts`, loaded with Node's own TypeScript support:
 
-```json
-{
-  "locales": ["en", "it", "de"],
-  "sourceLocale": "en",
-  "fallbacks": { "de": ["en"] },
-  "outDir": "src/parla",
-  "namespaces": { "checkout": { "format": "mf2", "path": "locales/{locale}/checkout.json" } },
-  "packages": ["@acme/ui"],
-  "functions": { "capitalize": "string" },
-  "markup": ["strong", "br"]
-}
+```ts
+import { defineConfig } from '@parlajs/compiler';
+
+export default defineConfig({
+  locales: ['en', 'it', 'de'],
+  sourceLocale: 'en',
+  fallbacks: { de: ['en'] },
+  outDir: 'src/parla',
+  namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
+  packages: ['@acme/ui'],
+  functions: { capitalize: 'string' },
+  markup: ['strong', 'br'],
+});
 ```
 
 - `packages`: workspace or installed packages whose namespaces to include.

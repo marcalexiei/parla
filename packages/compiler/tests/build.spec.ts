@@ -10,6 +10,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { build } from '../src/build.ts';
 import type { BuildResult } from '../src/build.ts';
 
+/** A `parla.config.ts` exporting `config`. */
+const configModule = (config: object): string =>
+  `export default ${JSON.stringify(config, null, 2)};\n`;
+
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
 
 const app = join(repo, '.tmp', 'build-test', 'app');
@@ -32,14 +36,17 @@ interface CommonMessages {
 
 let result: BuildResult;
 
-function setup(): void {
+async function setup(): Promise<void> {
   rmSync(join(repo, '.tmp', 'build-test'), { recursive: true, force: true });
-  put('parla.config.json', {
-    locales: ['en', 'it', 'de'],
-    sourceLocale: 'en',
-    namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
-    packages: ['@acme/ui'],
-  });
+  put(
+    'parla.config.ts',
+    configModule({
+      locales: ['en', 'it', 'de'],
+      sourceLocale: 'en',
+      namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
+      packages: ['@acme/ui'],
+    }),
+  );
   put('locales/en/checkout.json', {
     title: 'Checkout',
     cart: {
@@ -63,7 +70,7 @@ function setup(): void {
   });
   put('node_modules/@acme/ui/locales/en/common.json', { greeting: 'Hello {name}!', save: 'Save' });
   put('node_modules/@acme/ui/locales/it/common.json', { greeting: 'Ciao {name}!', save: 'Salva' });
-  result = build({ cwd: app });
+  result = await build({ cwd: app });
 }
 
 describe(build, () => {
@@ -162,7 +169,7 @@ describe('types for a package that depends on an adapter only', () => {
     writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
   };
 
-  it('augments the adapter, so messages are typed and rich text is a ReactNode', () => {
+  it('augments the adapter, so messages are typed and rich text is a ReactNode', async () => {
     rmSync(pkg, { recursive: true, force: true });
     write('package.json', {
       name: '@acme/widget',
@@ -170,7 +177,7 @@ describe('types for a package that depends on an adapter only', () => {
       parla: { namespaces: { widget: { format: 'icu', path: 'locales/{locale}/widget.json' } } },
     });
     write('locales/en/widget.json', { title: 'Widget', terms: 'Read the <link>terms</link>' });
-    const built = build({ cwd: pkg, write: 'types' });
+    const built = await build({ cwd: pkg, write: 'types' });
     expect(built.config.runtime).toBe('@parlajs/react');
     expect(readFileSync(join(pkg, 'src/parla/catalog.d.ts'), 'utf8')).toContain(
       "declare module '@parlajs/react'",
@@ -231,8 +238,8 @@ describe('chunks', () => {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, 'locales/en'), { recursive: true });
     writeFileSync(
-      join(dir, 'parla.config.json'),
-      JSON.stringify({
+      join(dir, 'parla.config.ts'),
+      configModule({
         locales: ['en'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
       }),
@@ -243,7 +250,7 @@ describe('chunks', () => {
       join(dir, 'locales/en/app.json'),
       `{ "__proto__": "Proto", "plain": "Plain", "nav": { "home": "Home" }, "terms": "Read the <link>terms</link>", "big": ${JSON.stringify(big).slice(0, -1)}, "__proto__": "Big proto" } }`,
     );
-    build({ cwd: dir });
+    await build({ cwd: dir });
     const chunk = readFileSync(join(dir, 'src/parla/messages/en/app.js'), 'utf8');
     expect(chunk).toContain('"plain": (p) => "Plain",');
 
@@ -277,13 +284,13 @@ describe('chunks', () => {
 describe('select keys', () => {
   const dir = join(repo, '.tmp', 'build-test-select');
 
-  it('match whatever order a translation lists its variants in', () => {
+  it('match whatever order a translation lists its variants in', async () => {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, 'locales/en'), { recursive: true });
     mkdirSync(join(dir, 'locales/it'), { recursive: true });
     writeFileSync(
-      join(dir, 'parla.config.json'),
-      JSON.stringify({
+      join(dir, 'parla.config.ts'),
+      configModule({
         locales: ['en', 'it'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
       }),
@@ -296,7 +303,7 @@ describe('select keys', () => {
       join(dir, 'locales/it/app.json'),
       JSON.stringify({ reply: '{g, select, female {Lei} male {Lui} other {Loro}} ha risposto' }),
     );
-    const built = build({ cwd: dir, write: 'types' });
+    const built = await build({ cwd: dir, write: 'types' });
     expect(built.diagnostics).toStrictEqual([]);
     expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toContain(
       'reply(params: { g: "female" | "male" | (string & {}) }): string;',
@@ -307,12 +314,12 @@ describe('select keys', () => {
 describe('interface names', () => {
   const dir = join(repo, '.tmp', 'build-test-names');
 
-  it('are numbered when two namespaces would share one', () => {
+  it('are numbered when two namespaces would share one', async () => {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, 'locales/en'), { recursive: true });
     writeFileSync(
-      join(dir, 'parla.config.json'),
-      JSON.stringify({
+      join(dir, 'parla.config.ts'),
+      configModule({
         locales: ['en'],
         namespaces: {
           'foo-bar': { format: 'icu', path: 'locales/{locale}/foo-bar.json' },
@@ -322,7 +329,7 @@ describe('interface names', () => {
     );
     writeFileSync(join(dir, 'locales/en/foo-bar.json'), JSON.stringify({ dash: 'Dash' }));
     writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
-    build({ cwd: dir, write: 'types' });
+    await build({ cwd: dir, write: 'types' });
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
     expect(dts).toContain('export interface FooBarMessages {\n  /** Dash */\n  dash(): string;');
     expect(dts).toContain('export interface FooBar2Messages {\n  /** Under */\n  under(): string;');
@@ -340,21 +347,27 @@ describe('custom functions and default markup', () => {
 
   it('registers them, renders them, and requires their implementations', async () => {
     rmSync(dir, { recursive: true, force: true });
-    write('parla.config.json', {
-      locales: ['en'],
-      functions: { capitalize: 'string' },
-      markup: ['strong'],
-      namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
-    });
+    write(
+      'parla.config.ts',
+      configModule({
+        locales: ['en'],
+        functions: { capitalize: 'string' },
+        markup: ['strong'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
     write('locales/en/app.json', {
       by: 'By {name, capitalize}',
       bold: 'A <strong>bold</strong> move',
       link: 'Read the <link>terms</link>',
     });
-    const built = build({ cwd: dir });
+    const built = await build({ cwd: dir });
     expect(built.diagnostics).toStrictEqual([]);
-    write('shadow/parla.config.json', { locales: ['en'], functions: { number: 'string' } });
-    expect(() => build({ cwd: join(dir, 'shadow') })).toThrow(
+    write(
+      'shadow/parla.config.ts',
+      configModule({ locales: ['en'], functions: { number: 'string' } }),
+    );
+    await expect(build({ cwd: join(dir, 'shadow') })).rejects.toThrow(
       '"functions" cannot redefine the built-in :number',
     );
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
@@ -435,7 +448,7 @@ describe("a package's types beside the app's", () => {
     writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
   };
 
-  it('add up, whichever loads first and with or without skipLibCheck', () => {
+  it('add up, whichever loads first and with or without skipLibCheck', async () => {
     rmSync(dir, { recursive: true, force: true });
     const ui = 'node_modules/@acme/ui';
     write(`${ui}/package.json`, {
@@ -443,15 +456,18 @@ describe("a package's types beside the app's", () => {
       parla: { namespaces: { ui: { format: 'icu', path: 'locales/{locale}/ui.json' } } },
     });
     write(`${ui}/locales/en/ui.json`, { save: 'Save' });
-    write('parla.config.json', {
-      locales: ['en', 'it'],
-      namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
-      packages: ['@acme/ui'],
-    });
+    write(
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'it'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+        packages: ['@acme/ui'],
+      }),
+    );
     write('locales/en/app.json', { hi: 'Hi' });
     write('locales/it/app.json', { hi: 'Ciao' });
-    build({ cwd: join(dir, ui), write: 'types' });
-    build({ cwd: dir });
+    await build({ cwd: join(dir, ui), write: 'types' });
+    await build({ cwd: dir });
 
     const usage = `import type { Locale, Namespaces } from '@parlajs/core';
 declare const n: Namespaces;
@@ -492,12 +508,12 @@ export const fr: Locale = 'fr';
 describe('builds running at once', () => {
   const dir = join(repo, '.tmp', 'build-test-parallel');
 
-  it('write through a rename, and leave another build’s temp file alone', () => {
+  it('write through a rename, and leave another build’s temp file alone', async () => {
     rmSync(dir, { recursive: true, force: true });
     mkdirSync(join(dir, 'locales/en'), { recursive: true });
     writeFileSync(
-      join(dir, 'parla.config.json'),
-      JSON.stringify({
+      join(dir, 'parla.config.ts'),
+      configModule({
         locales: ['en'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
       }),
@@ -508,7 +524,7 @@ describe('builds running at once', () => {
     writeFileSync(join(messages, '.app.js.1.tmp'), 'another build, mid-write');
     writeFileSync(join(messages, 'stale.js'), 'a namespace since removed');
 
-    build({ cwd: dir });
+    await build({ cwd: dir });
     expect(readdirSync(messages).toSorted()).toStrictEqual(['.app.js.1.tmp', 'app.js']);
     expect(readdirSync(join(dir, 'src/parla')).filter((f) => f.endsWith('.tmp'))).toStrictEqual([]);
   });

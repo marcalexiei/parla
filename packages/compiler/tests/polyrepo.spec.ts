@@ -7,12 +7,16 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { build } from '../src/build.ts';
 import { loadConfig } from '../src/config.ts';
 
+/** A `parla.config.ts` exporting `config`. */
+const configModule = (config: object): string =>
+  `export default ${JSON.stringify(config, null, 2)};\n`;
+
 const root = fileURLToPath(new URL('../../../.tmp/polyrepo-test', import.meta.url));
 const store = join(root, 'node_modules/.pnpm');
 
 function put(file: string, content: unknown): void {
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, JSON.stringify(content));
+  writeFileSync(file, typeof content === 'string' ? content : JSON.stringify(content));
 }
 
 /** Installs `name@version` into a pnpm-style store and returns its real directory. */
@@ -47,10 +51,10 @@ const deps = (pkgDir: string): string => dirname(dirname(pkgDir));
 describe(loadConfig, () => {
   beforeEach(() => {
     rmSync(root, { recursive: true, force: true });
-    put(join(root, 'parla.config.json'), { packages: ['@acme/ui', '@acme/form'] });
+    put(join(root, 'parla.config.ts'), configModule({ packages: ['@acme/ui', '@acme/form'] }));
   });
 
-  it('resolves dependencies of installed packages beside their real path, once each', () => {
+  it('resolves dependencies of installed packages beside their real path, once each', async () => {
     const base = publish('@acme/base', '1.0.0', 'base');
     const ui = publish('@acme/ui', '1.0.0', 'common', ['@acme/base']);
     const form = publish('@acme/form', '1.0.0', 'form', ['@acme/base']);
@@ -59,17 +63,17 @@ describe(loadConfig, () => {
     link(join(root, 'node_modules'), '@acme/ui', ui);
     link(join(root, 'node_modules'), '@acme/form', form);
 
-    const config = loadConfig(root);
+    const config = await loadConfig(root);
     expect(config.namespaces.map((ns) => `${ns.name}:${ns.owner}`).toSorted()).toStrictEqual([
       'base:@acme/base',
       'common:@acme/ui',
       'form:@acme/form',
     ]);
-    const { diagnostics } = build({ cwd: root });
+    const { diagnostics } = await build({ cwd: root });
     expect(diagnostics).toStrictEqual([]);
   });
 
-  it('rejects two installed versions of the package that owns a namespace', () => {
+  it('rejects two installed versions of the package that owns a namespace', async () => {
     const ui = publish('@acme/ui', '1.0.0', 'common', ['@acme/base']);
     const form = publish('@acme/form', '1.0.0', 'form', ['@acme/base']);
     link(deps(ui), '@acme/base', publish('@acme/base', '1.0.0', 'base'));
@@ -77,18 +81,18 @@ describe(loadConfig, () => {
     link(join(root, 'node_modules'), '@acme/ui', ui);
     link(join(root, 'node_modules'), '@acme/form', form);
 
-    expect(() => loadConfig(root)).toThrow(
+    await expect(loadConfig(root)).rejects.toThrow(
       /Two copies of "@acme\/base" provide namespace "base" \(.*1\.0\.0.*, .*2\.0\.0.*\)/u,
     );
   });
 
-  it('hints at "files" when a published package lacks a catalog', () => {
+  it('hints at "files" when a published package lacks a catalog', async () => {
     const ui = publish('@acme/ui', '1.0.0', 'common');
     rmSync(join(ui, 'locales'), { recursive: true });
     link(join(root, 'node_modules'), '@acme/ui', ui);
     link(join(root, 'node_modules'), '@acme/form', publish('@acme/form', '1.0.0', 'form'));
 
-    const { diagnostics } = build({ cwd: root, write: false });
+    const { diagnostics } = await build({ cwd: root, write: false });
     expect(diagnostics.map((d) => d.message)).toContainEqual(
       expect.stringContaining('does "@acme/ui" publish it (package.json "files")?'),
     );

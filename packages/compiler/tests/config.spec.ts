@@ -8,30 +8,49 @@ import { ConfigError, loadConfig } from '../src/config.ts';
 
 const dir = fileURLToPath(new URL('../../../.tmp/config-test', import.meta.url));
 
-function configWith(config: object): () => unknown {
+async function configWith(config: object): Promise<unknown> {
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'parla.config.json'), JSON.stringify(config));
-  return () => loadConfig(dir);
+  writeFileSync(join(dir, 'parla.config.ts'), `export default ${JSON.stringify(config)};`);
+  return loadConfig(dir);
 }
 
 const ns = (name: string): object => ({ [name]: { format: 'icu', path: 'l/{locale}.json' } });
 
 describe(loadConfig, () => {
-  it('accepts the names it writes files for', () => {
-    expect(
+  it('accepts the names it writes files for', async () => {
+    await expect(
       configWith({ locales: ['en', 'pt-BR', 'zh-Hant-TW'], namespaces: ns('admin_user.v2-beta') }),
-    ).not.toThrow();
+    ).resolves.toBeDefined();
   });
 
   it.each(['../evil', 'a/b', String.raw`a\b`, '..', '.hidden', ''])(
     'rejects the namespace name %j, which would write outside outDir',
-    (name) => {
-      expect(configWith({ namespaces: ns(name) })).toThrow(ConfigError);
+    async (name) => {
+      await expect(configWith({ namespaces: ns(name) })).rejects.toThrow(ConfigError);
     },
   );
 
-  it.each(['../en', 'en/x', '', 'en us'])('rejects the locale %j, not a tag', (locale) => {
-    expect(configWith({ locales: [locale], sourceLocale: locale })).toThrow(/is not a locale tag/);
+  it.each(['../en', 'en/x', '', 'en us'])('rejects the locale %j, not a tag', async (locale) => {
+    await expect(configWith({ locales: [locale], sourceLocale: locale })).rejects.toThrow(
+      /is not a locale tag/,
+    );
+  });
+
+  it('reads TypeScript, and an edit on the next load', async () => {
+    await configWith({ locales: ['en'] });
+    writeFileSync(
+      join(dir, 'parla.config.ts'),
+      "const locales: Array<string> = ['en', 'it'];\nexport default { locales };\n",
+    );
+    const config = await loadConfig(dir);
+    expect(config.locales).toStrictEqual(['en', 'it']);
+  });
+
+  it('explains a config without a default export', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'parla.config.ts'), 'export const locales = ["en"];\n');
+    await expect(loadConfig(dir)).rejects.toThrow(/must `export default defineConfig/);
   });
 });

@@ -47,16 +47,18 @@ t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 }
 ```
 
-`parla.config.json`:
+`parla.config.ts`:
 
-```json
-{
-  "locales": ["en", "it", "de"],
-  "sourceLocale": "en",
-  "fallbacks": { "de": ["en"] },
-  "outDir": "src/parla",
-  "namespaces": { "checkout": { "format": "mf2", "path": "locales/{locale}/checkout.json" } }
-}
+```ts
+import { defineConfig } from '@parlajs/compiler';
+
+export default defineConfig({
+  locales: ['en', 'it', 'de'],
+  sourceLocale: 'en',
+  fallbacks: { de: ['en'] },
+  outDir: 'src/parla',
+  namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
+});
 ```
 
 `vite.config.ts`: `plugins: [parla(), react()]`, with `parla` from `@parlajs/compiler/vite`.
@@ -113,11 +115,12 @@ A package owns namespaces in its `package.json`; the app lists it:
 }
 ```
 
-```json
-{ "packages": ["@acme/ui"] }
+```ts
+export default defineConfig({ packages: ['@acme/ui'] /* … */ });
 ```
 
 - Packages resolve through `node_modules`: workspace links and registry installs work alike.
+- A package's config is data in `package.json`: Node strips no types under `node_modules`.
 - `parla types` in a package writes only its `.d.ts`.
 - A published package ships its catalogs (`"files": ["dist", "locales"]`) and peers on `@parlajs/react`.
 - Two owners of one namespace fail the build.

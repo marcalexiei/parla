@@ -19,6 +19,7 @@ export {
 } from './compile.ts';
 export {
   ConfigError,
+  defineConfig,
   loadConfig,
   type NamespaceConfig,
   type ParlaConfig,

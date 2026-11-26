@@ -16,8 +16,8 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
   let watchFiles = new Set<string>();
   let isBuild = false;
 
-  const run = (log: (msg: string) => void): BuildResult => {
-    const result = build({ cwd: root, config: options.config, formats: options.formats });
+  const run = async (log: (msg: string) => void): Promise<BuildResult> => {
+    const result = await build({ cwd: root, config: options.config, formats: options.formats });
     watchFiles = new Set(result.config.watchFiles.map((f) => resolve(f)));
     for (const d of result.diagnostics) {
       log(formatDiagnostic(d, result.config.root));
@@ -32,8 +32,8 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
       root = options.root ? resolve(config.root, options.root) : config.root;
       isBuild = config.command === 'build';
     },
-    buildStart() {
-      const result = run((m) => {
+    async buildStart() {
+      const result = await run((m) => {
         this.warn(m);
       });
       for (const f of watchFiles) {
@@ -45,12 +45,12 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
     },
     configureServer(server: ViteDevServer) {
       server.watcher.add([...watchFiles]);
-      const onChange = (file: string): void => {
+      const onChange = async (file: string): Promise<void> => {
         if (!watchFiles.has(resolve(file))) {
           return;
         }
         try {
-          const result = run((m) => {
+          const result = await run((m) => {
             server.config.logger.warn(m);
           });
           server.watcher.add([...watchFiles]);
@@ -62,7 +62,9 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
         }
       };
       for (const event of ['change', 'add', 'unlink'] as const) {
-        server.watcher.on(event, onChange);
+        server.watcher.on(event, (file: string) => {
+          void onChange(file);
+        });
       }
     },
   };
