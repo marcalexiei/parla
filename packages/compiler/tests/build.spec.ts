@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -486,5 +486,30 @@ export const fr: Locale = 'fr';
         ).not.toThrow();
       }
     }
+  });
+});
+
+describe('builds running at once', () => {
+  const dir = join(repo, '.tmp', 'build-test-parallel');
+
+  it('write through a rename, and leave another build’s temp file alone', () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(join(dir, 'locales/en'), { recursive: true });
+    writeFileSync(
+      join(dir, 'parla.config.json'),
+      JSON.stringify({
+        locales: ['en'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    writeFileSync(join(dir, 'locales/en/app.json'), JSON.stringify({ title: 'Title' }));
+    const messages = join(dir, 'src/parla/messages/en');
+    mkdirSync(messages, { recursive: true });
+    writeFileSync(join(messages, '.app.js.1.tmp'), 'another build, mid-write');
+    writeFileSync(join(messages, 'stale.js'), 'a namespace since removed');
+
+    build({ cwd: dir });
+    expect(readdirSync(messages).toSorted()).toStrictEqual(['.app.js.1.tmp', 'app.js']);
+    expect(readdirSync(join(dir, 'src/parla')).filter((f) => f.endsWith('.tmp'))).toStrictEqual([]);
   });
 });
