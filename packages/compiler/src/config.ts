@@ -144,6 +144,11 @@ function checkFunctions(functions: Record<string, FunctionKind>): Record<string,
   return functions;
 }
 
+/** Names that become path segments under `outDir`: no separators, no `..`. */
+const NAMESPACE_NAME = /^[\w-]+(?:\.[\w-]+)*$/;
+/** A BCP 47-like tag: `en`, `pt-BR`, `zh-Hant-TW`. */
+const LOCALE_TAG = /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/;
+
 export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
   const explicit = configFile ? resolve(cwd, configFile) : undefined;
   const found = readConfigAt(cwd, explicit);
@@ -154,6 +159,11 @@ export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
   const { config } = found;
   const sourceLocale = config.sourceLocale ?? 'en';
   const locales = config.locales ?? [sourceLocale];
+  for (const locale of locales) {
+    if (!LOCALE_TAG.test(locale)) {
+      throw new ConfigError(`Locale "${locale}" is not a locale tag such as "en" or "pt-BR"`);
+    }
+  }
   if (!locales.includes(sourceLocale)) {
     throw new ConfigError(`sourceLocale "${sourceLocale}" is not in locales`);
   }
@@ -169,6 +179,11 @@ export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
     }
     visited.add(dir);
     for (const [name, ns] of Object.entries(cfg.namespaces ?? {})) {
+      if (!NAMESPACE_NAME.test(name)) {
+        throw new ConfigError(
+          `Namespace "${name}" must be letters, digits, "_", "-" or inner dots: it names files`,
+        );
+      }
       const existing = namespaces.get(name);
       if (existing?.owner === owner) {
         const copies = [ownerDirs.get(name) ?? root, dir].map((d) => relative(root, d)).join(', ');
