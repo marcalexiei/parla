@@ -8,7 +8,9 @@ export type CustomFunctions = Readonly<Record<string, FunctionKind>>;
 
 const NUMERIC = new Set(['number', 'integer', 'currency', 'percent', 'unit']);
 const DATES = new Set(['date', 'time', 'datetime']);
-const KNOWN = new Set([...NUMERIC, ...DATES, 'string']);
+/** The built-in message functions; the config's `functions` add to them. */
+export const BUILTIN_FUNCTIONS: ReadonlySet<string> = new Set([...NUMERIC, ...DATES, 'string']);
+const KNOWN = BUILTIN_FUNCTIONS;
 
 /** What a message needs from one parameter. `any` is an unannotated placeholder. */
 export type ParamKind =

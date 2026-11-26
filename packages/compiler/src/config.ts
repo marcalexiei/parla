@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
+import { BUILTIN_FUNCTIONS } from './compile.ts';
+
 export interface NamespaceConfig {
   /** Message syntax: `icu` or `mf2`. */
   format: string;
@@ -132,6 +134,16 @@ function detectRuntime(dir: string): string {
   return RUNTIMES.find((name) => name in deps) ?? '@parlajs/core';
 }
 
+function checkFunctions(functions: Record<string, FunctionKind>): Record<string, FunctionKind> {
+  const shadowing = Object.keys(functions).filter((name) => BUILTIN_FUNCTIONS.has(name));
+  if (shadowing.length > 0) {
+    throw new ConfigError(
+      `"functions" cannot redefine the built-in ${shadowing.map((n) => `:${n}`).join(', ')}`,
+    );
+  }
+  return functions;
+}
+
 export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
   const explicit = configFile ? resolve(cwd, configFile) : undefined;
   const found = readConfigAt(cwd, explicit);
@@ -208,7 +220,7 @@ export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
     fallbacks: config.fallbacks ?? {},
     outDir: resolve(root, config.outDir ?? 'src/parla'),
     runtime: config.runtime ?? detectRuntime(root),
-    functions: config.functions ?? {},
+    functions: checkFunctions(config.functions ?? {}),
     markup: config.markup ?? [],
     namespaces: resolved,
     watchFiles,

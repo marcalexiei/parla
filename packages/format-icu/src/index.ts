@@ -26,9 +26,12 @@ const LT = '\uE000';
  * Inside, `{`, `}` and `#` are re-quoted for the ICU parser, which quotes only those.
  */
 function quoteTags(source: string): string {
-  return source.replaceAll(/'(?<quoted><(?:[^']|'')*)'/g, (...args) => {
-    const { quoted = '' } = args.at(-1) as { quoted?: string };
-    return quoted.replaceAll(/[{}#]/g, (c) => `'${c}'`).replaceAll('<', LT);
+  // `''` first: an escaped apostrophe never opens a quote
+  return source.replaceAll(/''|'(?<quoted><(?:[^']|'')*)'/g, (match, ...args) => {
+    const { quoted } = args.at(-1) as { quoted?: string };
+    return quoted === undefined
+      ? match
+      : quoted.replaceAll(/[{}#]/g, (c) => `'${c}'`).replaceAll('<', LT);
   });
 }
 

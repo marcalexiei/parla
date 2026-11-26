@@ -127,6 +127,12 @@ describe('ICU', () => {
       { link: '1' },
     ]);
     expect(compile('icu', "'<head>' only").sig).toBe('(): string');
+    // `''` is an escaped apostrophe: the tag after it stays markup
+    expect(run('icu', "Say ''<b>hi</b>''", { b: link })).toStrictEqual([
+      "Say '",
+      { link: 'hi' },
+      "'",
+    ]);
   });
 
   it('compiles custom functions declared in the config, typed by their kind', () => {

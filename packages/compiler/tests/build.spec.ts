@@ -353,6 +353,10 @@ describe('custom functions and default markup', () => {
     });
     const built = build({ cwd: dir });
     expect(built.diagnostics).toStrictEqual([]);
+    write('shadow/parla.config.json', { locales: ['en'], functions: { number: 'string' } });
+    expect(() => build({ cwd: join(dir, 'shadow') })).toThrow(
+      '"functions" cannot redefine the built-in :number',
+    );
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
     expect(dts).toContain('    functions: "capitalize";\n    markup: "strong";\n');
     expect(dts).toContain(
