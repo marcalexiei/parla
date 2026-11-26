@@ -4,7 +4,7 @@ import { mf2 } from '@parlajs/format-mf2';
 import { describe, expect, it } from 'vitest';
 
 import { compileMessage, ModuleScope } from '../src/compile.ts';
-import type { MessageInfo } from '../src/compile.ts';
+import type { CustomFunctions, MessageInfo } from '../src/compile.ts';
 import { signature } from '../src/types.ts';
 
 const adapters = { icu, mf2 };
@@ -14,9 +14,10 @@ type Message = (p: object, rt: unknown) => unknown;
 function compile(
   format: keyof typeof adapters,
   source: string,
+  custom: CustomFunctions = {},
 ): { fn: Message; info: MessageInfo; sig: string } {
   const scope = new ModuleScope();
-  const { code, info } = compileMessage(adapters[format].parse(source), scope);
+  const { code, info } = compileMessage(adapters[format].parse(source), scope, custom);
   // oxlint-disable-next-line no-new-func, typescript/no-implied-eval -- evaluates the generated chunk code
   const factory = new Function(`${scope.consts.join('\n')}\nreturn ${code};`) as () => Message;
   return { fn: factory(), info, sig: signature(info) };
@@ -115,6 +116,39 @@ describe('ICU', () => {
 
   it('reports syntax errors', () => {
     expect(() => icu.parse('{count, plural, one {x}')).toThrow(/ICU/);
+  });
+
+  it("keeps a '<' quote as text, braces inside included", () => {
+    expect(run('icu', "Pick an '<option>' for {name}", { name: 'Ada' })).toBe(
+      'Pick an <option> for Ada',
+    );
+    expect(run('icu', "'<b>{x}</b>' and <b>{x}</b>", { x: 1, b: link })).toStrictEqual([
+      '<b>{x}</b> and ',
+      { link: '1' },
+    ]);
+    expect(compile('icu', "'<head>' only").sig).toBe('(): string');
+  });
+
+  it('compiles custom functions declared in the config, typed by their kind', () => {
+    const custom = { capitalize: 'string', ago: 'date' } as const;
+    expect(compile('icu', 'By {name, capitalize}', custom).sig).toBe(
+      '(params: { name: string }): string',
+    );
+    expect(compile('icu', '{d, ago}', custom).sig).toBe('(params: { d: Date | number }): string');
+    expect(() => compile('icu', 'By {name, capitalize}')).toThrow(/unknown function :capitalize/);
+  });
+});
+
+describe(signature, () => {
+  it('makes default markup optional, and the params too when nothing else is needed', () => {
+    const { info } = compile('icu', 'See <b>this</b>');
+    expect(signature(info, new Set(['b']))).toBe(
+      '(params?: { b?: (children: RichNode) => RichNode }): RichNode',
+    );
+    const { info: named } = compile('icu', 'See <b>{name}</b>');
+    expect(signature(named, new Set(['b']))).toBe(
+      '(params: { name: string | number; b?: (children: RichNode) => RichNode }): RichNode',
+    );
   });
 });
 

@@ -27,6 +27,17 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | `Translations<'a' \| 'b'>`  | The type of `t` for those namespaces                    |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list            |
 
+`createParla` also takes `functions` and `markup`, required with every name the config's
+`functions` and `markup` declare:
+
+```ts
+createParla({
+  catalog,
+  functions: { capitalize: (value, options, locale) => String(value).toLocaleUpperCase(locale) },
+  markup: { strong: (children) => `**${children}**` }, // a call's own `strong` wins
+});
+```
+
 ## License
 
 [MIT](./LICENSE)

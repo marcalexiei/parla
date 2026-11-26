@@ -54,17 +54,24 @@ export function paramType(kinds: Array<ParamKind>): string {
   return 'string | number';
 }
 
-export function signature(info: MessageInfo): string {
+/** `defaults`: markup the runtime renders when a call leaves it out (the config's `markup`). */
+export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new Set()): string {
   const fields = [...info.params.entries()]
     .toSorted(([a], [b]) => a.localeCompare(b))
     .map(([name, kinds]) => `${prop(name)}: ${paramType(kinds)}`);
+  let required = fields.length;
   for (const tag of [...info.markup].toSorted()) {
     if (!info.params.has(tag)) {
-      fields.push(`${prop(tag)}: (children: RichNode) => RichNode`);
+      const optional = defaults.has(tag);
+      fields.push(`${prop(tag)}${optional ? '?' : ''}: (children: RichNode) => RichNode`);
+      required += optional ? 0 : 1;
     }
   }
   const ret = info.rich ? 'RichNode' : 'string';
-  return fields.length > 0 ? `(params: { ${fields.join('; ')} }): ${ret}` : `(): ${ret}`;
+  if (fields.length === 0) {
+    return `(): ${ret}`;
+  }
+  return `(params${required === 0 ? '?' : ''}: { ${fields.join('; ')} }): ${ret}`;
 }
 
 interface Tree {
@@ -92,8 +99,9 @@ function render(tree: Tree, indent: string): string {
 export function namespaceInterface(
   namespace: string,
   messages: Map<string, { info: MessageInfo; source: string }>,
-  name: string = interfaceName(namespace),
+  options: { name?: string | undefined; defaults?: ReadonlySet<string> } = {},
 ): string {
+  const { name = interfaceName(namespace), defaults = new Set<string>() } = options;
   const tree: Tree = {};
   for (const [key, { info, source }] of messages) {
     const path = key.split('.');
@@ -107,7 +115,7 @@ export function namespaceInterface(
       }
       node = child;
     }
-    node[leaf] = { leaf: signature(info), doc: source };
+    node[leaf] = { leaf: signature(info, defaults), doc: source };
   }
   return `export interface ${name} {\n${render(tree, '  ')}\n}`;
 }

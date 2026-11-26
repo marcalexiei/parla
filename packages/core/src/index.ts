@@ -1,9 +1,11 @@
 import { createRuntime } from './runtime.ts';
-import type { MessageRuntime, WrapRich } from './runtime.ts';
+import type { MessageFunction, MessageRuntime, WrapRich } from './runtime.ts';
 
 export {
   createRuntime,
+  type MessageFunction,
   type MessageRuntime,
+  type RuntimeExtensions,
   type SelectorValue,
   type WrapRich,
 } from './runtime.ts';
@@ -22,6 +24,10 @@ export type Namespaces = Registered<'namespaces', Record<string, object>>;
 export type Namespace = keyof Namespaces;
 /** What a message with markup returns: `ReactNode` with `@parlajs/react`. */
 export type RichNode = Registered<'richNode', unknown>;
+/** The config's `functions`: each needs an implementation in `createParla({ functions })`. */
+export type FunctionName = Registered<'functions', never>;
+/** The config's `markup`: each needs a renderer in `createParla({ markup })`. */
+export type MarkupName = Registered<'markup', never>;
 
 /** A compiled chunk: called once per locale with its runtime, it returns the namespace's accessor. */
 export type MessageFactory = (rt: MessageRuntime) => unknown;
@@ -37,13 +43,22 @@ export interface Catalog {
   readonly namespaces: Readonly<Record<string, Readonly<Record<string, Loader>>>>;
 }
 
-export interface ParlaOptions {
+interface BaseOptions {
   catalog: Catalog;
   /** Initial locale. Defaults to the catalog's source locale. */
   locale?: Locale;
   /** Turns message parts with markup into one node. Set by framework adapters. */
   wrapRich?: WrapRich;
 }
+
+/** Required, with every declared name, once the config declares any. */
+type Declared<K extends string, Name extends string, V> = [Name] extends [never]
+  ? Partial<Record<K, undefined>>
+  : Record<K, Readonly<Record<Name, V>>>;
+
+export type ParlaOptions = BaseOptions &
+  Declared<'functions', FunctionName, MessageFunction> &
+  Declared<'markup', MarkupName, (children: RichNode) => RichNode>;
 
 /** Messages keyed by namespace: `t.checkout.title()`. Holding one proves its namespaces loaded. */
 export type Translations<NS extends Namespace> = { readonly [K in NS]: Namespaces[K] };
@@ -88,6 +103,10 @@ g[INSTANCE] = marker;
 
 export function createParla(options: ParlaOptions): Parla {
   const { catalog, wrapRich } = options;
+  const extensions = {
+    functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
+    markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
+  };
   const { locales } = catalog;
   let current: Locale = options.locale ?? catalog.sourceLocale;
   const listeners = new Set<() => void>();
@@ -108,7 +127,7 @@ export function createParla(options: ParlaOptions): Parla {
   const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
     if (!rt) {
-      rt = createRuntime(locale, wrapRich);
+      rt = createRuntime(locale, wrapRich, extensions);
       runtimes.set(locale, rt);
     }
     return rt;

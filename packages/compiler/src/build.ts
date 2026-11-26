@@ -183,6 +183,9 @@ function readCatalog(
   return { file, entries, exists: true };
 }
 
+const union = (names: ReadonlyArray<string>): string =>
+  names.map((n) => JSON.stringify(n)).join(' | ');
+
 function writeIfChanged(file: string, content: string, written: Array<string>): void {
   if (existsSync(file) && readFileSync(file, 'utf8') === content) {
     return;
@@ -277,7 +280,7 @@ export function build(options: BuildOptions = {}): BuildResult {
         }
         let compiled;
         try {
-          compiled = compileMessage(entry.model, scope);
+          compiled = compileMessage(entry.model, scope, config.functions);
         } catch (error) {
           if (!(error instanceof CompileError)) {
             throw error;
@@ -291,7 +294,10 @@ export function build(options: BuildOptions = {}): BuildResult {
           let ref = sourceInfo.get(key);
           if (!ref) {
             try {
-              ref = { info: compileMessage(srcEntry.model).info, source: srcEntry.source };
+              ref = {
+                info: compileMessage(srcEntry.model, undefined, config.functions).info,
+                source: srcEntry.source,
+              };
             } catch {
               // The source message's own error is reported for the source locale.
             }
@@ -341,18 +347,31 @@ export function build(options: BuildOptions = {}): BuildResult {
         `${HEADER}${consts}export default ($) => (${emitGroup(treeOf(messages), '')});\n`,
       );
     }
-    interfaces.push(namespaceInterface(ns.name, sourceInfo, names.get(ns.name)));
+    interfaces.push(
+      namespaceInterface(ns.name, sourceInfo, {
+        name: names.get(ns.name),
+        defaults: new Set(config.markup),
+      }),
+    );
   }
 
   if (write) {
     const out = config.outDir;
     const localeType = config.locales.map((l) => JSON.stringify(l)).join(' | ');
+    const extensions = [
+      ...(Object.keys(config.functions).length > 0
+        ? [`    functions: ${union(Object.keys(config.functions))};`]
+        : []),
+      ...(config.markup.length > 0 ? [`    markup: ${union(config.markup)};`] : []),
+    ]
+      .map((line) => `\n${line}`)
+      .join('');
     const nsEntries = config.namespaces
       .map((ns) => `      ${JSON.stringify(ns.name)}: ${names.get(ns.name)};`)
       .join('\n');
     writeIfChanged(
       join(out, 'catalog.d.ts'),
-      `${HEADER}import type { Catalog, RichNode } from '${config.runtime}';\n\n${interfaces.join('\n\n')}\n\nexport type Locale = ${localeType};\n\nexport declare const catalog: Catalog & { readonly locales: readonly Locale[]; readonly sourceLocale: ${JSON.stringify(config.sourceLocale)} };\n\ndeclare module '${config.runtime}' {\n  interface Register {\n    locale: ${localeType};\n    namespaces: {\n${nsEntries}\n    };\n  }\n}\n`,
+      `${HEADER}import type { Catalog, RichNode } from '${config.runtime}';\n\n${interfaces.join('\n\n')}\n\nexport type Locale = ${localeType};\n\nexport declare const catalog: Catalog & { readonly locales: readonly Locale[]; readonly sourceLocale: ${JSON.stringify(config.sourceLocale)} };\n\ndeclare module '${config.runtime}' {\n  interface Register {\n    locale: ${localeType};\n    namespaces: {\n${nsEntries}\n    };${extensions}\n  }\n}\n`,
       written,
     );
     if (write === 'all') {

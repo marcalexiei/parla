@@ -329,3 +329,94 @@ describe('interface names', () => {
     expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
   });
 });
+
+describe('custom functions and default markup', () => {
+  const dir = join(repo, '.tmp', 'build-test-extensions');
+  const write = (file: string, content: unknown): void => {
+    const path = join(dir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+  };
+
+  it('registers them, renders them, and requires their implementations', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    write('parla.config.json', {
+      locales: ['en'],
+      functions: { capitalize: 'string' },
+      markup: ['strong'],
+      namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+    });
+    write('locales/en/app.json', {
+      by: 'By {name, capitalize}',
+      bold: 'A <strong>bold</strong> move',
+      link: 'Read the <link>terms</link>',
+    });
+    const built = build({ cwd: dir });
+    expect(built.diagnostics).toStrictEqual([]);
+    const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
+    expect(dts).toContain('    functions: "capitalize";\n    markup: "strong";\n');
+    expect(dts).toContain(
+      'bold(params?: { strong?: (children: RichNode) => RichNode }): RichNode;',
+    );
+
+    const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
+      catalog: Catalog;
+    };
+    const parla = createParla({
+      catalog,
+      functions: {
+        capitalize: (value: unknown) =>
+          String(value).charAt(0).toUpperCase() + String(value).slice(1),
+      },
+      markup: { strong: (children: unknown) => `**${String(children)}**` },
+      // This spec's program has no generated `Register`, so the options are not typed here.
+    } as never);
+    const loaded = await parla.load(['app']);
+    const t = loaded['app'] as {
+      by: (p: { name: string }) => string;
+      bold: (p?: { strong?: (c: unknown) => unknown }) => unknown;
+    };
+    expect(t.by({ name: 'ada' })).toBe('By Ada');
+    expect(t.bold()).toBe('A **bold** move');
+    expect(t.bold({ strong: (c) => `<${String(c)}>` })).toBe('A <bold> move');
+
+    write(
+      'src/usage.ts',
+      `import { createParla } from '@parlajs/core';
+import type { Namespaces } from '@parlajs/core';
+import { catalog } from './parla/catalog.js';
+declare const t: Namespaces['app'];
+export const ok: unknown[] = [t.bold(), t.by({ name: 'ada' }), t.link({ link: (c) => c })];
+// @ts-expect-error markup without a default stays required
+t.link();
+export const parla = createParla({
+  catalog,
+  functions: { capitalize: (v) => String(v) },
+  markup: { strong: (c) => c },
+});
+// @ts-expect-error a declared function needs its implementation
+createParla({ catalog, markup: { strong: (c) => c } });
+// @ts-expect-error declared markup needs its renderer
+createParla({ catalog, functions: { capitalize: (v) => String(v) }, markup: {} });
+`,
+    );
+    write('tsconfig.json', {
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        module: 'preserve',
+        moduleResolution: 'bundler',
+        skipLibCheck: true,
+        allowImportingTsExtensions: true,
+        allowJs: false,
+        types: [],
+        paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
+      },
+      include: ['src'],
+    });
+    const tsc = join(repo, 'node_modules/.bin/tsc');
+    expect(() =>
+      execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
+    ).not.toThrow();
+  });
+});

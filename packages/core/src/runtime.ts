@@ -29,6 +29,21 @@ export interface MessageRuntime {
 
 export type WrapRich = (parts: Array<unknown>) => unknown;
 
+/** A message function beyond the built-in ones, declared in the config's `functions`. */
+export type MessageFunction = (
+  value: unknown,
+  options: Readonly<Record<string, unknown>>,
+  locale: string,
+) => string;
+
+/** Renders markup that a call does not pass a callback for, declared in the config's `markup`. */
+type MarkupRenderer = (children: unknown) => unknown;
+
+export interface RuntimeExtensions {
+  readonly functions?: Readonly<Record<string, MessageFunction>> | undefined;
+  readonly markup?: Readonly<Record<string, MarkupRenderer>> | undefined;
+}
+
 const NUMBER_FNS = new Set(['number', 'integer', 'currency', 'percent', 'unit']);
 const DATE_FNS = new Set(['date', 'time', 'datetime']);
 const DATE_FIELDS = [
@@ -167,7 +182,9 @@ function toDate(value: unknown): Date {
 export function createRuntime(
   locale: string,
   wrapRich: WrapRich = (parts) => parts,
+  extensions: RuntimeExtensions = {},
 ): MessageRuntime {
+  const { functions = {}, markup = {} } = extensions;
   const cache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>();
   const cached = <T extends Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>(
     key: string,
@@ -209,6 +226,10 @@ export function createRuntime(
       if (name === 'string') {
         return text(value);
       }
+      const custom = Object.hasOwn(functions, name) ? functions[name] : undefined;
+      if (custom) {
+        return custom(value, options, locale);
+      }
       throw new Error(`[parla] unknown message function :${name}`);
     },
     sn(value, options = {}) {
@@ -236,9 +257,13 @@ export function createRuntime(
       return best === -1 ? variants.length - 1 : best;
     },
     tag(params, name, children) {
-      const cb = params[name];
+      const own = params[name];
+      let cb = typeof own === 'function' ? (own as MarkupRenderer) : undefined;
+      if (!cb && Object.hasOwn(markup, name)) {
+        cb = markup[name];
+      }
       const inner = rt.rich(children);
-      return typeof cb === 'function' ? (cb as (children: unknown) => unknown)(inner) : inner;
+      return cb ? cb(inner) : inner;
     },
     rich(parts) {
       return parts.every((p) => typeof p === 'string') ? parts.join('') : wrapRich(parts);

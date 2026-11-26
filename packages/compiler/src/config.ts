@@ -9,6 +9,8 @@ export interface NamespaceConfig {
 }
 
 /** `parla.config.json`, or the `parla` field of a package's `package.json`. */
+export type FunctionKind = 'string' | 'number' | 'date';
+
 export interface ParlaConfig {
   $schema?: string;
   locales?: Array<string>;
@@ -21,6 +23,13 @@ export interface ParlaConfig {
   namespaces?: Record<string, NamespaceConfig>;
   /** Workspace packages whose namespaces this package uses. Resolved from `node_modules`. */
   packages?: Array<string>;
+  /**
+   * Message functions beyond the built-in ones, by what their value is. Each needs an
+   * implementation in `createParla({ functions })`.
+   */
+  functions?: Record<string, FunctionKind>;
+  /** Markup that calls may leave out: `createParla({ markup })` renders it. */
+  markup?: Array<string>;
   /**
    * Module the generated types import and augment: the adapter this package depends on.
    * Default: the first of `@parlajs/react`, `@parlajs/core` listed in `package.json`.
@@ -47,6 +56,8 @@ export interface ResolvedConfig {
   namespaces: Array<ResolvedNamespace>;
   /** Module the generated types import and augment. */
   runtime: string;
+  functions: Record<string, FunctionKind>;
+  markup: Array<string>;
   /** Every file whose change should trigger a rebuild. */
   watchFiles: Array<string>;
 }
@@ -197,6 +208,8 @@ export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
     fallbacks: config.fallbacks ?? {},
     outDir: resolve(root, config.outDir ?? 'src/parla'),
     runtime: config.runtime ?? detectRuntime(root),
+    functions: config.functions ?? {},
+    markup: config.markup ?? [],
     namespaces: resolved,
     watchFiles,
   };
