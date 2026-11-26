@@ -46,7 +46,7 @@ The benchmark lives in `parla-benchmark`, keeping its dependencies out of here.
 pnpm test             # vitest, once (`pnpm exec vitest` watches)
 pnpm test:coverage    # fails under a floor in vitest.config.coverage.ts
 pnpm typecheck        # builds, then tsc
-pnpm lint             # oxlint (`lint:fix`, `lint:knip`, `lint:publish`)
+pnpm lint             # oxlint (`lint:fix`, `lint:knip`, `lint:publish`, `lint:lib-check`)
 pnpm format           # oxfmt
 pnpm pack:all         # tarballs in .packs/
 pnpm check-all        # every CI check, cheapest first (`-k` keeps going)
@@ -70,6 +70,8 @@ TypeScript **7.x**, `oxlint-tsgolint` on the same major; strict flags in `tsconf
 - **Relative imports name the `.ts` file.**
 - **Interface members are properties** (`readonly load: (…) => …`), never methods.
 - **Never widen a signature for a test; adapt the test.**
+- **Consumers may keep `skipLibCheck: false`**: so does this repo, every type test, and
+  `lint:lib-check`, which type-checks the built packages and a generated catalog as an app would.
 - **Named exports only.**
 - **Build configs set `noCheck`**: a green build proves nothing.
 

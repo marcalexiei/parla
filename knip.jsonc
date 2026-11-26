@@ -7,6 +7,10 @@
     ".": {
       "entry": ["scripts/*.ts"]
     },
-    "packages/*": {}
+    "packages/*": {},
+    "packages/format-icu": {
+      // the types of `@messageformat/parser` import `moo`; `skipLibCheck: false` needs them
+      "ignoreDependencies": ["@types/moo"]
+    }
   }
 }

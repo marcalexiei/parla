@@ -15,6 +15,7 @@ const CHECKS: Record<string, Array<string>> = {
   lint: ['run', 'lint'],
   typecheck: ['run', 'typecheck'],
   publish: ['run', 'lint:publish'],
+  'lib-check': ['run', 'lint:lib-check'],
   knip: ['run', 'lint:knip'],
   tests: ['run', 'test:coverage'],
 };
