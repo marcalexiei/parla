@@ -262,19 +262,43 @@ export function createParla(options: ParlaOptions): Parla {
 }
 
 /** Picks the best supported locale from a preference list such as `navigator.languages`. */
+/** `zh-TW` → `zh-Hant-TW`: the likely script and region, to compare tags that omit them. */
+function maximize(tag: string): Intl.Locale | undefined {
+  try {
+    return new Intl.Locale(tag).maximize();
+  } catch {
+    return undefined;
+  }
+}
+
 export function matchLocale<L extends string>(
   requested: ReadonlyArray<string>,
   supported: ReadonlyArray<L>,
   fallback: L,
 ): L {
+  const candidates = supported.map((tag) => ({ tag, locale: maximize(tag) }));
   for (const req of requested) {
-    const lower = req.toLowerCase();
-    const [base] = lower.split('-');
-    const match =
-      supported.find((l) => l.toLowerCase() === lower) ??
-      supported.find((l) => l.toLowerCase().split('-')[0] === base);
-    if (match !== undefined) {
-      return match;
+    const exact = supported.find((l) => l.toLowerCase() === req.toLowerCase());
+    if (exact !== undefined) {
+      return exact;
+    }
+    const want = maximize(req);
+    if (!want) {
+      continue;
+    }
+    // Same language; then the same script (zh-Hant ≠ zh-Hans) outranks the same region.
+    let best: { tag: L; score: number } | undefined;
+    for (const { tag, locale } of candidates) {
+      if (locale?.language === want.language) {
+        const score =
+          (locale.script === want.script ? 2 : 0) + (locale.region === want.region ? 1 : 0);
+        if (!best || score > best.score) {
+          best = { tag, score };
+        }
+      }
+    }
+    if (best) {
+      return best.tag;
     }
   }
   return fallback;

@@ -170,4 +170,15 @@ describe(matchLocale, () => {
     expect(matchLocale(['pt-BR'], ['en', 'pt-BR'], 'en')).toBe('pt-BR');
     expect(matchLocale(['fr'], ['en', 'it'], 'en')).toBe('en');
   });
+
+  it('prefers the same script, then the same region, among tags of one language', () => {
+    expect(matchLocale(['zh-Hant-TW'], ['zh-CN', 'zh-TW'], 'en')).toBe('zh-TW');
+    expect(matchLocale(['zh-HK'], ['zh-CN', 'zh-TW'], 'en')).toBe('zh-TW');
+    expect(matchLocale(['sr-Latn-RS'], ['sr', 'sr-Latn'], 'en')).toBe('sr-Latn');
+    expect(matchLocale(['en'], ['en-GB', 'en-US'], 'en-GB')).toBe('en-US');
+    expect(matchLocale(['pt-PT'], ['en', 'pt-BR'], 'en')).toBe('pt-BR');
+    expect(matchLocale(['not a tag', 'it'], ['en', 'it'], 'en')).toBe('it');
+    // a later, worse candidate keeps the better one; an invalid supported tag is skipped
+    expect(matchLocale(['zh-HK'], ['zh-TW', 'zh-CN', 'not a tag'], 'en')).toBe('zh-TW');
+  });
 });
