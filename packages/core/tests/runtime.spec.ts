@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createRuntime } from '../src/runtime.ts';
 
 const rt = createRuntime('en');
+/** 21 × 21 distinct, valid number options */
+const numberOptions = (n: number): Record<string, number> => ({
+  minimumIntegerDigits: (n % 21) + 1,
+  maximumFractionDigits: Math.floor(n / 21),
+});
 const when = new Date(Date.UTC(2026, 0, 15, 9, 30, 45));
 const intl = (options: Intl.DateTimeFormatOptions): string =>
   new Intl.DateTimeFormat('en', options).format(when);
@@ -47,6 +52,23 @@ describe(createRuntime, () => {
     expect(rt.pick([rt.sn(1, { select: 'exact' })], [['one'], [null]])).toBe(1);
     expect(rt.pick([rt.ss('x')], [['a'], ['b']])).toBe(1);
     expect(rt.pick([], [['a']])).toBe(0);
+  });
+
+  it('keeps a bounded formatter cache, dropping the oldest', () => {
+    const fresh = createRuntime('en');
+    const made = vi.spyOn(Intl, 'NumberFormat');
+    onTestFinished(() => {
+      made.mockRestore();
+    });
+    fresh.f('number', 1, numberOptions(0));
+    fresh.f('number', 1, numberOptions(0));
+    expect(made).toHaveBeenCalledTimes(1);
+    for (let n = 1; n <= 300; n += 1) {
+      fresh.f('number', 1, numberOptions(n));
+    }
+    made.mockClear();
+    fresh.f('number', 1, numberOptions(0));
+    expect(made).toHaveBeenCalledTimes(1);
   });
 
   it('keeps markup children when no callback is passed', () => {
