@@ -2,20 +2,6 @@ import { mf1ToMessageData } from '@messageformat/icu-messageformat-1';
 import { parse } from '@messageformat/parser';
 import type { Model } from 'messageformat';
 
-export interface FormatAdapter {
-  /** Format id used in catalog config, e.g. `icu`. */
-  name: string;
-  /** Parses one message source into the MessageFormat 2 data model. Throws {@link FormatError}. */
-  readonly parse: (source: string) => Model.Message;
-}
-
-export class FormatError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FormatError';
-  }
-}
-
 const TAG = /<(?<close>\/?)(?<name>[A-Za-z][\w-]*)\s*(?<self>\/?)>/g;
 
 /** Stands for a quoted `<` until tags are split; a private-use character no catalog contains. */
@@ -94,7 +80,7 @@ function normalizeFunction(fn: Model.FunctionRef): Model.FunctionRef {
       return { type: 'function', name: 'unit', options };
     }
     case 'mf1:duration':
-      throw new FormatError('ICU `duration` is not supported');
+      throw new Error('ICU `duration` is not supported');
     default:
       // A custom function (`{x, capitalize}`): the compiler checks it against the config.
       return { ...fn, name: fn.name.replace(/^mf1:/, ''), options };
@@ -138,14 +124,15 @@ function normalize(msg: Model.Message): Model.Message {
   };
 }
 
-export const icu: FormatAdapter = {
+/** The compiler's `icu` format: parses one message into the MF2 data model, or throws. */
+export const icu = {
   name: 'icu',
-  parse(source) {
+  parse: (source: string): Model.Message => {
     let ast;
     try {
       ast = parse(quoteTags(source), { strict: false });
     } catch (error) {
-      throw new FormatError(`ICU ${(error as Error).message}`);
+      throw new Error(`ICU ${(error as Error).message}`, { cause: error });
     }
     return normalize(mf1ToMessageData(ast));
   },

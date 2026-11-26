@@ -1,40 +1,18 @@
-import { MessageSyntaxError, parseMessage, validate } from 'messageformat';
-import type { Model } from 'messageformat';
+import { parseMessage, validate } from 'messageformat';
+import type { MessageSyntaxError, Model } from 'messageformat';
 
-export type { Model } from 'messageformat';
-
-export interface FormatAdapter {
-  /** Format id used in catalog config, e.g. `mf2`. */
-  name: string;
-  /** Parses one message source into the MessageFormat 2 data model. Throws {@link FormatError}. */
-  readonly parse: (source: string) => Model.Message;
-}
-
-export class FormatError extends Error {
-  readonly start: number | undefined;
-  readonly end: number | undefined;
-
-  constructor(message: string, start?: number, end?: number) {
-    super(message);
-    this.start = start;
-    this.end = end;
-    this.name = 'FormatError';
-  }
-}
-
-export const mf2: FormatAdapter = {
+/** The compiler's `mf2` format: parses and validates one message, or throws. */
+export const mf2 = {
   name: 'mf2',
-  parse(source) {
-    let msg: Model.Message;
+  parse: (source: string): Model.Message => {
     try {
-      msg = parseMessage(source);
+      const msg = parseMessage(source);
       validate(msg);
+      return msg;
     } catch (error) {
-      if (error instanceof MessageSyntaxError) {
-        throw new FormatError(`MF2 ${error.type} at ${error.start}`, error.start, error.end);
-      }
-      throw error;
+      // Both throw only syntax errors, data model ones included.
+      const { type, start } = error as MessageSyntaxError;
+      throw new Error(`MF2 ${type} at ${start}`, { cause: error });
     }
-    return msg;
   },
 };

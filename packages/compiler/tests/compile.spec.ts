@@ -205,6 +205,9 @@ describe('MF2', () => {
   it('rejects unknown functions and bad markup', () => {
     expect(() => compile('mf2', '{$x :sparkle}')).toThrow(/unknown function :sparkle/);
     expect(() => compile('mf2', '{#b}never closed')).toThrow(/never closed/);
-    expect(() => mf2.parse('{{unclosed')).toThrow(/MF2/);
+    expect(() => mf2.parse('{{unclosed')).toThrow('MF2 missing-syntax at 10');
+    expect(() => mf2.parse('.input {$x :number}\n.match $x\none {{a}}')).toThrow(
+      'MF2 missing-fallback',
+    );
   });
 });

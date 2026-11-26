@@ -18,7 +18,12 @@ export default mergeConfig(
           'packages/react/src/**': { lines: 100, statements: 100, functions: 100, branches: 90 },
           'packages/compiler/src/**': { lines: 83, statements: 83, functions: 83, branches: 71 },
           'packages/format-icu/src/**': { lines: 91, statements: 91, functions: 100, branches: 80 },
-          'packages/format-mf2/src/**': { lines: 91, statements: 91, functions: 100, branches: 50 },
+          'packages/format-mf2/src/**': {
+            lines: 100,
+            statements: 100,
+            functions: 100,
+            branches: 100,
+          },
         },
       },
     },
