@@ -9,6 +9,9 @@ import { parla } from '@parlajs/compiler/vite';
 export default defineConfig({ plugins: [parla(), react()] }); // fails a production build on errors
 ```
 
+The plugin rebuilds on every catalog change in `vite` and `vite build --watch`, namespaces added to the
+config later included, so a Vite app needs no `parla build --watch`.
+
 ```
 parla build [--watch]   chunks + catalog.js + catalog.d.ts
 parla types             catalog.d.ts only
