@@ -71,6 +71,37 @@ describe(createParla, () => {
     expect(parla.locale).toBe('en');
   });
 
+  it('marks settled promises for React and retries a failed download', async () => {
+    const { catalog } = makeCatalog();
+    const failure = new Error('offline');
+    let attempts = 0;
+    const flaky: Catalog = {
+      ...catalog,
+      namespaces: {
+        ...catalog.namespaces,
+        flaky: {
+          en: async () => {
+            attempts += 1;
+            if (attempts === 1) {
+              throw failure;
+            }
+            return Promise.resolve(chunk({ ok: 'yes' }));
+          },
+        },
+      },
+    };
+    const parla = createParla({ catalog: flaky });
+    const first = parla.load('flaky');
+    await expect(first).rejects.toBe(failure);
+    expect(first).toMatchObject({ status: 'rejected', reason: failure });
+
+    const second = parla.load('flaky');
+    expect(second).not.toBe(first);
+    const t = await second;
+    expect(second).toMatchObject({ status: 'fulfilled', value: t });
+    expect(attempts).toBe(2);
+  });
+
   it('rejects unknown locales and namespaces', async () => {
     const { catalog } = makeCatalog();
     expect(() => createParla({ catalog, locale: 'fr' })).toThrow(/unknown locale "fr"/);

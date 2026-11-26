@@ -71,7 +71,8 @@ export function useParla(): Parla {
 export function useT<N extends Namespace>(namespace: N): Namespaces[N] {
   const parla = useParla();
   useSyncExternalStore(parla.subscribe, parla.getSnapshot, parla.getSnapshot);
-  return parla.getT(namespace) ?? use(parla.load(namespace));
+  // Called on every render: React forbids skipping a `use()` that suspended before.
+  return use(parla.load(namespace));
 }
 
 /** Current locale and a setter that loads the namespaces in use before switching. */

@@ -53,7 +53,10 @@ export interface Parla {
   readonly locales: ReadonlyArray<Locale>;
   /** Loads every namespace in use for `locale`, then switches, so nothing suspends. */
   readonly setLocale: (locale: Locale) => Promise<void>;
-  /** Loads a namespace once per locale. Returns the same promise on every call. */
+  /**
+   * Loads a namespace once per locale. Returns the same promise on every call, carrying
+   * `status` and `value` once settled, which React's `use()` reads without suspending.
+   */
   readonly load: <N extends Namespace>(namespace: N, locale?: Locale) => Promise<Namespaces[N]>;
   /** The accessor if the namespace is loaded for the current locale. */
   readonly getT: <N extends Namespace>(namespace: N) => Namespaces[N] | undefined;
@@ -125,6 +128,14 @@ export function createParla(options: ParlaOptions): Parla {
     return rt;
   };
 
+  // Set before the promise settles, so a `use()` in the render it wakes reads it synchronously.
+  const settle = (key: string, state: object): void => {
+    const promise = promises.get(key);
+    if (promise) {
+      Object.assign(promise as object, state);
+    }
+  };
+
   const fetchAccessor = async (
     namespace: string,
     locale: string,
@@ -138,8 +149,10 @@ export function createParla(options: ParlaOptions): Parla {
       const mod = await loader();
       const accessor = buildAccessor(mod.default, runtime(locale));
       accessors.set(key, accessor);
+      settle(key, { status: 'fulfilled', value: accessor });
       return accessor;
     } catch (error) {
+      settle(key, { status: 'rejected', reason: error });
       // A failed download is retried on the next call.
       promises.delete(key);
       throw error;
