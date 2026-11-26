@@ -30,7 +30,7 @@ export default defineConfig({
     // Tuned to what this repository is
     // ---------------------------------------------------------------------------
 
-    // Generated code calls `(p, $)`; the runtime and compiler mirror those names, and
+    // Generated code names params `p` and the runtime `$`; the runtime and compiler mirror those, and
     // comparator pairs, loop indexes and the discarded argument are single letters by convention.
     'id-length': [
       'error',

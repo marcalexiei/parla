@@ -23,9 +23,10 @@ export type Namespace = keyof Namespaces;
 /** What a message with markup returns: `ReactNode` with `@parlajs/react`. */
 export type RichNode = Registered<'richNode', unknown>;
 
-export type CompiledMessage = (params: Record<string, unknown>, rt: MessageRuntime) => unknown;
+/** A compiled chunk: called once per locale with its runtime, it returns the namespace's accessor. */
+export type MessageFactory = (rt: MessageRuntime) => unknown;
 export interface MessageModule {
-  default: Record<string, CompiledMessage>;
+  default: MessageFactory;
 }
 export type Loader = () => Promise<MessageModule>;
 
@@ -77,30 +78,6 @@ if (g[INSTANCE] && g[INSTANCE] !== marker) {
 }
 g[INSTANCE] = marker;
 
-type Message = (params?: Record<string, unknown>) => unknown;
-interface AccessorNode {
-  [key: string]: AccessorNode | Message;
-}
-
-function buildAccessor(messages: Record<string, CompiledMessage>, rt: MessageRuntime): unknown {
-  const root: AccessorNode = {};
-  for (const [key, fn] of Object.entries(messages)) {
-    const path = key.split('.');
-    const leaf = path.pop() ?? key;
-    let node = root;
-    for (const segment of path) {
-      let child = node[segment];
-      if (typeof child !== 'object') {
-        child = {};
-        node[segment] = child;
-      }
-      node = child;
-    }
-    node[leaf] = (params?: Record<string, unknown>): unknown => fn(params ?? {}, rt);
-  }
-  return root;
-}
-
 export function createParla(options: ParlaOptions): Parla {
   const { catalog, wrapRich } = options;
   const { locales } = catalog;
@@ -147,7 +124,7 @@ export function createParla(options: ParlaOptions): Parla {
     }
     try {
       const mod = await loader();
-      const accessor = buildAccessor(mod.default, runtime(locale));
+      const accessor = mod.default(runtime(locale));
       accessors.set(key, accessor);
       settle(key, { status: 'fulfilled', value: accessor });
       return accessor;

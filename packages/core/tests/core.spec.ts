@@ -7,14 +7,22 @@ interface Common {
   nav: { home: () => string };
 }
 
-const chunk = (messages: Record<string, string>): MessageModule => ({
-  default: Object.fromEntries(Object.entries(messages).map(([k, v]) => [k, () => v])),
-});
+interface Messages {
+  [key: string]: string | Messages;
+}
+
+const accessorOf = (messages: Messages): object =>
+  Object.fromEntries(
+    Object.entries(messages).map(([k, v]) => [k, typeof v === 'string' ? () => v : accessorOf(v)]),
+  );
+
+// What `parla build` emits: one factory per chunk, returning the accessor tree.
+const chunk = (messages: Messages): MessageModule => ({ default: () => accessorOf(messages) });
 
 function makeCatalog(): { catalog: Catalog; calls: Array<string> } {
   const calls: Array<string> = [];
   const loader =
-    (locale: string, ns: string, messages: Record<string, string>): Loader =>
+    (locale: string, ns: string, messages: Messages): Loader =>
     async () => {
       calls.push(`${locale}/${ns}`);
       return Promise.resolve(chunk(messages));
@@ -24,8 +32,8 @@ function makeCatalog(): { catalog: Catalog; calls: Array<string> } {
     sourceLocale: 'en',
     namespaces: {
       common: {
-        en: loader('en', 'common', { 'nav.home': 'Home' }),
-        it: loader('it', 'common', { 'nav.home': 'Inizio' }),
+        en: loader('en', 'common', { nav: { home: 'Home' } }),
+        it: loader('it', 'common', { nav: { home: 'Inizio' } }),
       },
       checkout: {
         en: loader('en', 'checkout', { title: 'Checkout' }),

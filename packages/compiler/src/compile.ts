@@ -22,6 +22,8 @@ export interface MessageInfo {
 export interface CompiledMessage {
   /** JS expression: `(p, $) => …`. */
   code: string;
+  /** The function's body alone, reading params from `p` and the runtime from `$`. */
+  body: string;
   info: MessageInfo;
 }
 
@@ -239,5 +241,5 @@ export function compileMessage(
     c.declare(decl);
   }
   const body = msg.type === 'message' ? c.pattern(msg.pattern).code : c.select(msg);
-  return { code: `(p, $) => ${body}`, info: c.info };
+  return { code: `(p, $) => ${body}`, body, info: c.info };
 }

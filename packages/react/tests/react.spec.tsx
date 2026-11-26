@@ -40,30 +40,32 @@ const catalog: Catalog = {
       en: async () => {
         await nextTask();
         return {
-          default: {
+          default: ($) => ({
             title: () => 'Shop',
-            terms: (p, $) => $.rich(['Read the ', $.tag(p, 'link', ['terms'])]),
-          },
+            terms: (p: Record<string, unknown>) =>
+              $.rich(['Read the ', $.tag(p, 'link', ['terms'])]),
+          }),
         };
       },
       it: async () => {
         await nextTask();
         return {
-          default: {
+          default: ($) => ({
             title: () => 'Negozio',
-            terms: (p, $) => $.rich(['Leggi i ', $.tag(p, 'link', ['termini'])]),
-          },
+            terms: (p: Record<string, unknown>) =>
+              $.rich(['Leggi i ', $.tag(p, 'link', ['termini'])]),
+          }),
         };
       },
     },
     extra: {
       en: async () => {
         await nextTask();
-        return { default: { hello: () => 'Hello' } };
+        return { default: () => ({ hello: () => 'Hello' }) };
       },
       it: async () => {
         await nextTask();
-        return { default: { hello: () => 'Ciao' } };
+        return { default: () => ({ hello: () => 'Ciao' }) };
       },
     },
     broken: {

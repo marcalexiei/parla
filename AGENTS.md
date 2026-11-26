@@ -30,8 +30,11 @@ its dependencies stay out of this workspace.
 
 - **The MF2 data model is the one IR.** A format adapter only parses into it; everything after
   (compile, types, runtime) is format-blind. A new format is a new adapter, nothing else.
-- **Compiled messages are `(p, $) => …`**, where `$` is the per-locale `MessageRuntime`. Its member
-  names are short on purpose: they are repeated in every generated chunk.
+- **A chunk exports `($) => accessor`**: called once per locale with its `MessageRuntime`, it
+  returns the nested tree of `(p) => …` messages in one object literal. `$`'s member names are
+  short on purpose: they are repeated in every chunk.
+- **Startup cost lives in the chunk factory**: a message that never reads `$` is hoisted to module
+  scope, and a group past 127 keys is split, since V8 builds larger literals ~100× slower.
 - **The runtime runs in browsers**: `core`, `react` and `format-*` read no Node globals
   (`no-restricted-globals` enforces it). Only `compiler` is Node-only.
 - **Types reach a consumer through `Register`**: generated `catalog.d.ts` augments it with `locale`

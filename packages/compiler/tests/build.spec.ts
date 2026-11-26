@@ -220,3 +220,56 @@ useSuspenseParla('widget');
     ).not.toThrow();
   });
 });
+
+describe('chunks', () => {
+  const dir = join(repo, '.tmp', 'build-test-chunk');
+
+  it('build the accessor in one call, keeping a `__proto__` key as a message', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(join(dir, 'locales/en'), { recursive: true });
+    writeFileSync(
+      join(dir, 'parla.config.json'),
+      JSON.stringify({
+        locales: ['en'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    // Past 127 keys a group is a literal plus assignments, and `__proto__` must stay a message.
+    const big = Object.fromEntries(Array.from({ length: 130 }, (_, i) => [`k${i}`, `Big ${i}`]));
+    writeFileSync(
+      join(dir, 'locales/en/app.json'),
+      `{ "__proto__": "Proto", "plain": "Plain", "nav": { "home": "Home" }, "terms": "Read the <link>terms</link>", "big": ${JSON.stringify(big).slice(0, -1)}, "__proto__": "Big proto" } }`,
+    );
+    build({ cwd: dir });
+    const chunk = readFileSync(join(dir, 'src/parla/messages/en/app.js'), 'utf8');
+    // Plain text never reads `p` or `$`, so it is created once per module.
+    expect(chunk).toMatch(/const (?<name>m\d+) = \(p\) => "Plain";[\s\S]*"plain": \k<name>,/);
+
+    const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
+      catalog: Catalog;
+    };
+    const t = (await createParla({ catalog }).load('app')) as Record<string, unknown> & {
+      plain: () => string;
+      nav: { home: () => string };
+      terms: (params?: object) => string;
+      big: Record<string, () => string>;
+    };
+    expect(Object.getPrototypeOf(t)).toBe(Object.prototype);
+    const proto = Object.getOwnPropertyDescriptor(t, '__proto__')?.value as
+      | (() => string)
+      | undefined;
+    expect(proto?.()).toBe('Proto');
+    expect([t.plain(), t.nav.home()]).toStrictEqual(['Plain', 'Home']);
+    expect([t.big['k0']?.(), t.big['k129']?.()]).toStrictEqual(['Big 0', 'Big 129']);
+    expect(Object.getPrototypeOf(t.big)).toBe(Object.prototype);
+    const bigProto = Object.getOwnPropertyDescriptor(t.big, '__proto__')?.value as
+      | (() => string)
+      | undefined;
+    expect(bigProto?.()).toBe('Big proto');
+    const again = (await createParla({ catalog }).load('app')) as typeof t;
+    expect(again.plain).toBe(t.plain);
+    expect(again.terms).not.toBe(t.terms);
+    // Markup without its callback keeps the children, as before.
+    expect(t.terms()).toBe('Read the terms');
+  });
+});
