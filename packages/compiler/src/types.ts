@@ -13,6 +13,22 @@ export function interfaceName(namespace: string): string {
   return `${/^\d/.test(pascal) ? '_' : ''}${pascal}Messages`;
 }
 
+/** {@link interfaceName} per namespace, numbered where two collide (`foo-bar`, `foo_bar`). */
+export function interfaceNames(namespaces: ReadonlyArray<string>): Map<string, string> {
+  const names = new Map<string, string>();
+  const used = new Set<string>();
+  for (const namespace of namespaces) {
+    const base = interfaceName(namespace);
+    let name = base;
+    for (let n = 2; used.has(name); n += 1) {
+      name = base.replace(/Messages$/, `${n}Messages`);
+    }
+    used.add(name);
+    names.set(namespace, name);
+  }
+  return names;
+}
+
 /** Collapses every use of one parameter into a single TS type. */
 export function paramType(kinds: Array<ParamKind>): string {
   if (kinds.some((k) => k.kind === 'number')) {
@@ -76,6 +92,7 @@ function render(tree: Tree, indent: string): string {
 export function namespaceInterface(
   namespace: string,
   messages: Map<string, { info: MessageInfo; source: string }>,
+  name: string = interfaceName(namespace),
 ): string {
   const tree: Tree = {};
   for (const [key, { info, source }] of messages) {
@@ -92,5 +109,5 @@ export function namespaceInterface(
     }
     node[leaf] = { leaf: signature(info), doc: source };
   }
-  return `export interface ${interfaceName(namespace)} {\n${render(tree, '  ')}\n}`;
+  return `export interface ${name} {\n${render(tree, '  ')}\n}`;
 }

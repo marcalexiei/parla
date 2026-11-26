@@ -303,3 +303,29 @@ describe('select keys', () => {
     );
   });
 });
+
+describe('interface names', () => {
+  const dir = join(repo, '.tmp', 'build-test-names');
+
+  it('are numbered when two namespaces would share one', () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(join(dir, 'locales/en'), { recursive: true });
+    writeFileSync(
+      join(dir, 'parla.config.json'),
+      JSON.stringify({
+        locales: ['en'],
+        namespaces: {
+          'foo-bar': { format: 'icu', path: 'locales/{locale}/foo-bar.json' },
+          foo_bar: { format: 'icu', path: 'locales/{locale}/foo_bar.json' },
+        },
+      }),
+    );
+    writeFileSync(join(dir, 'locales/en/foo-bar.json'), JSON.stringify({ dash: 'Dash' }));
+    writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
+    build({ cwd: dir, write: 'types' });
+    const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
+    expect(dts).toContain('export interface FooBarMessages {\n  /** Dash */\n  dash(): string;');
+    expect(dts).toContain('export interface FooBar2Messages {\n  /** Under */\n  under(): string;');
+    expect(dts).toContain('"foo-bar": FooBarMessages;\n      "foo_bar": FooBar2Messages;');
+  });
+});
