@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="3 6 116 116" role="img" aria-label="Parla">
+<defs><clipPath id="c"><circle cx="46" cy="54" r="34"/></clipPath></defs>
+<circle cx="46" cy="54" r="34" fill="#16171B"/>
+<path d="M22 70L10 102L40 84Z" fill="#16171B"/>
+<circle cx="78" cy="62" r="34" fill="#E5412B"/>
+<path d="M98 78L110 108L84 92Z" fill="#E5412B"/>
+<circle cx="78" cy="62" r="34" fill="#16171B" fill-opacity="0.5" clip-path="url(#c)"/>
+</svg>

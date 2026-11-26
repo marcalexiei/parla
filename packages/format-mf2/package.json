@@ -1,0 +1,28 @@
+{
+  "name": "@parlajs/format-mf2",
+  "version": "0.0.0",
+  "description": "MessageFormat 2 adapter for the Parla compiler.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcalexiei/parla.git",
+    "directory": "packages/format-mf2"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "messageformat": "^4.1.0"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@parlajs/compiler",
+  "version": "0.0.0",
+  "description": "Compiles Parla catalogs into per-locale chunks and typed accessors.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcalexiei/parla.git",
+    "directory": "packages/compiler"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "bin": {
+    "parla": "./dist/cli.js"
+  },
+  "dependencies": {
+    "@parlajs/format-icu": "workspace:^",
+    "@parlajs/format-mf2": "workspace:^",
+    "messageformat": "^4.1.0"
+  },
+  "devDependencies": {
+    "@parlajs/core": "workspace:^",
+    "vite": "8.3.8"
+  },
+  "peerDependencies": {
+    "vite": ">=6"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}

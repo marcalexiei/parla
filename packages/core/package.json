@@ -1,0 +1,25 @@
+{
+  "name": "@parlajs/core",
+  "version": "0.0.0",
+  "description": "Framework-agnostic runtime for Parla: locale state, lazy catalogs, formatting.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcalexiei/parla.git",
+    "directory": "packages/core"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  }
+}
