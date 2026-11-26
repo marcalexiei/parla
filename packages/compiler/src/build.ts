@@ -9,7 +9,7 @@ import { CompileError, compileMessage, ModuleScope } from './compile.ts';
 import type { MessageInfo } from './compile.ts';
 import { fallbackChain, loadConfig } from './config.ts';
 import type { ResolvedConfig, ResolvedNamespace } from './config.ts';
-import { interfaceNames, namespaceInterface, paramType } from './types.ts';
+import { interfaceName, interfaceNames, namespaceInterface, paramType } from './types.ts';
 
 export interface FormatAdapter {
   readonly name: string;
@@ -183,8 +183,11 @@ function readCatalog(
   return { file, entries, exists: true };
 }
 
-const union = (names: ReadonlyArray<string>): string =>
-  names.map((n) => JSON.stringify(n)).join(' | ');
+/** One registry augmentation, or nothing when it has no member. */
+const registry = (name: string, members: ReadonlyArray<[key: string, type: string]>): string =>
+  members.length === 0
+    ? ''
+    : `  interface ${name} {\n${members.map(([k, t]) => `    ${JSON.stringify(k)}: ${t};`).join('\n')}\n  }\n`;
 
 function writeIfChanged(file: string, content: string, written: Array<string>): void {
   if (existsSync(file) && readFileSync(file, 'utf8') === content) {
@@ -205,6 +208,7 @@ export function build(options: BuildOptions = {}): BuildResult {
   const chunks = new Map<string, string>();
   const interfaces: Array<string> = [];
   const names = interfaceNames(config.namespaces.map((ns) => ns.name));
+  const nameOf = (namespace: string): string => names.get(namespace) ?? interfaceName(namespace);
 
   for (const ns of config.namespaces) {
     const adapter = formats[ns.format];
@@ -349,7 +353,7 @@ export function build(options: BuildOptions = {}): BuildResult {
     }
     interfaces.push(
       namespaceInterface(ns.name, sourceInfo, {
-        name: names.get(ns.name),
+        name: nameOf(ns.name),
         defaults: new Set(config.markup),
       }),
     );
@@ -358,20 +362,27 @@ export function build(options: BuildOptions = {}): BuildResult {
   if (write) {
     const out = config.outDir;
     const localeType = config.locales.map((l) => JSON.stringify(l)).join(' | ');
-    const extensions = [
-      ...(Object.keys(config.functions).length > 0
-        ? [`    functions: ${union(Object.keys(config.functions))};`]
-        : []),
-      ...(config.markup.length > 0 ? [`    markup: ${union(config.markup)};`] : []),
-    ]
-      .map((line) => `\n${line}`)
-      .join('');
-    const nsEntries = config.namespaces
-      .map((ns) => `      ${JSON.stringify(ns.name)}: ${names.get(ns.name)};`)
-      .join('\n');
+    const registries = [
+      registry(
+        'LocaleRegistry',
+        config.locales.map((l) => [l, 'true']),
+      ),
+      registry(
+        'NamespaceRegistry',
+        config.namespaces.map((ns) => [ns.name, nameOf(ns.name)]),
+      ),
+      registry(
+        'FunctionRegistry',
+        Object.keys(config.functions).map((f) => [f, 'true']),
+      ),
+      registry(
+        'MarkupRegistry',
+        config.markup.map((m) => [m, 'true']),
+      ),
+    ].join('');
     writeIfChanged(
       join(out, 'catalog.d.ts'),
-      `${HEADER}import type { Catalog, RichNode } from '${config.runtime}';\n\n${interfaces.join('\n\n')}\n\nexport type Locale = ${localeType};\n\nexport declare const catalog: Catalog & { readonly locales: readonly Locale[]; readonly sourceLocale: ${JSON.stringify(config.sourceLocale)} };\n\ndeclare module '${config.runtime}' {\n  interface Register {\n    locale: ${localeType};\n    namespaces: {\n${nsEntries}\n    };${extensions}\n  }\n}\n`,
+      `${HEADER}import type { Catalog, RichNode } from '${config.runtime}';\n\n${interfaces.join('\n\n')}\n\nexport type Locale = ${localeType};\n\nexport declare const catalog: Catalog & { readonly locales: readonly Locale[]; readonly sourceLocale: ${JSON.stringify(config.sourceLocale)} };\n\ndeclare module '${config.runtime}' {\n${registries}}\n`,
       written,
     );
     if (write === 'all') {

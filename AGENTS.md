@@ -14,7 +14,7 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 
 | Path                  |                                                            |
 | --------------------- | ---------------------------------------------------------- |
-| `packages/core`       | Runtime: locale state, lazy loading, `Intl`, `Register`    |
+| `packages/core`       | Runtime: locale state, lazy loading, `Intl`, registries    |
 | `packages/react`      | `ParlaProvider`, `useParla`, `useLocale`                   |
 | `packages/compiler`   | `parla` CLI and Vite plugin: catalogs → chunks + `.d.ts`   |
 | `packages/format-icu` | ICU → MF2 data model                                       |
@@ -35,8 +35,9 @@ The benchmark lives in `parla-benchmark`, keeping its dependencies out of here.
 - **V8 builds literals past 127 keys ~100× slower**, so bigger groups are split. Hoisting messages
   out of the factory measured no faster and 40% more gzip.
 - **`core`, `react` and `format-*` run in browsers**: no Node globals (`no-restricted-globals`).
-- **Types reach consumers through `Register`**: `catalog.d.ts` augments the runtime the package
-  depends on (`@parlajs/react` before `@parlajs/core`, or `runtime`).
+- **Types reach consumers through registries**: `catalog.d.ts` augments the runtime the package
+  depends on (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale,
+  namespace, function or tag, so a package's types and the app's add up instead of clashing.
 - **A namespace has one owner package**; a second is a build error.
 
 ## Commands
