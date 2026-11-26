@@ -17,7 +17,7 @@ import { CompileError, compileMessage, ModuleScope } from './compile.ts';
 import type { MessageInfo } from './compile.ts';
 import { fallbackChain, loadConfig } from './config.ts';
 import type { ResolvedConfig, ResolvedNamespace } from './config.ts';
-import { interfaceName, interfaceNames, namespaceInterface, paramType } from './types.ts';
+import { interfaceNames, namespaceInterface, paramType } from './types.ts';
 
 export interface FormatAdapter {
   readonly name: string;
@@ -192,10 +192,33 @@ function readCatalog(
 }
 
 /** One registry augmentation, or nothing when it has no member. */
-const registry = (name: string, members: ReadonlyArray<[key: string, type: string]>): string =>
-  members.length === 0
-    ? ''
-    : `  interface ${name} {\n${members.map(([k, t]) => `    ${JSON.stringify(k)}: ${t};`).join('\n')}\n  }\n`;
+function registry(
+  name: string,
+  keys: ReadonlyArray<string>,
+  type: (key: string) => string = () => 'true',
+): string {
+  const members = keys.map((k) => `    ${JSON.stringify(k)}: ${type(k)};\n`).join('');
+  return members ? `  interface ${name} {\n${members}  }\n` : '';
+}
+
+/** A translation's params and markup against the source message's. */
+function mismatches(own: MessageInfo, source: MessageInfo): Array<string> {
+  const out: Array<string> = [];
+  for (const [param, kinds] of own.params) {
+    const expected = source.params.get(param);
+    if (!expected) {
+      out.push(`uses $${param}, which the source message does not have`);
+    } else if (paramType(kinds) !== paramType(expected) && paramType(kinds) !== 'string | number') {
+      out.push(`$${param} is ${paramType(kinds)} here but ${paramType(expected)} in the source`);
+    }
+  }
+  for (const tag of own.markup) {
+    if (!source.markup.has(tag)) {
+      out.push(`uses markup "${tag}", which the source message does not have`);
+    }
+  }
+  return out;
+}
 
 /**
  * Writes through a dotted temp file and a rename: builds run at once (one per app of a monorepo, the
@@ -222,7 +245,9 @@ export function build(options: BuildOptions = {}): BuildResult {
   const chunks = new Map<string, string>();
   const interfaces: Array<string> = [];
   const names = interfaceNames(config.namespaces.map((ns) => ns.name));
-  const nameOf = (namespace: string): string => names.get(namespace) ?? interfaceName(namespace);
+  const nameOf = (namespace: string): string => names.get(namespace) ?? '';
+  // The source locale first, so every translation has its source message to compare against.
+  const locales = [config.sourceLocale, ...config.locales.filter((l) => l !== config.sourceLocale)];
 
   for (const ns of config.namespaces) {
     const adapter = formats[ns.format];
@@ -261,7 +286,7 @@ export function build(options: BuildOptions = {}): BuildResult {
     const source = catalogs.get(config.sourceLocale) ?? new Map<string, Entry>();
     const sourceInfo = new Map<string, { info: MessageInfo; source: string }>();
 
-    for (const locale of config.locales) {
+    for (const locale of locales) {
       const scope = new ModuleScope();
       const messages: Array<[key: string, fn: string]> = [];
       const own = catalogs.get(locale) ?? new Map<string, Entry>();
@@ -309,49 +334,10 @@ export function build(options: BuildOptions = {}): BuildResult {
         if (locale === config.sourceLocale) {
           sourceInfo.set(key, { info: compiled.info, source: srcEntry.source });
         } else if (own.has(key)) {
-          let ref = sourceInfo.get(key);
-          if (!ref) {
-            try {
-              ref = {
-                info: compileMessage(srcEntry.model, undefined, config.functions).info,
-                source: srcEntry.source,
-              };
-            } catch {
-              // The source message's own error is reported for the source locale.
-            }
-          }
-          if (ref) {
-            for (const [param, kinds] of compiled.info.params) {
-              const expected = ref.info.params.get(param);
-              if (!expected) {
-                at({
-                  level: 'error',
-                  code: 'param-mismatch',
-                  key,
-                  message: `uses $${param}, which the source message does not have`,
-                });
-              } else if (
-                paramType(kinds) !== paramType(expected) &&
-                paramType(kinds) !== 'string | number'
-              ) {
-                at({
-                  level: 'error',
-                  code: 'param-mismatch',
-                  key,
-                  message: `$${param} is ${paramType(kinds)} here but ${paramType(expected)} in the source`,
-                });
-              }
-            }
-            for (const tag of compiled.info.markup) {
-              if (!ref.info.markup.has(tag)) {
-                at({
-                  level: 'error',
-                  code: 'param-mismatch',
-                  key,
-                  message: `uses markup "${tag}", which the source message does not have`,
-                });
-              }
-            }
+          // A source message that fails to compile is reported for the source locale.
+          const ref = sourceInfo.get(key);
+          for (const message of ref ? mismatches(compiled.info, ref.info) : []) {
+            at({ level: 'error', code: 'param-mismatch', key, message });
           }
         }
         // A message that never reads `p` takes no default, so a call without params allocates nothing.
@@ -365,34 +351,21 @@ export function build(options: BuildOptions = {}): BuildResult {
         `${HEADER}${consts}export default ($) => (${emitGroup(treeOf(messages), '')});\n`,
       );
     }
-    interfaces.push(
-      namespaceInterface(ns.name, sourceInfo, {
-        name: nameOf(ns.name),
-        defaults: new Set(config.markup),
-      }),
-    );
+    interfaces.push(namespaceInterface(sourceInfo, nameOf(ns.name), new Set(config.markup)));
   }
 
   if (write) {
     const out = config.outDir;
     const localeType = config.locales.map((l) => JSON.stringify(l)).join(' | ');
     const registries = [
-      registry(
-        'LocaleRegistry',
-        config.locales.map((l) => [l, 'true']),
-      ),
+      registry('LocaleRegistry', config.locales),
       registry(
         'NamespaceRegistry',
-        config.namespaces.map((ns) => [ns.name, nameOf(ns.name)]),
+        config.namespaces.map((ns) => ns.name),
+        nameOf,
       ),
-      registry(
-        'FunctionRegistry',
-        Object.keys(config.functions).map((f) => [f, 'true']),
-      ),
-      registry(
-        'MarkupRegistry',
-        config.markup.map((m) => [m, 'true']),
-      ),
+      registry('FunctionRegistry', Object.keys(config.functions)),
+      registry('MarkupRegistry', config.markup),
     ].join('');
     writeIfChanged(
       join(out, 'catalog.d.ts'),

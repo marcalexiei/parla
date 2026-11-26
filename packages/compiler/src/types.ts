@@ -4,7 +4,7 @@ const IDENT = /^[A-Za-z_$][\w$]*$/;
 
 const prop = (name: string): string => (IDENT.test(name) ? name : JSON.stringify(name));
 
-export function interfaceName(namespace: string): string {
+function interfaceName(namespace: string): string {
   const pascal = namespace
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)
@@ -97,11 +97,10 @@ function render(tree: Tree, indent: string): string {
 }
 
 export function namespaceInterface(
-  namespace: string,
   messages: Map<string, { info: MessageInfo; source: string }>,
-  options: { name?: string | undefined; defaults?: ReadonlySet<string> } = {},
+  name: string,
+  defaults: ReadonlySet<string>,
 ): string {
-  const { name = interfaceName(namespace), defaults = new Set<string>() } = options;
   const tree: Tree = {};
   for (const [key, { info, source }] of messages) {
     const path = key.split('.');

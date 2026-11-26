@@ -1,13 +1,7 @@
 #!/usr/bin/env node
 /**
- * @file A consumer that keeps `skipLibCheck: false` type-checks against the published types.
- *
- * Installs the built packages into a throwaway app under `.tmp/`, generates its catalog with the
- * built compiler (custom functions, default markup, rich text, plurals, selects, dates), and runs
- * `tsc` with strict flags and lib checking on, under `bundler` and `nodenext` resolution: every
- * `.d.ts` in the program is checked, parla's and the generated `catalog.d.ts` included.
- *
- * Needs `pnpm run build:packages` first (`typecheck` leaves the build in place).
+ * @file Type-checks a throwaway app against the built packages with `skipLibCheck: false`, under
+ * `bundler` and `nodenext` resolution. Run `pnpm run build:packages` first.
  */
 
 import { spawnSync } from 'node:child_process';

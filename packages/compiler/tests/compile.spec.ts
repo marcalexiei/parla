@@ -17,9 +17,11 @@ function compile(
   custom: CustomFunctions = {},
 ): { fn: Message; info: MessageInfo; sig: string } {
   const scope = new ModuleScope();
-  const { code, info } = compileMessage(adapters[format].parse(source), scope, custom);
+  const { body, info } = compileMessage(adapters[format].parse(source), scope, custom);
   // oxlint-disable-next-line no-new-func, typescript/no-implied-eval -- evaluates the generated chunk code
-  const factory = new Function(`${scope.consts.join('\n')}\nreturn ${code};`) as () => Message;
+  const factory = new Function(
+    `${scope.consts.join('\n')}\nreturn (p, $) => ${body};`,
+  ) as () => Message;
   return { fn: factory(), info, sig: signature(info) };
 }
 
