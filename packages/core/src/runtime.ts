@@ -179,6 +179,9 @@ function toDate(value: unknown): Date {
   return value instanceof Date ? value : new Date(value as string | number);
 }
 
+/** Formatters kept per locale. A catalog's constant options need far fewer. */
+const CACHE_SIZE = 256;
+
 export function createRuntime(
   locale: string,
   wrapRich: WrapRich = (parts) => parts,
@@ -192,6 +195,11 @@ export function createRuntime(
   ): T => {
     let hit = cache.get(key) as T | undefined;
     if (!hit) {
+      // Options bound to params (`minimumFractionDigits=$d`) make new keys: drop the oldest.
+      const [oldest] = cache.keys();
+      if (cache.size >= CACHE_SIZE && oldest !== undefined) {
+        cache.delete(oldest);
+      }
       cache.set(key, (hit = make()));
     }
     return hit;
