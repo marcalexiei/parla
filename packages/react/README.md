@@ -18,7 +18,7 @@ function Cart({ count }: { count: number }) {
       <p>{t.checkout.cart.items({ count })}</p>
       <p>{t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> })}</p>
       {locales.map((l) => (
-        <button key={l} disabled={l === locale} onClick={() => void setLocale(l)}>
+        <button key={l} disabled={l === locale} onClick={() => setLocale(l).catch(reportError)}>
           {l}
         </button>
       ))}
@@ -37,7 +37,8 @@ createRoot(root).render(
 
 - `useParla(['a', 'b'])` returns `{ t }`, keyed by namespace. Loaded namespaces never suspend:
   `await parla.load([...])` in a route loader to skip the fallback.
-- A locale switch never suspends: `setLocale` loads first.
+- A locale switch never suspends: `setLocale` loads first. If a download fails, it rejects and
+  keeps the current locale: handle it (`.catch`), or it is an unhandled rejection.
 - A failed download reaches the nearest error boundary.
 
 ## License
