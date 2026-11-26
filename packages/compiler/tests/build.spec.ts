@@ -100,15 +100,15 @@ describe(build, () => {
       catalog: Catalog;
     };
     const parla = createParla({ catalog, locale: 'it' });
-    const t = (await parla.load('checkout')) as CheckoutMessages;
+    const italian = await parla.load(['checkout']);
+    const t = italian['checkout'] as CheckoutMessages;
     expect(t.title()).toBe('Cassa');
     expect(t.cart.items({ count: 1 })).toBe('1 articolo');
     expect(t.cart.items({ count: 4 })).toBe('4 articoli');
     expect(t.terms({ link: (c: string) => `[${c}]` })).toBe('Accept the [terms]');
     await parla.setLocale('de');
-    const de = parla.getT('common');
-    expect(de).toBeUndefined();
-    const common = (await parla.load('common')) as CommonMessages;
+    const de = await parla.load(['common']);
+    const common = de['common'] as CommonMessages;
     expect(common.greeting({ name: 'Ada' })).toBe('Hello Ada!');
   });
 
@@ -179,21 +179,24 @@ describe('types for a package that depends on an adapter only', () => {
     write(
       'src/usage.ts',
       `import type { ReactNode } from 'react';
-import { useParla, useSuspenseParla } from '@parlajs/react';
+import { useParla } from '@parlajs/react';
+import type { Parla, Translations } from '@parlajs/react';
 import './parla/catalog.js';
-const { t } = useSuspenseParla(['widget']);
+const { t } = useParla(['widget']);
 export const title: string = t.widget.title();
 export const terms: ReactNode = t.widget.terms({ link: (children) => children });
 // @ts-expect-error a ReactNode is not a number, so the adapter's RichNode reached the types
 export const wrong: number = t.widget.terms({ link: (children) => children });
-const lazy = useParla(['widget']);
-export const ready: string | undefined = lazy.ready ? lazy.t.widget.title() : undefined;
-// @ts-expect-error \`t\` is undefined until \`ready\` is checked
-lazy.t.widget.title();
+// @ts-expect-error only the listed namespaces are in \`t\`
+t.other.title();
 // @ts-expect-error the namespace is registered, so an unknown one is rejected
 useParla(['widget', 'missing']);
 // @ts-expect-error always a list, even for one namespace
-useSuspenseParla('widget');
+useParla('widget');
+declare const parla: Parla;
+export const loaded: Translations<'widget'> = await parla.load(['widget']);
+// @ts-expect-error a child demanding a namespace needs a \`t\` that loaded it
+export const unloaded: Translations<'widget'> = await parla.load([]);
 `,
     );
     const reactTypes = join(repo, 'packages/react/node_modules/@types/react');
@@ -247,7 +250,8 @@ describe('chunks', () => {
     const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
       catalog: Catalog;
     };
-    const t = (await createParla({ catalog }).load('app')) as Record<string, unknown> & {
+    const loaded = await createParla({ catalog }).load(['app']);
+    const t = loaded['app'] as Record<string, unknown> & {
       plain: () => string;
       nav: { home: () => string };
       terms: (params?: object) => string;

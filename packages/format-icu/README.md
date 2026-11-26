@@ -1,14 +1,10 @@
 # @parlajs/format-icu
 
-ICU MessageFormat support for [Parla](https://github.com/marcalexiei/parla). Parses ICU messages
-into the MessageFormat 2 data model, which the compiler turns into code.
+ICU MessageFormat → MF2 data model, for [Parla](https://github.com/marcalexiei/parla)'s
+compiler (`"format": "icu"`).
 
-Used by [`@parlajs/compiler`](../compiler) for namespaces with `"format": "icu"`; you rarely
-import it yourself.
-
-Supported: placeholders, `plural` (with `=N` and `offset`), `selectordinal`, `select`,
-`number` (including `::currency/EUR` skeletons and `percent`), `date`, `time`, and
-`<tag>…</tag>` rich text. `duration` is not supported.
+Supports placeholders, `plural` (`=N`, `offset`), `selectordinal`, `select`, `number`
+(`::currency/EUR`, `percent`), `date`, `time` and `<tag>…</tag>`. Not `duration`.
 
 ## License
 

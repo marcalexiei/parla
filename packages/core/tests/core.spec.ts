@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createParla, matchLocale } from '../src/index.ts';
 import type { Catalog, Loader, MessageModule } from '../src/index.ts';
@@ -45,31 +45,35 @@ function makeCatalog(): { catalog: Catalog; calls: Array<string> } {
 }
 
 describe(createParla, () => {
-  it('loads a namespace once and exposes nested accessors', async () => {
+  it('loads each namespace once and returns messages keyed by namespace', async () => {
     const { catalog, calls } = makeCatalog();
     const parla = createParla({ catalog });
-    expect(parla.getT('common')).toBeUndefined();
-    const [a, b] = (await Promise.all([
-      parla.load('common'),
-      parla.load('common'),
-    ])) as Array<Common>;
+    const [a, b] = await Promise.all([
+      parla.load(['common', 'checkout']),
+      parla.load(['checkout', 'common', 'common']),
+    ]);
+    // The same set of namespaces is one cached object, whatever the order.
     expect(a).toBe(b);
-    expect(a?.nav.home()).toBe('Home');
-    expect(parla.getT('common')).toBe(a);
-    expect(calls).toStrictEqual(['en/common']);
+    expect((a['common'] as Common).nav.home()).toBe('Home');
+    const single = await parla.load(['common']);
+    expect(single['common']).toBe(a['common']);
+    expect(calls).toStrictEqual(['en/checkout', 'en/common']);
   });
 
-  it('preloads the namespaces in use before switching locale', async () => {
+  it('loads the namespaces loaded so far before switching locale, then never suspends', async () => {
     const { catalog, calls } = makeCatalog();
     const parla = createParla({ catalog });
-    await parla.load('common');
+    await parla.load(['common']);
     const listener = vi.fn<() => void>();
     parla.subscribe(listener);
     await parla.setLocale('it');
     expect(calls).toStrictEqual(['en/common', 'it/common']);
     expect(listener).toHaveBeenCalledTimes(1);
-    expect((parla.getT('common') as Common | undefined)?.nav.home()).toBe('Inizio');
-    expect(parla.getSnapshot().locale).toBe('it');
+    expect(parla.locale).toBe('it');
+    const promise = parla.load(['common']);
+    expect(promise).toMatchObject({ status: 'fulfilled' });
+    const t = await promise;
+    expect((t['common'] as Common).nav.home()).toBe('Inizio');
   });
 
   it('keeps the last of several concurrent switches', async () => {
@@ -79,7 +83,7 @@ describe(createParla, () => {
     expect(parla.locale).toBe('en');
   });
 
-  it('marks settled promises for React and retries a failed download', async () => {
+  it('marks settled promises for React and retries a failed download a second later', async () => {
     const { catalog } = makeCatalog();
     const failure = new Error('offline');
     let attempts = 0;
@@ -98,12 +102,19 @@ describe(createParla, () => {
         },
       },
     };
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const parla = createParla({ catalog: flaky });
-    const first = parla.load('flaky');
+    const first = parla.load(['flaky']);
+    expect(parla.load(['flaky'])).toBe(first);
     await expect(first).rejects.toBe(failure);
     expect(first).toMatchObject({ status: 'rejected', reason: failure });
 
-    const second = parla.load('flaky');
+    expect(parla.load(['flaky'])).toBe(first);
+    vi.advanceTimersByTime(1000);
+    const second = parla.load(['flaky']);
     expect(second).not.toBe(first);
     const t = await second;
     expect(second).toMatchObject({ status: 'fulfilled', value: t });
@@ -113,7 +124,7 @@ describe(createParla, () => {
   it('rejects unknown locales and namespaces', async () => {
     const { catalog } = makeCatalog();
     expect(() => createParla({ catalog, locale: 'fr' })).toThrow(/unknown locale "fr"/);
-    await expect(createParla({ catalog }).load('nope' as never)).rejects.toThrow(
+    await expect(createParla({ catalog }).load(['nope' as never])).rejects.toThrow(
       /unknown namespace/,
     );
   });

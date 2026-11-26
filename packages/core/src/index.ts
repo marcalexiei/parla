@@ -45,27 +45,35 @@ export interface ParlaOptions {
   wrapRich?: WrapRich;
 }
 
-export interface Snapshot {
-  readonly locale: Locale;
-}
+/** Messages keyed by namespace: `t.checkout.title()`. Holding one proves its namespaces loaded. */
+export type Translations<NS extends Namespace> = { readonly [K in NS]: Namespaces[K] };
 
 export interface Parla {
   readonly locale: Locale;
   readonly locales: ReadonlyArray<Locale>;
-  /** Loads every namespace in use for `locale`, then switches, so nothing suspends. */
+  /** Loads every namespace loaded so far for `locale`, then switches, so nothing suspends. */
   readonly setLocale: (locale: Locale) => Promise<void>;
   /**
-   * Loads a namespace once per locale. Returns the same promise on every call, carrying
-   * `status` and `value` once settled, which React's `use()` reads without suspending.
+   * Loads the namespaces for the current locale. The same list returns the same promise, carrying
+   * `status` and `value` once settled, which React's `use()` reads without suspending. A failure
+   * is returned for a second, then retried.
    */
-  readonly load: <N extends Namespace>(namespace: N, locale?: Locale) => Promise<Namespaces[N]>;
-  /** The accessor if the namespace is loaded for the current locale. */
-  readonly getT: <N extends Namespace>(namespace: N) => Namespaces[N] | undefined;
-  /** Loads namespaces ahead of render, e.g. on the server or before hydration. */
-  readonly preload: (namespaces: ReadonlyArray<Namespace>, locale?: Locale) => Promise<void>;
+  readonly load: <NS extends Namespace>(namespaces: ReadonlyArray<NS>) => Promise<Translations<NS>>;
+  /** Called after each locale switch. */
   readonly subscribe: (listener: () => void) => () => void;
-  readonly getSnapshot: () => Snapshot;
 }
+
+// Marks the promise as React's `use()` reads it; awaited first, so set before `use()` wakes.
+async function track(promise: Promise<unknown>): Promise<void> {
+  try {
+    const value = await promise;
+    void Object.assign(promise, { status: 'fulfilled', value });
+  } catch (error) {
+    void Object.assign(promise, { status: 'rejected', reason: error });
+  }
+}
+
+const RETRY_AFTER_MS = 1000;
 
 const INSTANCE = Symbol.for('parlajs.core');
 const marker = {};
@@ -81,12 +89,13 @@ g[INSTANCE] = marker;
 export function createParla(options: ParlaOptions): Parla {
   const { catalog, wrapRich } = options;
   const { locales } = catalog;
-  let snapshot: Snapshot = { locale: options.locale ?? catalog.sourceLocale };
+  let current: Locale = options.locale ?? catalog.sourceLocale;
   const listeners = new Set<() => void>();
   const runtimes = new Map<string, MessageRuntime>();
-  const promises = new Map<string, Promise<unknown>>();
-  const accessors = new Map<string, unknown>();
-  const used = new Set<Namespace>();
+  const accessors = new Map<string, Promise<unknown>>();
+  const settled = new Map<string, unknown>();
+  const translations = new Map<string, Promise<object>>();
+  const loaded = new Set<Namespace>();
   let switchToken = 0;
 
   const assertLocale = (locale: Locale): void => {
@@ -94,7 +103,7 @@ export function createParla(options: ParlaOptions): Parla {
       throw new Error(`[parla] unknown locale "${locale}". Known: ${locales.join(', ')}`);
     }
   };
-  assertLocale(snapshot.locale);
+  assertLocale(current);
 
   const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
@@ -103,14 +112,6 @@ export function createParla(options: ParlaOptions): Parla {
       runtimes.set(locale, rt);
     }
     return rt;
-  };
-
-  // Set before the promise settles, so a `use()` in the render it wakes reads it synchronously.
-  const settle = (key: string, state: object): void => {
-    const promise = promises.get(key);
-    if (promise) {
-      Object.assign(promise as object, state);
-    }
   };
 
   const fetchAccessor = async (
@@ -124,52 +125,82 @@ export function createParla(options: ParlaOptions): Parla {
     }
     try {
       const mod = await loader();
-      const accessor = mod.default(runtime(locale));
-      accessors.set(key, accessor);
-      settle(key, { status: 'fulfilled', value: accessor });
-      return accessor;
+      const value = mod.default(runtime(locale));
+      settled.set(key, value);
+      return value;
     } catch (error) {
-      settle(key, { status: 'rejected', reason: error });
       // A failed download is retried on the next call.
-      promises.delete(key);
+      accessors.delete(key);
       throw error;
     }
   };
 
-  const parla: Parla = {
+  // oxlint-disable-next-line typescript/promise-function-async -- the promise is cached
+  const accessor = (namespace: string, locale: string): Promise<unknown> => {
+    const key = `${locale}\u0000${namespace}`;
+    let promise = accessors.get(key);
+    if (!promise) {
+      promise = fetchAccessor(namespace, locale, key);
+      accessors.set(key, promise);
+    }
+    return promise;
+  };
+
+  const fetchTranslations = async (
+    list: ReadonlyArray<string>,
+    locale: string,
+    key: string,
+  ): Promise<object> => {
+    try {
+      const values = await Promise.all(list.map(async (ns) => accessor(ns, locale)));
+      return Object.fromEntries(list.map((ns, i) => [ns, values[i]]));
+    } catch (error) {
+      // Kept a while so React's retry render reads the error instead of loading again.
+      setTimeout(() => {
+        translations.delete(key);
+      }, RETRY_AFTER_MS);
+      throw error;
+    }
+  };
+
+  // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
+  const load = (namespaces: ReadonlyArray<Namespace>, locale: Locale): Promise<object> => {
+    const list = [...new Set(namespaces)].toSorted();
+    const key = `${locale}\u0000${list.join('\u0000')}`;
+    let promise = translations.get(key);
+    if (!promise) {
+      for (const ns of list) {
+        loaded.add(ns);
+      }
+      const keys = list.map((ns) => [ns, `${locale}\u0000${ns}`] as const);
+      if (keys.every(([, k]) => settled.has(k))) {
+        // Loaded already, e.g. by `setLocale`: fulfilled from the start, so a switch never suspends.
+        const value = Object.fromEntries(keys.map(([ns, k]) => [ns, settled.get(k)]));
+        promise = Object.assign(Promise.resolve(value), { status: 'fulfilled', value });
+      } else {
+        promise = fetchTranslations(list, locale, key);
+        void track(promise);
+      }
+      translations.set(key, promise);
+    }
+    return promise;
+  };
+
+  return {
     get locale() {
-      return snapshot.locale;
+      return current;
     },
     locales,
-    // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
-    load(namespace, locale = snapshot.locale) {
-      const key = `${locale}\u0000${namespace}`;
-      used.add(namespace);
-      let promise = promises.get(key);
-      if (!promise) {
-        promise = fetchAccessor(namespace, locale, key);
-        promises.set(key, promise);
-      }
-      return promise as Promise<Namespaces[typeof namespace]>;
-    },
-    getT(namespace) {
-      used.add(namespace);
-      return accessors.get(`${snapshot.locale}\u0000${namespace}`) as
-        | Namespaces[typeof namespace]
-        | undefined;
-    },
-    async preload(namespaces, locale = snapshot.locale) {
-      await Promise.all(namespaces.map(async (ns) => parla.load(ns, locale)));
-    },
+    load: (namespaces) => load(namespaces, current) as never,
     async setLocale(locale) {
       assertLocale(locale);
       switchToken += 1;
       const token = switchToken;
-      await parla.preload([...used], locale);
-      if (token !== switchToken || locale === snapshot.locale) {
+      await Promise.all([...loaded].map(async (ns) => accessor(ns, locale)));
+      if (token !== switchToken || locale === current) {
         return;
       }
-      snapshot = { locale };
+      current = locale;
       for (const listener of listeners) {
         listener();
       }
@@ -180,9 +211,7 @@ export function createParla(options: ParlaOptions): Parla {
         listeners.delete(listener);
       };
     },
-    getSnapshot: () => snapshot,
   };
-  return parla;
 }
 
 /** Picks the best supported locale from a preference list such as `navigator.languages`. */

@@ -1,15 +1,11 @@
 import { createParla as createCoreParla } from '@parlajs/core';
-import type { Locale, Namespace, Namespaces, Parla, ParlaOptions } from '@parlajs/core';
+import type { Locale, Namespace, Parla, ParlaOptions, Translations } from '@parlajs/core';
 import {
   createContext,
   createElement,
   Fragment,
   use,
   useContext,
-  useEffect,
-  useMemo,
-  useReducer,
-  useState,
   useSyncExternalStore,
 } from 'react';
 import type { ReactNode } from 'react';
@@ -31,7 +27,7 @@ export {
   type Register,
   type RichNode,
   type SelectorValue,
-  type Snapshot,
+  type Translations,
   type WrapRich,
 } from '@parlajs/core';
 
@@ -50,11 +46,7 @@ export function createParla(options: ParlaOptions): Parla {
   return createCoreParla({ wrapRich, ...options });
 }
 
-interface ParlaContextValue {
-  readonly parla: Parla;
-}
-
-const ParlaContext = createContext<ParlaContextValue | null>(null);
+const ParlaContext = createContext<Parla | null>(null);
 ParlaContext.displayName = 'ParlaContext';
 
 export function ParlaProvider({
@@ -64,128 +56,37 @@ export function ParlaProvider({
   parla: Parla;
   children?: ReactNode;
 }): ReactNode {
-  const value = useMemo(() => ({ parla }), [parla]);
-  return createElement(ParlaContext.Provider, { value }, children);
+  return createElement(ParlaContext.Provider, { value: parla }, children);
 }
 
-function useParlaContext(): ParlaContextValue {
-  const value = useContext(ParlaContext);
-  if (!value) {
+/** The instance, re-rendering the component when the locale switches. */
+function useParlaInstance(): Parla {
+  const parla = useContext(ParlaContext);
+  if (!parla) {
     throw new Error('[parla] wrap your app in <ParlaProvider parla={…}>');
   }
-  return value;
-}
-
-/** Accessors keyed by namespace: `t.checkout.title()`. */
-export type Translations<NS extends ReadonlyArray<Namespace>> = {
-  readonly [K in NS[number]]: Namespaces[K];
-};
-
-export interface SuspenseParlaResult<NS extends ReadonlyArray<Namespace>> {
-  readonly parla: Parla;
-  readonly t: Translations<NS>;
-}
-
-/** `t` exists only once `ready` is checked. */
-export type ParlaResult<NS extends ReadonlyArray<Namespace>> =
-  | { readonly ready: true; readonly parla: Parla; readonly t: Translations<NS> }
-  | { readonly ready: false; readonly parla: Parla; readonly t: undefined };
-
-// Cached so `t` keeps its identity across renders while the locale stays.
-const keyedCache = new WeakMap<Parla, Map<string, object>>();
-
-function keyed(
-  parla: Parla,
-  locale: Locale,
-  namespaces: ReadonlyArray<Namespace>,
-  accessors: ReadonlyArray<unknown>,
-): unknown {
-  const key = `${locale}\u0000${namespaces.join('\u0000')}`;
-  let byKey = keyedCache.get(parla);
-  if (!byKey) {
-    byKey = new Map();
-    keyedCache.set(parla, byKey);
-  }
-  let t = byKey.get(key);
-  if (!t) {
-    t = Object.fromEntries(namespaces.map((ns, i) => [ns, accessors[i]]));
-    byKey.set(key, t);
-  }
-  return t;
+  const locale = (): Locale => parla.locale;
+  useSyncExternalStore(parla.subscribe, locale, locale);
+  return parla;
 }
 
 /**
- * Typed messages for the namespaces, suspending until they load for the current locale.
- * Switching locale does not suspend: `setLocale` loads first.
+ * Messages for the namespaces, keyed by namespace. Suspends until they load for the current
+ * locale; loaded ones never suspend, and neither does a locale switch: `setLocale` loads first.
  */
-export function useSuspenseParla<const NS extends ReadonlyArray<Namespace>>(
-  namespaces: NS,
-): SuspenseParlaResult<NS> {
-  const { parla } = useParlaContext();
-  const { locale } = useSyncExternalStore(parla.subscribe, parla.getSnapshot, parla.getSnapshot);
-  // Every load starts before the first `use()` can suspend, so they download in parallel.
-  // A loop, not an `async` callback: `use()` needs Parla's cached promise itself.
-  const pending: Array<Promise<unknown>> = [];
-  for (const ns of namespaces) {
-    pending.push(parla.load(ns, locale));
-  }
-  const accessors: Array<unknown> = [];
-  for (const promise of pending) {
-    // Called on every render: React forbids skipping a `use()` that suspended before.
-    accessors.push(use(promise));
-  }
-  return { parla, t: keyed(parla, locale, namespaces, accessors) as Translations<NS> };
+export function useParla<NS extends Namespace>(
+  namespaces: ReadonlyArray<NS>,
+): { readonly t: Translations<NS> } {
+  const parla = useParlaInstance();
+  return { t: use(parla.load(namespaces)) };
 }
 
-/**
- * Typed messages for the namespaces, without suspending: `ready` is false until they load for
- * the current locale, then the component re-renders. Loaded ones are ready at once.
- */
-export function useParla<const NS extends ReadonlyArray<Namespace>>(
-  namespaces: NS,
-): ParlaResult<NS> {
-  const { parla } = useParlaContext();
-  const { locale } = useSyncExternalStore(parla.subscribe, parla.getSnapshot, parla.getSnapshot);
-  const key = namespaces.join('\u0000');
-  const accessors = namespaces.map((ns) => parla.getT(ns));
-  const ready = accessors.every((accessor) => accessor !== undefined);
-  const [failure, setFailure] = useState<{ readonly error: unknown }>();
-  const [, loaded] = useReducer((count: number) => count + 1, 0);
-
-  useEffect(() => {
-    let live = true;
-    const load = async (): Promise<void> => {
-      try {
-        await parla.preload(key.split('\u0000') as Array<Namespace>, locale);
-        if (live) {
-          loaded();
-        }
-      } catch (error) {
-        if (live) {
-          setFailure({ error });
-        }
-      }
-    };
-    if (!ready) {
-      void load();
-    }
-    return (): void => {
-      live = false;
-    };
-  }, [parla, locale, key, ready]);
-
-  if (failure) {
-    throw failure.error;
-  }
-  if (!ready) {
-    return { ready, parla, t: undefined };
-  }
-  return { ready, parla, t: keyed(parla, locale, namespaces, accessors) as Translations<NS> };
-}
-
-/** Current locale and a setter that loads the namespaces in use before switching. */
-export function useLocale(): [Locale, (locale: Locale) => Promise<void>] {
-  const { parla } = useParlaContext();
-  const { locale } = useSyncExternalStore(parla.subscribe, parla.getSnapshot, parla.getSnapshot);
-  return [locale, parla.setLocale];
+/** The current locale, the supported ones, and a setter that loads before switching. */
+export function useLocale(): {
+  readonly locale: Locale;
+  readonly locales: ReadonlyArray<Locale>;
+  readonly setLocale: (locale: Locale) => Promise<void>;
+} {
+  const { locale, locales, setLocale } = useParlaInstance();
+  return { locale, locales, setLocale };
 }

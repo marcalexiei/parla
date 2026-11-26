@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createParla, ParlaProvider, useLocale, useParla, useSuspenseParla } from '../src/index.ts';
-import type { Catalog, Parla } from '../src/index.ts';
+import { createParla, ParlaProvider, useLocale, useParla } from '../src/index.ts';
+import type { Catalog, Parla, Translations } from '../src/index.ts';
 
 // What `parla build` would generate for this catalog.
 declare module '@parlajs/core' {
@@ -84,8 +84,8 @@ const catalog: Catalog = {
 const link = (children: ReactNode): ReactNode => <a href="/terms">{children}</a>;
 
 function Shop(): ReactNode {
-  const { t } = useSuspenseParla(['shop']);
-  const [locale, setLocale] = useLocale();
+  const { t } = useParla(['shop']);
+  const { locale, locales, setLocale } = useLocale();
   return (
     <div>
       <h1>{t.shop.title()}</h1>
@@ -93,7 +93,7 @@ function Shop(): ReactNode {
       <button
         type="button"
         onClick={() => {
-          void setLocale(locale === 'en' ? 'it' : 'en');
+          void setLocale(locales.find((l) => l !== locale) ?? locale);
         }}>
         {locale}
       </button>
@@ -101,21 +101,23 @@ function Shop(): ReactNode {
   );
 }
 
+// A child demands the namespaces it reads; a parent's wider `t` satisfies it.
+function Hello({ t }: { t: Translations<'extra'> }): ReactNode {
+  return <span>{t.extra.hello()}</span>;
+}
+
 function Greeting(): ReactNode {
-  const { t, ready } = useParla(['shop', 'extra']);
-  if (!ready) {
-    return <span>not ready</span>;
-  }
+  const { t } = useParla(['shop', 'extra']);
   return (
     <h1>
-      {t.extra.hello()} {t.shop.title()}
+      <Hello t={t} /> {t.shop.title()}
     </h1>
   );
 }
 
 function Offline(): ReactNode {
-  const { ready } = useParla(['broken']);
-  return <span>{ready ? 'ready' : 'not ready'}</span>;
+  useParla(['broken']);
+  return <span>ready</span>;
 }
 
 class Boundary extends Component<{ children: ReactNode }, { error?: Error }> {
@@ -128,11 +130,6 @@ class Boundary extends Component<{ children: ReactNode }, { error?: Error }> {
   override render(): ReactNode {
     return this.state.error ? <span>{this.state.error.message}</span> : this.props.children;
   }
-}
-
-function Broken(): ReactNode {
-  useSuspenseParla(['shop']);
-  return null;
 }
 
 function wrapperFor(parla: Parla): (props: { children: ReactNode }) => ReactNode {
@@ -159,7 +156,7 @@ describe('@parlajs/react', () => {
           </Suspense>
         </ParlaProvider>,
       );
-      await parla.load('shop');
+      await parla.load(['shop']);
     });
     expect(screen.getByRole('heading').textContent).toBe('Shop');
     expect(screen.getByRole('link').textContent).toBe('terms');
@@ -167,7 +164,9 @@ describe('@parlajs/react', () => {
 
     await act(async () => {
       screen.getByRole('button').click();
-      await parla.preload(['shop'], 'it');
+      await vi.waitFor(() => {
+        expect(parla.locale).toBe('it');
+      });
     });
     expect(screen.getByRole('heading').textContent).toBe('Negozio');
     expect(screen.queryByText('loading')).toBeNull();
@@ -208,26 +207,23 @@ describe('@parlajs/react', () => {
 
   it('loads several namespaces at once, keyed by namespace, with a `t` that keeps its identity', async () => {
     const parla = createParla({ catalog });
-    const load = vi.spyOn(parla, 'load');
     const hook = await act(async () => {
-      const rendered = renderHook(() => useSuspenseParla(['shop', 'extra']), {
+      const rendered = renderHook(() => useParla(['shop', 'extra']), {
         wrapper: wrapperFor(parla),
       });
-      await parla.preload(['shop', 'extra']);
+      await parla.load(['shop', 'extra']);
       return rendered;
     });
     const { result, rerender } = hook;
-    // Both downloads start before the first one suspends; one by one would load `shop` twice first.
-    expect(load.mock.calls.slice(0, 2).map(([ns]) => ns)).toStrictEqual(['shop', 'extra']);
     const { t } = result.current;
     expect([t.shop.title(), t.extra.hello()]).toStrictEqual(['Shop', 'Hello']);
     rerender();
     expect(result.current.t).toBe(t);
-    expect(result.current.parla).toBe(parla);
   });
 
-  it('renders without suspending until ready, then re-renders, and is ready at once when loaded', async () => {
+  it('never suspends for namespaces loaded ahead, and passes `t` down typed', async () => {
     const parla = createParla({ catalog });
+    await parla.load(['shop', 'extra']);
     act(() => {
       render(
         <ParlaProvider parla={parla}>
@@ -237,16 +233,8 @@ describe('@parlajs/react', () => {
         </ParlaProvider>,
       );
     });
-    expect(screen.getByText('not ready')).toBeDefined();
     expect(screen.queryByText('loading')).toBeNull();
-
-    await act(async () => {
-      await parla.preload(['shop', 'extra']);
-    });
     expect(screen.getByRole('heading').textContent).toBe('Hello Shop');
-
-    const { result } = renderHook(() => useParla(['extra']), { wrapper: wrapperFor(parla) });
-    expect(result.current.ready && result.current.t.extra.hello()).toBe('Hello');
   });
 
   it('hands a failed download to the error boundary', async () => {
@@ -256,33 +244,19 @@ describe('@parlajs/react', () => {
       render(
         <ParlaProvider parla={parla}>
           <Boundary>
-            <Offline />
+            <Suspense fallback={<span>loading</span>}>
+              <Offline />
+            </Suspense>
           </Boundary>
         </ParlaProvider>,
       );
-      await expect(parla.load('broken')).rejects.toThrow('offline');
+      await expect(parla.load(['broken'])).rejects.toThrow('offline');
     });
     await expect(screen.findByText('offline')).resolves.toBeDefined();
   });
 
-  it('ignores a load that settles after unmounting', async () => {
-    const consoleError = vi.spyOn(console, 'error');
-    const parla = createParla({ catalog });
-    const { unmount } = render(
-      <ParlaProvider parla={parla}>
-        <Greeting />
-        <Offline />
-      </ParlaProvider>,
-    );
-    unmount();
-    await act(async () => {
-      await parla.preload(['shop', 'extra']);
-      await expect(parla.load('broken')).rejects.toThrow('offline');
-    });
-    expect(consoleError).not.toHaveBeenCalled();
-  });
-
   it('explains a missing provider', () => {
-    expect(() => render(<Broken />)).toThrow(/ParlaProvider/);
+    vi.spyOn(console, 'error').mockReturnValue();
+    expect(() => render(<Offline />)).toThrow(/ParlaProvider/);
   });
 });
