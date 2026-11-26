@@ -1,7 +1,8 @@
 // oxlint-disable max-classes-per-file -- the compiler, its error and its chunk scope belong together
 import type { Model } from 'messageformat';
 
-import type { FunctionKind } from './config.ts';
+/** What a custom function's value is: it types the param. */
+export type FunctionKind = 'string' | 'number' | 'date';
 
 /** Message functions beyond the built-in ones, by what their value is. */
 export type CustomFunctions = Readonly<Record<string, FunctionKind>>;
@@ -10,7 +11,6 @@ const NUMERIC = new Set(['number', 'integer', 'currency', 'percent', 'unit']);
 const DATES = new Set(['date', 'time', 'datetime']);
 /** The built-in message functions; the config's `functions` add to them. */
 export const BUILTIN_FUNCTIONS: ReadonlySet<string> = new Set([...NUMERIC, ...DATES, 'string']);
-const KNOWN = BUILTIN_FUNCTIONS;
 
 /** What a message needs from one parameter. `any` is an unannotated placeholder. */
 export type ParamKind =
@@ -27,9 +27,7 @@ export interface MessageInfo {
 }
 
 export interface CompiledMessage {
-  /** JS expression: `(p, $) => …`. */
-  code: string;
-  /** The function's body alone, reading params from `p` and the runtime from `$`. */
+  /** A function body reading params from `p` and the runtime from `$`. */
   body: string;
   info: MessageInfo;
 }
@@ -70,12 +68,12 @@ function literalValue(value: string): string {
   return JSON.stringify(value);
 }
 
-function kindOf(fn: Model.FunctionRef | undefined, custom: CustomFunctions): ParamKind {
+function kindOf(fn: Model.FunctionRef | undefined, custom: CustomKinds): ParamKind {
   if (!fn) {
     return { kind: 'any' };
   }
-  const declared = KNOWN.has(fn.name) ? undefined : custom[fn.name];
-  if (declared && Object.hasOwn(custom, fn.name)) {
+  const declared = custom.get(fn.name);
+  if (declared) {
     return { kind: declared };
   }
   if (NUMERIC.has(fn.name)) {
@@ -87,21 +85,17 @@ function kindOf(fn: Model.FunctionRef | undefined, custom: CustomFunctions): Par
   return { kind: 'string' };
 }
 
-function checkFn(fn: Model.FunctionRef, custom: CustomFunctions): void {
-  if (!KNOWN.has(fn.name) && !Object.hasOwn(custom, fn.name)) {
-    throw new CompileError(`unknown function :${fn.name}`);
-  }
-}
+type CustomKinds = ReadonlyMap<string, FunctionKind>;
 
 class MessageCompiler {
   private readonly vars = new Map<string, Binding>();
   private readonly scope: ModuleScope;
-  private readonly custom: CustomFunctions;
+  private readonly custom: CustomKinds;
   readonly info: MessageInfo = { params: new Map(), markup: new Set(), rich: false };
 
   constructor(scope: ModuleScope, custom: CustomFunctions) {
     this.scope = scope;
-    this.custom = custom;
+    this.custom = new Map(Object.entries(custom));
   }
 
   private record(param: string, kind: ParamKind): void {
@@ -139,7 +133,9 @@ class MessageCompiler {
     }
     const own = expr.functionRef;
     if (own) {
-      checkFn(own, this.custom);
+      if (!BUILTIN_FUNCTIONS.has(own.name) && !this.custom.has(own.name)) {
+        throw new CompileError(`unknown function :${own.name}`);
+      }
       const inherited = binding.fn?.name === own.name ? binding.fn.options : undefined;
       binding.fn = inherited ? { ...own, options: { ...inherited, ...own.options } } : own;
     }
@@ -256,5 +252,5 @@ export function compileMessage(
     c.declare(decl);
   }
   const body = msg.type === 'message' ? c.pattern(msg.pattern).code : c.select(msg);
-  return { code: `(p, $) => ${body}`, body, info: c.info };
+  return { body, info: c.info };
 }
