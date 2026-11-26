@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
+import { BUILTIN_FUNCTIONS } from './compile.ts';
+
 export interface NamespaceConfig {
   /** Message syntax: `icu` or `mf2`. */
   format: string;
@@ -9,6 +11,8 @@ export interface NamespaceConfig {
 }
 
 /** `parla.config.json`, or the `parla` field of a package's `package.json`. */
+export type FunctionKind = 'string' | 'number' | 'date';
+
 export interface ParlaConfig {
   $schema?: string;
   locales?: Array<string>;
@@ -21,6 +25,13 @@ export interface ParlaConfig {
   namespaces?: Record<string, NamespaceConfig>;
   /** Workspace packages whose namespaces this package uses. Resolved from `node_modules`. */
   packages?: Array<string>;
+  /**
+   * Message functions beyond the built-in ones, by what their value is. Each needs an
+   * implementation in `createParla({ functions })`.
+   */
+  functions?: Record<string, FunctionKind>;
+  /** Markup that calls may leave out: `createParla({ markup })` renders it. */
+  markup?: Array<string>;
   /**
    * Module the generated types import and augment: the adapter this package depends on.
    * Default: the first of `@parlajs/react`, `@parlajs/core` listed in `package.json`.
@@ -47,6 +58,8 @@ export interface ResolvedConfig {
   namespaces: Array<ResolvedNamespace>;
   /** Module the generated types import and augment. */
   runtime: string;
+  functions: Record<string, FunctionKind>;
+  markup: Array<string>;
   /** Every file whose change should trigger a rebuild. */
   watchFiles: Array<string>;
 }
@@ -119,6 +132,16 @@ function detectRuntime(dir: string): string {
   const pkg = readJson(file) as PackageJson;
   const deps = { ...pkg.peerDependencies, ...pkg.devDependencies, ...pkg.dependencies };
   return RUNTIMES.find((name) => name in deps) ?? '@parlajs/core';
+}
+
+function checkFunctions(functions: Record<string, FunctionKind>): Record<string, FunctionKind> {
+  const shadowing = Object.keys(functions).filter((name) => BUILTIN_FUNCTIONS.has(name));
+  if (shadowing.length > 0) {
+    throw new ConfigError(
+      `"functions" cannot redefine the built-in ${shadowing.map((n) => `:${n}`).join(', ')}`,
+    );
+  }
+  return functions;
 }
 
 export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
@@ -197,6 +220,8 @@ export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
     fallbacks: config.fallbacks ?? {},
     outDir: resolve(root, config.outDir ?? 'src/parla'),
     runtime: config.runtime ?? detectRuntime(root),
+    functions: checkFunctions(config.functions ?? {}),
+    markup: config.markup ?? [],
     namespaces: resolved,
     watchFiles,
   };

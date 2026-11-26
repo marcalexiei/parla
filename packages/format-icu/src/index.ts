@@ -18,13 +18,33 @@ export class FormatError extends Error {
 
 const TAG = /<(?<close>\/?)(?<name>[A-Za-z][\w-]*)\s*(?<self>\/?)>/g;
 
+/** Stands for a quoted `<` until tags are split; a private-use character no catalog contains. */
+const LT = '\uE000';
+
+/**
+ * `'<` quotes up to the next `'` (FormatJS): `'<b>'` is the text `<b>`, not markup.
+ * Inside, `{`, `}` and `#` are re-quoted for the ICU parser, which quotes only those.
+ */
+function quoteTags(source: string): string {
+  // `''` first: an escaped apostrophe never opens a quote
+  return source.replaceAll(/''|'(?<quoted><(?:[^']|'')*)'/g, (match, ...args) => {
+    const { quoted } = args.at(-1) as { quoted?: string };
+    return quoted === undefined
+      ? match
+      : quoted.replaceAll(/[{}#]/g, (c) => `'${c}'`).replaceAll('<', LT);
+  });
+}
+
 /** ICU tags (`<link>…</link>`, a FormatJS convention) become MF2 markup. */
 function splitTags(text: string): Model.Pattern {
   const out: Model.Pattern = [];
+  const push = (slice: string): void => {
+    out.push(slice.replaceAll(LT, '<'));
+  };
   let last = 0;
   for (const m of text.matchAll(TAG)) {
     if (m.index > last) {
-      out.push(text.slice(last, m.index));
+      push(text.slice(last, m.index));
     }
     const { close, name = '', self } = m.groups ?? {};
     let kind: Model.Markup['kind'] = 'open';
@@ -37,7 +57,7 @@ function splitTags(text: string): Model.Pattern {
     last = m.index + m[0].length;
   }
   if (last < text.length) {
-    out.push(text.slice(last));
+    push(text.slice(last));
   }
   return out;
 }
@@ -76,7 +96,8 @@ function normalizeFunction(fn: Model.FunctionRef): Model.FunctionRef {
     case 'mf1:duration':
       throw new FormatError('ICU `duration` is not supported');
     default:
-      return { ...fn, options };
+      // A custom function (`{x, capitalize}`): the compiler checks it against the config.
+      return { ...fn, name: fn.name.replace(/^mf1:/, ''), options };
   }
 }
 
@@ -122,7 +143,7 @@ export const icu: FormatAdapter = {
   parse(source) {
     let ast;
     try {
-      ast = parse(source, { strict: false });
+      ast = parse(quoteTags(source), { strict: false });
     } catch (error) {
       throw new FormatError(`ICU ${(error as Error).message}`);
     }

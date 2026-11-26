@@ -52,4 +52,24 @@ describe(createRuntime, () => {
   it('keeps markup children when no callback is passed', () => {
     expect(rt.tag({}, 'b', ['bold'])).toBe('bold');
   });
+
+  it('calls custom functions after the built-in ones, with the options and locale', () => {
+    const ext = createRuntime('it', undefined, {
+      functions: {
+        shout: (value, options, locale) =>
+          `${String(value).toUpperCase()}${typeof options['mark'] === 'string' ? options['mark'] : ''}@${locale}`,
+        number: () => 'never',
+      },
+    });
+    expect(ext.f('shout', 'ciao', { mark: '!' })).toBe('CIAO!@it');
+    expect(ext.f('number', 2)).toBe('2');
+    expect(() => ext.f('toString', 1)).toThrow(/unknown message function/);
+  });
+
+  it('renders default markup unless the call passes its own', () => {
+    const ext = createRuntime('en', undefined, { markup: { b: (c) => `*${String(c)}*` } });
+    expect(ext.tag({}, 'b', ['bold'])).toBe('*bold*');
+    expect(ext.tag({ b: (c: unknown) => `_${String(c)}_` }, 'b', ['bold'])).toBe('_bold_');
+    expect(ext.tag({}, 'i', ['plain'])).toBe('plain');
+  });
 });
