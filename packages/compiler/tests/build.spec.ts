@@ -273,3 +273,33 @@ describe('chunks', () => {
     expect(t.terms()).toBe('Read the terms');
   });
 });
+
+describe('select keys', () => {
+  const dir = join(repo, '.tmp', 'build-test-select');
+
+  it('match whatever order a translation lists its variants in', () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(join(dir, 'locales/en'), { recursive: true });
+    mkdirSync(join(dir, 'locales/it'), { recursive: true });
+    writeFileSync(
+      join(dir, 'parla.config.json'),
+      JSON.stringify({
+        locales: ['en', 'it'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    writeFileSync(
+      join(dir, 'locales/en/app.json'),
+      JSON.stringify({ reply: '{g, select, male {He} female {She} other {They}} replied' }),
+    );
+    writeFileSync(
+      join(dir, 'locales/it/app.json'),
+      JSON.stringify({ reply: '{g, select, female {Lei} male {Lui} other {Loro}} ha risposto' }),
+    );
+    const built = build({ cwd: dir, write: 'types' });
+    expect(built.diagnostics).toStrictEqual([]);
+    expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toContain(
+      'reply(params: { g: "female" | "male" | (string & {}) }): string;',
+    );
+  });
+});

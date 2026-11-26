@@ -23,7 +23,10 @@ export function paramType(kinds: Array<ParamKind>): string {
   }
   const selects = kinds.filter((k) => k.kind === 'select');
   if (selects.length > 0) {
-    const keys = [...new Set(selects.flatMap((s) => s.keys))].map((k) => JSON.stringify(k));
+    // sorted: a translation may list the variants in another order
+    const keys = [...new Set(selects.flatMap((s) => s.keys))]
+      .toSorted()
+      .map((k) => JSON.stringify(k));
     if (selects.some((s) => s.open)) {
       keys.push('(string & {})');
     }
