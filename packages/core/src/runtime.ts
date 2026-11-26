@@ -173,6 +173,8 @@ function toDate(value: unknown): Date {
   return value instanceof Date ? value : new Date(value as string | number);
 }
 
+const NO_OPTIONS: Readonly<Record<string, unknown>> = Object.freeze({});
+
 /** Formatters kept per locale. A catalog's constant options need far fewer. */
 const CACHE_SIZE = 256;
 
@@ -200,6 +202,26 @@ export function createRuntime(
     return hit;
   };
 
+  // Hoisted constant options and `NO_OPTIONS` are one object each: found by identity, no key built.
+  const byOptions = new WeakMap<object, Map<string, Intl.NumberFormat | Intl.DateTimeFormat>>();
+  const formatter = <T extends Intl.NumberFormat | Intl.DateTimeFormat>(
+    name: string,
+    options: Readonly<Record<string, unknown>>,
+    make: () => T,
+  ): T => {
+    let named = byOptions.get(options);
+    let hit = named?.get(name) as T | undefined;
+    if (!hit) {
+      hit = cached(name + JSON.stringify(options), make);
+      if (!named) {
+        named = new Map();
+        byOptions.set(options, named);
+      }
+      named.set(name, hit);
+    }
+    return hit;
+  };
+
   const rt: MessageRuntime = {
     locale,
     str(value) {
@@ -211,18 +233,19 @@ export function createRuntime(
       }
       return text(value);
     },
-    f(name, value, options = {}) {
-      const key = name + JSON.stringify(options);
+    f(name, value, options = NO_OPTIONS) {
       if (NUMBER_FNS.has(name)) {
         const n = Number(value) - Number(options['offset'] ?? 0);
-        return cached(
-          key,
+        return formatter(
+          name,
+          options,
           () => new Intl.NumberFormat(locale, numberOptions(name, options)),
         ).format(n);
       }
       if (DATE_FNS.has(name)) {
-        return cached(
-          key,
+        return formatter(
+          name,
+          options,
           () => new Intl.DateTimeFormat(locale, dateOptions(name, options)),
         ).format(toDate(value));
       }
@@ -235,13 +258,13 @@ export function createRuntime(
       }
       throw new Error(`[parla] unknown message function :${name}`);
     },
-    sn(value, options = {}) {
+    sn(value, options = NO_OPTIONS) {
       const n = Number(value);
       if (options['select'] === 'exact') {
         return { n, cat: '' };
       }
       const type = options['select'] === 'ordinal' ? 'ordinal' : 'cardinal';
-      const rules = cached(`plural:${type}`, () => new Intl.PluralRules(locale, { type }));
+      const rules = cached(type, () => new Intl.PluralRules(locale, { type }));
       return { n, cat: rules.select(n - Number(options['offset'] ?? 0)) };
     },
     ss(value) {
