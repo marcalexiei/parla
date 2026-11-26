@@ -9,7 +9,7 @@ import { CompileError, compileMessage, ModuleScope } from './compile.ts';
 import type { MessageInfo } from './compile.ts';
 import { fallbackChain, loadConfig } from './config.ts';
 import type { ResolvedConfig, ResolvedNamespace } from './config.ts';
-import { interfaceName, namespaceInterface, paramType } from './types.ts';
+import { interfaceNames, namespaceInterface, paramType } from './types.ts';
 
 export interface FormatAdapter {
   readonly name: string;
@@ -201,6 +201,7 @@ export function build(options: BuildOptions = {}): BuildResult {
   const written: Array<string> = [];
   const chunks = new Map<string, string>();
   const interfaces: Array<string> = [];
+  const names = interfaceNames(config.namespaces.map((ns) => ns.name));
 
   for (const ns of config.namespaces) {
     const adapter = formats[ns.format];
@@ -340,14 +341,14 @@ export function build(options: BuildOptions = {}): BuildResult {
         `${HEADER}${consts}export default ($) => (${emitGroup(treeOf(messages), '')});\n`,
       );
     }
-    interfaces.push(namespaceInterface(ns.name, sourceInfo));
+    interfaces.push(namespaceInterface(ns.name, sourceInfo, names.get(ns.name)));
   }
 
   if (write) {
     const out = config.outDir;
     const localeType = config.locales.map((l) => JSON.stringify(l)).join(' | ');
     const nsEntries = config.namespaces
-      .map((ns) => `      ${JSON.stringify(ns.name)}: ${interfaceName(ns.name)};`)
+      .map((ns) => `      ${JSON.stringify(ns.name)}: ${names.get(ns.name)};`)
       .join('\n');
     writeIfChanged(
       join(out, 'catalog.d.ts'),
