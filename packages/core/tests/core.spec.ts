@@ -164,6 +164,51 @@ describe(createParla, () => {
   });
 });
 
+const only = (catalog: Catalog, ns: string): Catalog => ({
+  ...catalog,
+  namespaces: { [ns]: catalog.namespaces[ns] ?? {} },
+});
+
+describe('register', () => {
+  it('adds namespaces to an instance created without a catalog', async () => {
+    const { catalog } = makeCatalog();
+    const parla = createParla({ locales: ['en', 'it'], sourceLocale: 'en' });
+    parla.register(only(catalog, 'common'));
+    parla.register(only(catalog, 'checkout'));
+    const t = await parla.load(['common', 'checkout']);
+    expect((t['common'] as Common).nav.home()).toBe('Home');
+    expect(parla.locales).toStrictEqual(['en', 'it']);
+  });
+
+  it('loads a namespace registered after a load of it failed', async () => {
+    const { catalog } = makeCatalog();
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const parla = createParla({ catalog: only(catalog, 'common') });
+    await expect(parla.load(['checkout'])).rejects.toThrow(/unknown namespace "checkout"/);
+    parla.register(catalog);
+    vi.advanceTimersByTime(1000);
+    await expect(parla.load(['checkout'])).resolves.toHaveProperty('checkout');
+  });
+
+  it('keeps the first loaders of a namespace registered twice', async () => {
+    const { catalog, calls } = makeCatalog();
+    const parla = createParla({ catalog });
+    parla.register(makeCatalog().catalog);
+    await parla.load(['common']);
+    expect(calls).toStrictEqual(['en/common']);
+  });
+
+  it('rejects a catalog with other locales', () => {
+    const parla = createParla({ catalog: makeCatalog().catalog });
+    expect(() => {
+      parla.register({ locales: ['en', 'de'], sourceLocale: 'en', namespaces: {} });
+    }).toThrow("the catalog's locales en, de (source en) differ from en, it (source en)");
+  });
+});
+
 describe(matchLocale, () => {
   it('matches exact tags, then base languages', () => {
     expect(matchLocale(['it-IT', 'en'], ['en', 'it'], 'en')).toBe('it');
