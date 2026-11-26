@@ -55,9 +55,13 @@ export interface Catalog {
   readonly namespaces: Readonly<Record<string, Readonly<Record<string, Loader>>>>;
 }
 
+/** A catalog, or the locales of the catalogs `register` adds later. */
+type CatalogOptions =
+  | { catalog: Catalog }
+  | { catalog?: undefined; locales: ReadonlyArray<Locale>; sourceLocale: Locale };
+
 interface BaseOptions<Node> {
-  catalog: Catalog;
-  /** Initial locale. Defaults to the catalog's source locale. */
+  /** Initial locale. Defaults to the source locale. */
   locale?: Locale;
   /** Turns message parts with markup into one node. Set by framework adapters. */
   wrapRich?: WrapRich<Node>;
@@ -69,7 +73,8 @@ type Declared<K extends string, Name extends string, V> = [Name] extends [never]
   : Record<K, Readonly<Record<Name, V>>>;
 
 // `Node` is inferred from `wrapRich` alone, so a renderer returning another type is an error.
-export type ParlaOptions<Node = string> = BaseOptions<Node> &
+export type ParlaOptions<Node = string> = CatalogOptions &
+  BaseOptions<Node> &
   Declared<'functions', FunctionName, MessageFunction> &
   Declared<'markup', MarkupName, (children: NoInfer<Node>) => NoInfer<Node>>;
 
@@ -93,6 +98,8 @@ export interface Parla<Node = string> {
   ) => Promise<Translations<NS, Node>>;
   /** Called after each locale switch. */
   readonly subscribe: (listener: () => void) => () => void;
+  /** Adds a catalog's namespaces; one already registered keeps its loaders. Same locales only. */
+  readonly register: (catalog: Catalog) => void;
 }
 
 // Marks the promise as React's `use()` reads it; awaited first, so set before `use()` wakes.
@@ -120,13 +127,14 @@ g[INSTANCE] = marker;
 
 /** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
-  const { catalog, wrapRich } = options;
+  const { wrapRich } = options;
+  const { locales, sourceLocale } = options.catalog ?? options;
   const extensions = {
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
     markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
   };
-  const { locales } = catalog;
-  let current: Locale = options.locale ?? catalog.sourceLocale;
+  const registered = new Map<string, Readonly<Record<string, Loader>>>();
+  let current: Locale = options.locale ?? sourceLocale;
   const listeners = new Set<() => void>();
   const runtimes = new Map<string, MessageRuntime>();
   const accessors = new Map<string, Promise<unknown>>();
@@ -156,19 +164,22 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     locale: string,
     key: string,
   ): Promise<unknown> => {
-    const loader = catalog.namespaces[namespace]?.[locale];
+    const loader = registered.get(namespace)?.[locale];
     if (!loader) {
       throw new Error(`[parla] unknown namespace "${namespace}" for locale "${locale}"`);
     }
+    const mod = await loader();
+    const value = mod.default(runtime(locale));
+    settled.set(key, value);
+    return value;
+  };
+
+  // After `set`: a failed download, or a namespace not registered yet, is retried on the next call.
+  const forgetOnFailure = async (promise: Promise<unknown>, key: string): Promise<void> => {
     try {
-      const mod = await loader();
-      const value = mod.default(runtime(locale));
-      settled.set(key, value);
-      return value;
-    } catch (error) {
-      // A failed download is retried on the next call.
+      await promise;
+    } catch {
       accessors.delete(key);
-      throw error;
     }
   };
 
@@ -179,6 +190,7 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     if (!promise) {
       promise = fetchAccessor(namespace, locale, key);
       accessors.set(key, promise);
+      void forgetOnFailure(promise, key);
     }
     return promise;
   };
@@ -233,6 +245,26 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     await loadAll(locale);
   };
 
+  const register = (catalog: Catalog): void => {
+    const same =
+      catalog.sourceLocale === sourceLocale &&
+      catalog.locales.length === locales.length &&
+      catalog.locales.every((l) => locales.includes(l));
+    if (!same) {
+      throw new Error(
+        `[parla] the catalog's locales ${catalog.locales.join(', ')} (source ${catalog.sourceLocale}) differ from ${locales.join(', ')} (source ${sourceLocale})`,
+      );
+    }
+    for (const [ns, loaders] of Object.entries(catalog.namespaces)) {
+      if (!registered.has(ns)) {
+        registered.set(ns, loaders);
+      }
+    }
+  };
+  if (options.catalog) {
+    register(options.catalog);
+  }
+
   return {
     get locale() {
       return current;
@@ -252,6 +284,7 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
         listener();
       }
     },
+    register,
     subscribe(listener) {
       listeners.add(listener);
       return () => {

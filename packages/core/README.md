@@ -23,6 +23,7 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | --------------------------- | -------------------------------------------------------------------- |
 | `parla.load(ns[])`          | `t` keyed by namespace; the same list, the same promise              |
 | `parla.setLocale(locale)`   | Loads first, then notifies; rejects, unswitched, if a download fails |
+| `parla.register(catalog)`   | Adds a catalog's namespaces; the same locales only                   |
 | `parla.subscribe(listener)` | Called after each switch                                             |
 | `Translations<'a' \| 'b'>`  | The type of `t` for those namespaces                                 |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
