@@ -119,6 +119,10 @@ A package owns namespaces in its `package.json`; the app lists it:
 export default defineConfig({ packages: ['@acme/ui'] /* … */ });
 ```
 
+`{ name: '@acme/i18n', namespaces: ['generic'] }` takes a subset; paths to one package add up.
+`packages: 'dependencies'` instead walks the workspace-linked `dependencies`, collecting every
+`parla` field; a package reached only that way gives all its namespaces, unless one lists a subset.
+
 - Packages resolve through `node_modules`: workspace links and registry installs work alike.
 - A package's config is data in `package.json`: Node strips no types under `node_modules`.
 - `parla types` in a package writes only its `.d.ts`.

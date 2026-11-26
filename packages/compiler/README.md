@@ -36,7 +36,8 @@ export default defineConfig({
 });
 ```
 
-- `packages`: workspace or installed packages whose namespaces to include.
+- `packages`: workspace or installed packages whose namespaces to include; `{ name, namespaces }`
+  for a subset, or `'dependencies'` to walk the workspace-linked `dependencies`.
 - `functions`: message functions beyond the built-in ones, by their value's type (`string`,
   `number`, `date`); `createParla({ functions })` must implement each.
 - `markup`: tags a call may leave out; `createParla({ markup })` must render each.

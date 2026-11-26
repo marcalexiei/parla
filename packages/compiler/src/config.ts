@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { BUILTIN_FUNCTIONS } from './compile.ts';
@@ -22,8 +22,12 @@ export interface ParlaConfig {
   outDir?: string;
   /** Namespaces this package owns. */
   namespaces?: Record<string, NamespaceConfig>;
-  /** Workspace packages whose namespaces this package uses. Resolved from `node_modules`. */
-  packages?: Array<string>;
+  /**
+   * Packages whose namespaces this package uses, resolved from `node_modules`: a name for all of
+   * them, `{ name, namespaces }` for a subset. `dependencies` walks the workspace-linked
+   * `dependencies` instead, collecting every `parla` field.
+   */
+  packages?: Array<string | { name: string; namespaces: Array<string> }> | 'dependencies';
   /**
    * Message functions beyond the built-in ones, by what their value is. Each needs an
    * implementation in `createParla({ functions })`.
@@ -83,19 +87,16 @@ function readJson(file: string): unknown {
   }
 }
 
-function findPackageDir(name: string, from: string): string {
-  let dir = from;
-  for (;;) {
+function findPackageDir(name: string, from: string): string | undefined {
+  for (let dir = from; ; dir = dirname(dir)) {
     const candidate = join(dir, 'node_modules', name, 'package.json');
     if (existsSync(candidate)) {
       // pnpm's isolated layout keeps a package's own deps beside its real path, not the symlink.
       return realpathSync(dirname(candidate));
     }
-    const parent = dirname(dir);
-    if (parent === dir) {
-      throw new ConfigError(`Package "${name}" listed in "packages" was not found from ${from}`);
+    if (dirname(dir) === dir) {
+      return undefined;
     }
-    dir = parent;
   }
 }
 
@@ -122,11 +123,15 @@ async function importConfig(file: string): Promise<ParlaConfig> {
   return config;
 }
 
+function readPackageJson(dir: string): PackageJson | undefined {
+  const file = join(dir, 'package.json');
+  return existsSync(file) ? (readJson(file) as PackageJson) : undefined;
+}
+
 /** A package's `parla` field: packages are data, read from `node_modules` too. */
 function readPackageConfig(dir: string): { file: string; config: ParlaConfig } | undefined {
-  const pkg = join(dir, 'package.json');
-  const field = existsSync(pkg) ? (readJson(pkg) as PackageJson).parla : undefined;
-  return field ? { file: pkg, config: field } : undefined;
+  const field = readPackageJson(dir)?.parla;
+  return field ? { file: join(dir, 'package.json'), config: field } : undefined;
 }
 
 /** `parla.config.ts`, or else the `parla` field of `package.json`. */
@@ -144,12 +149,8 @@ async function readProjectConfig(
 const RUNTIMES = ['@parlajs/react', '@parlajs/core'];
 
 function detectRuntime(dir: string): string {
-  const file = join(dir, 'package.json');
-  if (!existsSync(file)) {
-    return '@parlajs/core';
-  }
-  const pkg = readJson(file) as PackageJson;
-  const deps = { ...pkg.peerDependencies, ...pkg.devDependencies, ...pkg.dependencies };
+  const pkg = readPackageJson(dir);
+  const deps = { ...pkg?.peerDependencies, ...pkg?.devDependencies, ...pkg?.dependencies };
   return RUNTIMES.find((name) => name in deps) ?? '@parlajs/core';
 }
 
@@ -187,57 +188,129 @@ export async function loadConfig(cwd: string, configFile?: string): Promise<Reso
     throw new ConfigError(`sourceLocale "${sourceLocale}" is not in locales`);
   }
 
-  const namespaces = new Map<string, ResolvedNamespace>();
   const watchFiles = [found.file];
-  const visited = new Set<string>();
-  const ownerDirs = new Map<string, string>();
+  /** Each package once, in the order reached, with what includes it. */
+  const owners = new Map<
+    string,
+    { name: string; config: ParlaConfig; all: boolean; subset: Set<string>; reached: boolean }
+  >();
+  const walked = new Set<string>();
 
-  const collect = (dir: string, owner: string, cfg: ParlaConfig): void => {
-    if (visited.has(dir)) {
+  /** `all` for a name, the namespaces of a subset, or `reached` through `dependencies`. */
+  const add = (
+    dir: string,
+    name: string,
+    cfg: ParlaConfig,
+    via: 'all' | 'reached' | ReadonlyArray<string>,
+  ): void => {
+    if (typeof via === 'object') {
+      const unknown = via.filter((ns) => !Object.hasOwn(cfg.namespaces ?? {}, ns));
+      if (unknown.length > 0) {
+        throw new ConfigError(`Package "${name}" does not own namespace "${unknown.join('", "')}"`);
+      }
+    }
+    let owner = owners.get(dir);
+    const isNew = !owner;
+    if (!owner) {
+      owner = { name, config: cfg, all: false, subset: new Set(), reached: false };
+      owners.set(dir, owner);
+    }
+    if (via === 'all') {
+      owner.all = true;
+    } else if (via === 'reached') {
+      owner.reached = true;
+    } else {
+      for (const ns of via) {
+        owner.subset.add(ns);
+      }
+    }
+    if (!isNew) {
       return;
     }
-    visited.add(dir);
-    for (const [name, ns] of Object.entries(cfg.namespaces ?? {})) {
-      if (!NAMESPACE_NAME.test(name)) {
-        throw new ConfigError(
-          `Namespace "${name}" must be letters, digits, "_", "-" or inner dots: it names files`,
-        );
-      }
-      const existing = namespaces.get(name);
-      if (existing?.owner === owner) {
-        const copies = [ownerDirs.get(name) ?? root, dir].map((d) => relative(root, d)).join(', ');
-        throw new ConfigError(
-          `Two copies of "${owner}" provide namespace "${name}" (${copies}); install a single version`,
-        );
-      }
-      if (existing) {
-        throw new ConfigError(
-          `Namespace "${name}" is owned by both "${existing.owner}" and "${owner}"`,
-        );
-      }
-      ownerDirs.set(name, dir);
-      if (!ns.path.includes('{locale}')) {
-        throw new ConfigError(`Namespace "${name}" path must contain {locale}`);
-      }
-      namespaces.set(name, {
-        name,
-        format: ns.format,
-        owner,
-        pathPattern: ns.path,
-        file: (locale) => resolve(dir, ns.path.replaceAll('{locale}', locale)),
-      });
+    if (cfg.packages === 'dependencies') {
+      // oxlint-disable-next-line eslint/no-use-before-define -- `add` and `walk` recurse into each other
+      walk(dir);
+      return;
     }
-    for (const pkgName of cfg.packages ?? []) {
+    for (const ref of cfg.packages ?? []) {
+      const pkgName = typeof ref === 'string' ? ref : ref.name;
       const pkgDir = findPackageDir(pkgName, dir);
+      if (!pkgDir) {
+        throw new ConfigError(
+          `Package "${pkgName}" listed in "packages" was not found from ${dir}`,
+        );
+      }
       const sub = readPackageConfig(pkgDir);
       if (!sub) {
         throw new ConfigError(`Package "${pkgName}" has no "parla" field in its package.json`);
       }
       watchFiles.push(sub.file);
-      collect(pkgDir, pkgName, sub.config);
+      add(pkgDir, pkgName, sub.config, typeof ref === 'string' ? 'all' : ref.namespaces);
     }
   };
-  collect(root, '.', config);
+
+  // Workspace links only, passing through packages without a `parla` field.
+  function walk(dir: string): void {
+    if (walked.has(dir)) {
+      return;
+    }
+    walked.add(dir);
+    const pkg = readPackageJson(dir);
+    for (const dep of Object.keys(pkg?.dependencies ?? {})) {
+      const depDir = findPackageDir(dep, dir);
+      if (!depDir || depDir.split(sep).includes('node_modules')) {
+        continue;
+      }
+      watchFiles.push(join(depDir, 'package.json'));
+      const sub = readPackageConfig(depDir);
+      if (sub) {
+        add(depDir, dep, sub.config, 'reached');
+      }
+      walk(depDir);
+    }
+  }
+
+  add(root, '.', config, 'all');
+
+  const namespaces = new Map<string, ResolvedNamespace>();
+  const ownerDirs = new Map<string, string>();
+  for (const [dir, owner] of owners) {
+    // A subset listed anywhere narrows a package that is only reached as a dependency.
+    const all = owner.all || (owner.reached && owner.subset.size === 0);
+    for (const [name, ns] of Object.entries(owner.config.namespaces ?? {})) {
+      if (!NAMESPACE_NAME.test(name)) {
+        throw new ConfigError(
+          `Namespace "${name}" must be letters, digits, "_", "-" or inner dots: it names files`,
+        );
+      }
+      if (!all && !owner.subset.has(name)) {
+        continue;
+      }
+      const existing = namespaces.get(name);
+      if (existing?.owner === owner.name) {
+        const copies = [ownerDirs.get(name) ?? root, dir].map((d) => relative(root, d)).join(', ');
+        throw new ConfigError(
+          `Two copies of "${owner.name}" provide namespace "${name}" (${copies}); install a single version`,
+        );
+      }
+      if (existing) {
+        throw new ConfigError(
+          `Namespace "${name}" is owned by both "${existing.owner}" and "${owner.name}"`,
+        );
+      }
+      if (!ns.path.includes('{locale}')) {
+        throw new ConfigError(`Namespace "${name}" path must contain {locale}`);
+      }
+      ownerDirs.set(name, dir);
+      namespaces.set(name, {
+        name,
+        format: ns.format,
+        owner: owner.name,
+        pathPattern: ns.path,
+        file: (locale) => resolve(dir, ns.path.replaceAll('{locale}', locale)),
+      });
+    }
+  }
 
   const resolved = [...namespaces.values()];
   for (const ns of resolved) {
