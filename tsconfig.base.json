@@ -1,18 +1,47 @@
 {
+  // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2023", "DOM"],
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "jsx": "react-jsx",
+    // Type Checking
     "strict": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
     "noUncheckedIndexedAccess": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "isolatedModules": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Modules
+    "module": "nodenext",
+    "target": "esnext",
+    "types": [],
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "customConditions": [
+      /**
+       * Custom condition that resolves to the original TypeScript source.
+       * It allows realtime typechecking between packages without rebuilding them.
+       *
+       * Keep in sync with the `conditions` in each package's `vitest.config.ts`.
+       */
+      "@parlajs/source"
+    ],
+
+    // A relative import names the file that exists, so `node src/index.ts` resolves it.
+    "allowImportingTsExtensions": true,
+    // Required for the `tsconfig.build.json` files to emit: rewrites `./x.ts` to `./x.js`.
+    "rewriteRelativeImportExtensions": true,
+
+    // Emit
+    // Off by default so no `tsc` writes output unless explicitly opted in
+    "noEmit": true,
+
+    // Interop Constraints
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "types": ["node"]
+    "isolatedModules": true,
+
+    // Completeness
+    "skipLibCheck": true
   }
 }

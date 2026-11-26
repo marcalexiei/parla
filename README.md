@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo/parla-lockup.svg" alt="Parla" width="320">
+  <img src="./.github/assets/logo.svg" alt="Parla" width="320">
 </p>
 
 <p align="center">Type-safe i18n with one accessor API, per-locale lazy loading, ICU and MessageFormat 2.</p>
@@ -9,15 +9,15 @@
 ```tsx
 const t = useT('checkout');
 
-t.title();                     // "Checkout"
-t.cart.items({ count: 3 });    // "3 items"       — count: number, required
+t.title(); // "Checkout"
+t.cart.items({ count: 3 }); // "3 items"       — count: number, required
 t.terms({ link: (c) => <a href="/terms">{c}</a> });
 ```
 
 ## Why
 
 - **One API.** Every message is a typed function on an accessor. No string keys, no second way to do it.
-- **Only what's needed is downloaded.** Catalogs compile to one chunk per *locale × namespace*, loaded with `import()`. A German user never downloads French.
+- **Only what's needed is downloaded.** Catalogs compile to one chunk per _locale × namespace_, loaded with `import()`. A German user never downloads French.
 - **Switch locale without a flash.** `setLocale` loads the namespaces in use first, then switches.
 - **ICU and MessageFormat 2.** Pick per namespace. Both compile through the MF2 data model, so types, rich text and runtime behave the same.
 - **Built for monorepos.** Each namespace has one owner package; apps compose them.
@@ -25,13 +25,13 @@ t.terms({ link: (c) => <a href="/terms">{c}</a> });
 
 ## Packages
 
-| Package | |
-|---|---|
-| `@parlajs/core` | Runtime: locale state, lazy loading, `Intl` formatting, type registry |
-| `@parlajs/react` | `ParlaProvider`, `useT`, `useLocale`; re-exports the core |
-| `@parlajs/compiler` | `parla` CLI and Vite plugin: catalogs → chunks + `.d.ts` |
-| `@parlajs/format-icu` | ICU MessageFormat parser (via `messageformat`) |
-| `@parlajs/format-mf2` | MessageFormat 2 parser (via `messageformat`) |
+| Package               |                                                                       |
+| --------------------- | --------------------------------------------------------------------- |
+| `@parlajs/core`       | Runtime: locale state, lazy loading, `Intl` formatting, type registry |
+| `@parlajs/react`      | `ParlaProvider`, `useT`, `useLocale`; re-exports the core             |
+| `@parlajs/compiler`   | `parla` CLI and Vite plugin: catalogs → chunks + `.d.ts`              |
+| `@parlajs/format-icu` | ICU MessageFormat parser (via `messageformat`)                        |
+| `@parlajs/format-mf2` | MessageFormat 2 parser (via `messageformat`)                          |
 
 ## Quick start (React + Vite)
 
@@ -41,8 +41,10 @@ t.terms({ link: (c) => <a href="/terms">{c}</a> });
 // locales/en/checkout.json  (mf2)
 {
   "title": "Checkout",
-  "cart": { "items": ".input {$count :number}\n.match $count\none {{{$count} item}}\n* {{{$count} items}}" },
-  "terms": "Accept the {#link}terms{/link}"
+  "cart": {
+    "items": ".input {$count :number}\n.match $count\none {{{$count} item}}\n* {{{$count} items}}",
+  },
+  "terms": "Accept the {#link}terms{/link}",
 }
 ```
 
@@ -73,6 +75,7 @@ export default defineConfig({ plugins: [parla(), react()] });
 
 ```tsx
 import { createParla, matchLocale, ParlaProvider, useLocale, useT } from '@parlajs/react';
+
 import { catalog } from './parla/catalog.js';
 
 const parla = createParla({
@@ -91,7 +94,7 @@ createRoot(root).render(
 
 `useT(namespace)` suspends until that namespace's chunk for the current locale is loaded.
 
-## Monorepos
+## Monorepos and polyrepos
 
 A package declares the namespaces it owns in its `package.json`:
 
@@ -112,6 +115,12 @@ The app lists the packages it uses, and the compiler pulls their catalogs in:
 
 Two packages owning the same namespace is a build error. Inside a package, `parla types` writes only the `.d.ts`, so the package type-checks on its own.
 
+Packages are found in `node_modules`, so a workspace link and a package installed from a registry work the same way. The app compiles every catalog with its own locales and fallbacks. A package that uses other packages' namespaces lists them in its own `packages`, and the app picks those up without listing them again. For a package published from its own repo:
+
+- ship the catalogs: add their folder to `files` (e.g. `"files": ["dist", "locales"]`);
+- make `@parlajs/react` (or `@parlajs/core`) a `peerDependency`, so the app and the package share one runtime;
+- only one installed version can own a namespace. With two, the build fails and names both copies; dedupe them.
+
 ## CLI
 
 ```
@@ -125,15 +134,15 @@ Checks: invalid syntax, unknown functions, missing files and translations (fille
 
 ## Supported message features
 
-| | ICU | MF2 |
-|---|---|---|
-| Placeholders | `{name}` | `{$name}` |
-| Plural, exact match, offset | `{n, plural, =0 {…} one {# …} other {…}}` | `.input {$n :number}` `.match $n` |
-| Ordinal | `selectordinal` | `:number select=ordinal` |
-| Select | `{g, select, …}` | `:string` selector, multiple selectors |
-| Numbers | `number`, `::currency/EUR`, `percent` | `:number`, `:integer`, `:currency`, `:percent`, `:unit` |
-| Dates | `date`, `time` | `:date`, `:time`, `:datetime` |
-| Rich text | `<link>…</link>` | `{#link}…{/link}`, `{#br/}` |
+|                             | ICU                                       | MF2                                                     |
+| --------------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| Placeholders                | `{name}`                                  | `{$name}`                                               |
+| Plural, exact match, offset | `{n, plural, =0 {…} one {# …} other {…}}` | `.input {$n :number}` `.match $n`                       |
+| Ordinal                     | `selectordinal`                           | `:number select=ordinal`                                |
+| Select                      | `{g, select, …}`                          | `:string` selector, multiple selectors                  |
+| Numbers                     | `number`, `::currency/EUR`, `percent`     | `:number`, `:integer`, `:currency`, `:percent`, `:unit` |
+| Dates                       | `date`, `time`                            | `:date`, `:time`, `:datetime`                           |
+| Rich text                   | `<link>…</link>`                          | `{#link}…{/link}`, `{#br/}`                             |
 
 Formatting uses `Intl`, so there's no locale data to ship.
 

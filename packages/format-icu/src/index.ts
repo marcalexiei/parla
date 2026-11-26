@@ -6,7 +6,7 @@ export interface FormatAdapter {
   /** Format id used in catalog config, e.g. `icu`. */
   name: string;
   /** Parses one message source into the MessageFormat 2 data model. Throws {@link FormatError}. */
-  parse(source: string): Model.Message;
+  readonly parse: (source: string) => Model.Message;
 }
 
 export class FormatError extends Error {
@@ -16,25 +16,39 @@ export class FormatError extends Error {
   }
 }
 
-const TAG = /<(\/?)([A-Za-z][\w-]*)\s*(\/?)>/g;
+const TAG = /<(?<close>\/?)(?<name>[A-Za-z][\w-]*)\s*(?<self>\/?)>/g;
 
 /** ICU tags (`<link>…</link>`, a FormatJS convention) become MF2 markup. */
 function splitTags(text: string): Model.Pattern {
   const out: Model.Pattern = [];
   let last = 0;
   for (const m of text.matchAll(TAG)) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    const kind = m[1] ? 'close' : m[3] ? 'standalone' : 'open';
-    out.push({ type: 'markup', kind, name: m[2]! });
+    if (m.index > last) {
+      out.push(text.slice(last, m.index));
+    }
+    const { close, name = '', self } = m.groups ?? {};
+    let kind: Model.Markup['kind'] = 'open';
+    if (close) {
+      kind = 'close';
+    } else if (self) {
+      kind = 'standalone';
+    }
+    out.push({ type: 'markup', kind, name });
     last = m.index + m[0].length;
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) {
+    out.push(text.slice(last));
+  }
   return out;
 }
 
 function stripMf1Options(options: Model.Options | undefined): Model.Options {
   const out: Model.Options = {};
-  for (const [k, v] of Object.entries(options ?? {})) if (!k.startsWith('mf1:')) out[k] = v;
+  for (const [k, v] of Object.entries(options ?? {})) {
+    if (!k.startsWith('mf1:')) {
+      out[k] = v;
+    }
+  }
   return out;
 }
 
@@ -52,9 +66,9 @@ function normalizeFunction(fn: Model.FunctionRef): Model.FunctionRef {
     case 'mf1:time':
       return { type: 'function', name: 'time', options };
     case 'mf1:unit': {
-      const unit = options.unit;
+      const { unit } = options;
       if (unit?.type === 'literal' && unit.value === 'percent') {
-        delete options.unit;
+        delete options['unit'];
         return { type: 'function', name: 'percent', options };
       }
       return { type: 'function', name: 'unit', options };
@@ -68,22 +82,33 @@ function normalizeFunction(fn: Model.FunctionRef): Model.FunctionRef {
 
 function normalizeExpression<E extends Model.Expression>(expr: E): E {
   const { attributes: _drop, ...rest } = expr;
-  return (rest.functionRef ? { ...rest, functionRef: normalizeFunction(rest.functionRef) } : rest) as E;
+  return (
+    rest.functionRef ? { ...rest, functionRef: normalizeFunction(rest.functionRef) } : rest
+  ) as E;
 }
 
 function normalizePattern(pattern: Model.Pattern): Model.Pattern {
   const out: Model.Pattern = [];
   for (const part of pattern) {
-    if (typeof part === 'string') out.push(...splitTags(part));
-    else if (part.type === 'expression') out.push(normalizeExpression(part));
-    else out.push(part);
+    if (typeof part === 'string') {
+      out.push(...splitTags(part));
+    } else if (part.type === 'expression') {
+      out.push(normalizeExpression(part));
+    } else {
+      out.push(part);
+    }
   }
   return out;
 }
 
 function normalize(msg: Model.Message): Model.Message {
-  const declarations = msg.declarations.map((d) => ({ ...d, value: normalizeExpression(d.value) })) as Model.Declaration[];
-  if (msg.type === 'message') return { type: 'message', declarations, pattern: normalizePattern(msg.pattern) };
+  const declarations = msg.declarations.map((d) => ({
+    ...d,
+    value: normalizeExpression(d.value),
+  })) as Array<Model.Declaration>;
+  if (msg.type === 'message') {
+    return { type: 'message', declarations, pattern: normalizePattern(msg.pattern) };
+  }
   return {
     type: 'select',
     declarations,
@@ -104,5 +129,3 @@ export const icu: FormatAdapter = {
     return normalize(mf1ToMessageData(ast));
   },
 };
-
-export default icu;

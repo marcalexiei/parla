@@ -1,2 +1,34 @@
 packages:
   - packages/*
+
+allowBuilds:
+  # vite's optional bundler; it fetches its platform binary in a postinstall
+  esbuild: true
+  lefthook: true
+
+catalog:
+  '@vitest/coverage-v8': 5.1.1
+  happy-dom: 21.0.4
+  oxfmt: 0.78.0
+  vitest: 5.1.1
+
+# Deliberately stricter than pnpm's 1440 default (3 days vs 1)
+minimumReleaseAge: 4320
+
+# The cooling-off period buys nothing against our own packages.
+minimumReleaseAgeExclude:
+  - '@marcalexiei/oxfmt-config'
+  - '@marcalexiei/oxlint-config'
+
+# Reject a version with weaker publish trust evidence than an earlier one.
+trustPolicy: no-downgrade
+
+# Fail on unmet peers and on a Node version outside `engines`, instead of warning
+strictPeerDependencies: true
+engineStrict: true
+
+# An update re-resolves only what it bumps, leaving older copies another range would share.
+autoDedupe: true
+# Without it, a non-frozen install cannot tell the lockfile was deduped, and resolves it again.
+lockfile:
+  includeResolutionSettings: true

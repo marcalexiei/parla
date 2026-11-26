@@ -2,36 +2,67 @@
   "name": "@parlajs/react",
   "version": "0.0.0",
   "description": "React adapter for Parla.",
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "localization",
+    "react",
+    "react-i18n",
+    "type-safe"
+  ],
+  "homepage": "https://github.com/marcalexiei/parla",
+  "bugs": {
+    "url": "https://github.com/marcalexiei/parla/issues"
+  },
   "license": "MIT",
-  "type": "module",
+  "author": {
+    "name": "Marco Pasqualetti",
+    "url": "https://github.com/marcalexiei"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcalexiei/parla.git",
     "directory": "packages/react"
   },
+  "files": [
+    "build",
+    "src",
+    "README.md"
+  ],
+  "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "@parlajs/source": "./src/index.ts",
+      "default": "./build/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "@types/react": "19.3.3",
-    "@types/react-dom": "19.3.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "prepack": "pnpm run build",
+    "lint:publish": "attw --pack . --profile esm-only && publint --strict",
+    "test": "vitest",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "@parlajs/core": "workspace:^"
   },
+  "devDependencies": {
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "happy-dom": "catalog:default",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "vitest": "catalog:default"
+  },
   "peerDependencies": {
     "react": ">=19"
+  },
+  "engines": {
+    "node": "^24 || >=26"
   }
 }

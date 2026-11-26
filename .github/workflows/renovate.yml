@@ -1,0 +1,84 @@
+name: Renovate
+
+# Self-hosted rather than the Mend app, for one reason: `postUpgradeTasks` is a self-hosted-only
+# option, and it is what writes the changeset a documentation pin needs. The configuration is
+# `.github/renovate.json5`; this workflow only decides when Renovate gets to look.
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: The log level to run with.
+        required: false
+        default: info
+        type: choice
+        options: [info, debug]
+      dryRun:
+        description: Resolve and log the updates without opening anything.
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - .github/renovate.json5
+  schedule:
+    #        ┌───────────── minute (0 - 59)
+    #        │  ┌───────────── hour (0 - 23)
+    #        │  │ ┌───────────── day of the month (1 - 31)
+    #        │  │ │ ┌───────────── month (1 - 12 or JAN-DEC)
+    #        │  │ │ │ ┌───────────── day of the week (0 - 6 or SUN-SAT)
+    #        *  * * * *
+    # Daily: the per-manager `schedule` in the configuration narrows it from here.
+    - cron: '45 0 * * *'
+
+# A dispatch racing the schedule would resolve the same updates twice.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  renovate:
+    # Off until the helper app and the `update-meta-files` environment are set up.
+    if: ${{ github.repository == 'marcalexiei/parla' && vars.HELPER_APP_ID != '' }}
+    name: Renovate
+    runs-on: ubuntu-26.04
+
+    timeout-minutes: 30
+
+    environment: update-meta-files # where HELPER_APP_ID and HELPER_PRIVATE_KEY live
+
+    permissions:
+      contents: read # the app token, not GITHUB_TOKEN, pushes the branches and opens the PRs
+
+    steps:
+      # A GitHub App token, not GITHUB_TOKEN: events from the default token do not
+      # start other workflows, so CI would never run on the generated PRs.
+      - name: Create release helper token
+        id: release-helper
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.HELPER_APP_ID }}
+          private-key: ${{ secrets.HELPER_PRIVATE_KEY }}
+          permission-contents: write # pushes update branches and merges automerged PRs
+          permission-pull-requests: write # opens and updates the PRs
+          permission-issues: write # keeps the Dependency Dashboard issue
+          permission-statuses: write # sets the minimumReleaseAge status
+          permission-workflows: write # updates action pins in workflow files
+          permission-vulnerability-alerts: read # turns Dependabot alerts into security PRs
+
+      # No checkout: Renovate clones the repository itself, and reads the configuration from it.
+      - name: Renovate
+        uses: renovatebot/github-action@acdd6bda8b035c99ce59d5675816af2aa65a1774 # v46.3.14
+        with:
+          token: ${{ steps.release-helper.outputs.token }}
+        env:
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_DRY_RUN: ${{ inputs.dryRun == true && 'full' || '' }}
+          # Reads changelogs and resolves release tags on repositories other than this one.
+          GITHUB_COM_TOKEN: ${{ github.token }}
+          # `postUpgradeTasks` runs nothing that is not listed here.
+          RENOVATE_ALLOWED_COMMANDS: '["^\\.github/scripts/renovate-changeset\\.sh "]'

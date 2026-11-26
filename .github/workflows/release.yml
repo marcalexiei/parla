@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+  # queue every push: without it, a newer run replaces the waiting one and that release is skipped
+  queue: max
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+# Skips the pre-commit hook — see ../CONTRIBUTING.md, "Workflows That Commit".
+env:
+  LEFTHOOK: 0
+
+jobs:
+  release:
+    name: Release
+    # Off until the release helper app and the `release-npm` environment are set up.
+    if: ${{ vars.RELEASE_HELPER_APP_ID != '' }}
+
+    environment: release-npm
+
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: read # the app token, not GITHUB_TOKEN, pushes the release and opens the PR
+      id-token: write # required for npm OIDC trusted publishing
+
+    outputs:
+      published: ${{ steps.changesets.outputs.published }}
+      # `[]` when the action sets no list, so a later `fromJSON` still parses.
+      publishedPackages: ${{ steps.changesets.outputs['published-packages'] || '[]' }}
+
+    steps:
+      # A GitHub App token, not GITHUB_TOKEN: events from the default token do not
+      # start other workflows, so CI would never run on the release PR.
+      - name: Create release helper token
+        id: release-helper
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RELEASE_HELPER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_HELPER_PRIVATE_KEY }}
+          permission-contents: write # pushes the release branch, tags and releases
+          permission-pull-requests: write # opens and updates the release PR
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install Dependencies
+        uses: marcalexiei/github-actions/setup-node-and-pnpm@2c28f768b03ce332a96804ae076f15c84f239684 # v4.0.2
+        with:
+          save-cache: false
+
+      # `pnpm release` builds, then `changeset publish` publishes every package whose
+      # version is not yet on npm, in dependency order.
+      - name: Create Release Pull Request or Publish to npm
+        id: changesets
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          github-token: ${{ steps.release-helper.outputs.token }}
+          commit-message: 'chore: release'
+          pr-title: 'chore: release'
+          pr-base-branch: main
+          publish-script: 'pnpm release'
+
+  # Its own job, so a comment that fails is a red job to re-run rather than an error swallowed
+  # inside a green release: the packages are already on npm by the time it runs.
+  comment:
+    name: Comment
+    needs: release
+    if: ${{ needs.release.outputs.published == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    environment: release-npm # where the release helper's credentials live
+
+    permissions:
+      contents: read # required to check out the repository
+
+    steps:
+      - name: Create release helper token
+        id: release-helper
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RELEASE_HELPER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_HELPER_PRIVATE_KEY }}
+          permission-contents: read # finds the PRs a commit shipped in
+          permission-pull-requests: write # comments on shipped PRs
+          permission-issues: write # comments on the issues those PRs close
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the commenter reads the history before the release commit
+
+      - name: Comment on shipped PRs and issues
+        uses: marcalexiei/changesets-release-commenter@05af9622283286a660465ac50f552b7f4151377e # v0.4.0
+        with:
+          github-token: ${{ steps.release-helper.outputs.token }}
+          published-packages: ${{ needs.release.outputs.publishedPackages }}

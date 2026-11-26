@@ -1,42 +1,69 @@
-// @vitest-environment happy-dom
 import { act, render, screen } from '@testing-library/react';
 import { Suspense } from 'react';
+import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
-import { createParla, ParlaProvider, useLocale, useT, type Catalog } from '../src/index.js';
+
+import { createParla, ParlaProvider, useLocale, useT } from '../src/index.ts';
+import type { Catalog } from '../src/index.ts';
+
+// What `parla build` would generate for this catalog.
+declare module '@parlajs/core' {
+  interface Register {
+    namespaces: {
+      shop: {
+        title: () => string;
+        terms: (params: { link: (children: ReactNode) => ReactNode }) => ReactNode;
+      };
+    };
+  }
+}
 
 const catalog: Catalog = {
   locales: ['en', 'it'],
   sourceLocale: 'en',
   namespaces: {
     shop: {
-      en: async () => ({
-        default: {
-          title: () => 'Shop',
-          terms: (p, $) => $.rich(['Read the ', $.tag(p, 'link', ['terms'])]),
-        },
-      }),
-      it: async () => ({
-        default: {
-          title: () => 'Negozio',
-          terms: (p, $) => $.rich(['Leggi i ', $.tag(p, 'link', ['termini'])]),
-        },
-      }),
+      en: async () =>
+        Promise.resolve({
+          default: {
+            title: () => 'Shop',
+            terms: (p, $) => $.rich(['Read the ', $.tag(p, 'link', ['terms'])]),
+          },
+        }),
+      it: async () =>
+        Promise.resolve({
+          default: {
+            title: () => 'Negozio',
+            terms: (p, $) => $.rich(['Leggi i ', $.tag(p, 'link', ['termini'])]),
+          },
+        }),
     },
   },
 };
 
-function Shop() {
-  const t = useT('shop') as any;
+const link = (children: ReactNode): ReactNode => <a href="/terms">{children}</a>;
+
+function Shop(): ReactNode {
+  const t = useT('shop');
   const [locale, setLocale] = useLocale();
   return (
     <div>
       <h1>{t.title()}</h1>
-      <p>{t.terms({ link: (children: React.ReactNode) => <a href="/terms">{children}</a> })}</p>
-      <button type="button" onClick={() => setLocale(locale === 'en' ? 'it' : 'en')}>
+      <p>{t.terms({ link })}</p>
+      <button
+        type="button"
+        onClick={() => {
+          void setLocale(locale === 'en' ? 'it' : 'en');
+        }}>
         {locale}
       </button>
     </div>
   );
+}
+
+function Broken(): ReactNode {
+  useT('shop');
+  return null;
 }
 
 describe('@parlajs/react', () => {
@@ -50,6 +77,7 @@ describe('@parlajs/react', () => {
           </Suspense>
         </ParlaProvider>,
       );
+      await parla.load('shop');
     });
     expect(screen.getByRole('heading').textContent).toBe('Shop');
     expect(screen.getByRole('link').textContent).toBe('terms');
@@ -57,18 +85,15 @@ describe('@parlajs/react', () => {
 
     await act(async () => {
       screen.getByRole('button').click();
+      await parla.preload(['shop'], 'it');
     });
-    expect(screen.queryByText('loading')).toBeNull();
     expect(screen.getByRole('heading').textContent).toBe('Negozio');
+    expect(screen.queryByText('loading')).toBeNull();
     expect(screen.getByRole('link').textContent).toBe('termini');
     expect(screen.getByRole('button').textContent).toBe('it');
   });
 
   it('explains a missing provider', () => {
-    const Broken = () => {
-      useT('shop');
-      return null;
-    };
     expect(() => render(<Broken />)).toThrow(/ParlaProvider/);
   });
 });

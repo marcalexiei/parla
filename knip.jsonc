@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "vitest": {
+    "entry": ["tests/**/*.spec.{ts,tsx}"]
+  },
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.ts"]
+    },
+    "packages/*": {}
+  }
+}

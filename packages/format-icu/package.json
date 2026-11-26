@@ -2,29 +2,57 @@
   "name": "@parlajs/format-icu",
   "version": "0.0.0",
   "description": "ICU MessageFormat adapter for the Parla compiler.",
+  "keywords": [
+    "i18n",
+    "icu",
+    "messageformat",
+    "parser"
+  ],
+  "homepage": "https://github.com/marcalexiei/parla",
+  "bugs": {
+    "url": "https://github.com/marcalexiei/parla/issues"
+  },
   "license": "MIT",
-  "type": "module",
+  "author": {
+    "name": "Marco Pasqualetti",
+    "url": "https://github.com/marcalexiei"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcalexiei/parla.git",
     "directory": "packages/format-icu"
   },
+  "files": [
+    "build",
+    "src",
+    "README.md"
+  ],
+  "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "@parlajs/source": "./src/index.ts",
+      "default": "./build/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit"
+    "prepack": "pnpm run build",
+    "lint:publish": "attw --pack . --profile esm-only && publint --strict",
+    "test": "vitest",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "@messageformat/icu-messageformat-1": "^0.13.0",
     "@messageformat/parser": "^5.2.0",
     "messageformat": "^4.1.0"
+  },
+  "devDependencies": {
+    "vitest": "catalog:default"
+  },
+  "engines": {
+    "node": "^24 || >=26"
   }
 }

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "include": [
+    "scripts",
+    "oxfmt.config.ts",
+    "oxlint.config.ts",
+    "vitest.config.ts",
+    "vitest.config.coverage.ts"
+  ],
+  "compilerOptions": {
+    "customConditions": [],
+    // Base config sets `types: []`; these scripts run on node
+    "types": ["node"]
+  }
+}

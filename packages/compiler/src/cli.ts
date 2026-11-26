@@ -2,7 +2,9 @@
 import { watch } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
-import { build, formatDiagnostic, type BuildOptions } from './build.js';
+
+import { build, formatDiagnostic } from './build.ts';
+import type { BuildOptions } from './build.ts';
 
 const HELP = `Usage: parla <command> [options]
 
@@ -29,38 +31,62 @@ const { values, positionals } = parseArgs({
   },
 });
 
-const command = positionals[0];
+const [command] = positionals;
 if (values.help || !command || !['build', 'types', 'check'].includes(command)) {
   console.log(HELP);
   process.exit(values.help ? 0 : 1);
 }
 
-const write: BuildOptions['write'] = command === 'build' ? 'all' : command === 'types' ? 'types' : false;
+const WRITE: Record<string, BuildOptions['write']> = { build: 'all', types: 'types', check: false };
+const write = WRITE[command] ?? false;
 
-async function run(): Promise<{ failed: boolean; files: string[] }> {
+function run(): { failed: boolean; files: Array<string> } {
   const started = performance.now();
-  const result = await build({ config: values.config, write });
+  const result = build({ config: values.config, write });
   const { diagnostics, config } = result;
   const errors = diagnostics.filter((d) => d.level === 'error').length;
   const warnings = diagnostics.length - errors;
-  if (values.json) console.log(JSON.stringify(diagnostics, null, 2));
-  else for (const d of diagnostics) console.log(formatDiagnostic(d, config.root));
+  if (values.json) {
+    console.log(JSON.stringify(diagnostics, null, 2));
+  } else {
+    for (const d of diagnostics) {
+      console.log(formatDiagnostic(d, config.root));
+    }
+  }
   const ms = Math.round(performance.now() - started);
   const summary = `${config.namespaces.length} namespaces × ${config.locales.length} locales · ${errors} errors · ${warnings} warnings · ${ms}ms`;
-  if (!values.json) console.log(`parla ${command}: ${summary}${write ? ` · ${result.written.length} files written` : ''}`);
-  return { failed: errors > 0 || (Boolean(values.strict) && warnings > 0), files: config.watchFiles };
+  if (!values.json) {
+    console.log(
+      `parla ${command}: ${summary}${write ? ` · ${result.written.length} files written` : ''}`,
+    );
+  }
+  return {
+    failed: errors > 0 || (Boolean(values.strict) && warnings > 0),
+    files: config.watchFiles,
+  };
+}
+
+function rebuild(): void {
+  try {
+    run();
+  } catch (error) {
+    console.error(`parla: ${(error as Error).message}`);
+  }
 }
 
 try {
-  const first = await run();
-  if (!values.watch || !write) process.exit(first.failed ? 1 : 0);
+  const first = run();
+  if (!values.watch || !write) {
+    process.exit(first.failed ? 1 : 0);
+  }
   let timer: NodeJS.Timeout | undefined;
+  const schedule = (): void => {
+    clearTimeout(timer);
+    timer = setTimeout(rebuild, 50);
+  };
   const dirs = new Set(first.files.map((f) => dirname(f)));
   for (const dir of dirs) {
-    watch(dir, () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => void run().catch((e) => console.error(e.message)), 50);
-    });
+    watch(dir, schedule);
   }
   console.log(`parla: watching ${dirs.size} folders`);
 } catch (error) {

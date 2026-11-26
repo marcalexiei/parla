@@ -1,21 +1,23 @@
-import { MessageSyntaxError, parseMessage, validate, type Model } from 'messageformat';
+import { MessageSyntaxError, parseMessage, validate } from 'messageformat';
+import type { Model } from 'messageformat';
 
-export type { Model };
+export type { Model } from 'messageformat';
 
 export interface FormatAdapter {
   /** Format id used in catalog config, e.g. `mf2`. */
   name: string;
   /** Parses one message source into the MessageFormat 2 data model. Throws {@link FormatError}. */
-  parse(source: string): Model.Message;
+  readonly parse: (source: string) => Model.Message;
 }
 
 export class FormatError extends Error {
-  constructor(
-    message: string,
-    readonly start?: number,
-    readonly end?: number,
-  ) {
+  readonly start: number | undefined;
+  readonly end: number | undefined;
+
+  constructor(message: string, start?: number, end?: number) {
     super(message);
+    this.start = start;
+    this.end = end;
     this.name = 'FormatError';
   }
 }
@@ -36,5 +38,3 @@ export const mf2: FormatAdapter = {
     return msg;
   },
 };
-
-export default mf2;

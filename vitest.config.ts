@@ -1,18 +1,14 @@
-import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-const src = (pkg: string) => fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url));
-
 export default defineConfig({
-  resolve: {
-    alias: {
-      '@parlajs/core': src('core'),
-      '@parlajs/format-icu': src('format-icu'),
-      '@parlajs/format-mf2': src('format-mf2'),
-      '@parlajs/react': src('react'),
-    },
-  },
   test: {
-    include: ['packages/*/test/**/*.test.{ts,tsx}'],
+    // a project does not inherit this file, so each sets the `@parlajs/source` condition it needs
+    projects: [
+      'packages/core/vitest.config.ts',
+      'packages/format-icu/vitest.config.ts',
+      'packages/format-mf2/vitest.config.ts',
+      'packages/compiler/vitest.config.ts',
+      'packages/react/vitest.config.ts',
+    ],
   },
 });

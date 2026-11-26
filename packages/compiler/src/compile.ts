@@ -1,3 +1,4 @@
+// oxlint-disable max-classes-per-file -- the compiler, its error and its chunk scope belong together
 import type { Model } from 'messageformat';
 
 const NUMERIC = new Set(['number', 'integer', 'currency', 'percent', 'unit']);
@@ -10,10 +11,10 @@ export type ParamKind =
   | { kind: 'date' }
   | { kind: 'string' }
   | { kind: 'any' }
-  | { kind: 'select'; keys: string[]; open: boolean };
+  | { kind: 'select'; keys: Array<string>; open: boolean };
 
 export interface MessageInfo {
-  params: Map<string, ParamKind[]>;
+  params: Map<string, Array<ParamKind>>;
   markup: Set<string>;
   rich: boolean;
 }
@@ -30,7 +31,7 @@ export class CompileError extends Error {
 
 /** Module-level constants shared by every message in one generated chunk. */
 export class ModuleScope {
-  readonly consts: string[] = [];
+  readonly consts: Array<string> = [];
   private readonly seen = new Map<string, string>();
   hoist(code: string): string {
     let name = this.seen.get(code);
@@ -50,25 +51,44 @@ interface Binding {
 }
 
 function literalValue(value: string): string {
-  if (/^-?\d+(\.\d+)?$/.test(value)) return value;
-  if (value === 'true' || value === 'false') return value;
+  if (/^-?\d+(?:\.\d+)?$/.test(value)) {
+    return value;
+  }
+  if (value === 'true' || value === 'false') {
+    return value;
+  }
   return JSON.stringify(value);
 }
 
 function kindOf(fn: Model.FunctionRef | undefined): ParamKind {
-  if (!fn) return { kind: 'any' };
-  if (NUMERIC.has(fn.name)) return { kind: 'number' };
-  if (DATES.has(fn.name)) return { kind: 'date' };
+  if (!fn) {
+    return { kind: 'any' };
+  }
+  if (NUMERIC.has(fn.name)) {
+    return { kind: 'number' };
+  }
+  if (DATES.has(fn.name)) {
+    return { kind: 'date' };
+  }
   return { kind: 'string' };
+}
+
+function checkFn(fn: Model.FunctionRef): void {
+  if (!KNOWN.has(fn.name)) {
+    throw new CompileError(`unknown function :${fn.name}`);
+  }
 }
 
 class MessageCompiler {
   private readonly vars = new Map<string, Binding>();
+  private readonly scope: ModuleScope;
   readonly info: MessageInfo = { params: new Map(), markup: new Set(), rich: false };
 
-  constructor(private readonly scope: ModuleScope) {}
+  constructor(scope: ModuleScope) {
+    this.scope = scope;
+  }
 
-  private record(param: string, kind: ParamKind) {
+  private record(param: string, kind: ParamKind): void {
     const list = this.info.params.get(param) ?? [];
     list.push(kind);
     this.info.params.set(param, list);
@@ -78,14 +98,15 @@ class MessageCompiler {
     return this.vars.get(name) ?? { raw: `p[${JSON.stringify(name)}]`, param: name };
   }
 
-  private checkFn(fn: Model.FunctionRef) {
-    if (!KNOWN.has(fn.name)) throw new CompileError(`unknown function :${fn.name}`);
-  }
-
   private options(fn: Model.FunctionRef): string {
     const entries = Object.entries(fn.options ?? {});
-    if (entries.length === 0) return '';
-    const parts = entries.map(([k, v]) => `${JSON.stringify(k)}: ${v.type === 'literal' ? literalValue(v.value) : this.resolve(v.name).raw}`);
+    if (entries.length === 0) {
+      return '';
+    }
+    const parts = entries.map(
+      ([k, v]) =>
+        `${JSON.stringify(k)}: ${v.type === 'literal' ? literalValue(v.value) : this.resolve(v.name).raw}`,
+    );
     const code = `{ ${parts.join(', ')} }`;
     const constant = entries.every(([, v]) => v.type === 'literal');
     return `, ${constant ? this.scope.hoist(code) : code}`;
@@ -93,68 +114,95 @@ class MessageCompiler {
 
   private effective(expr: Model.Expression): Binding {
     let binding: Binding;
-    if (expr.arg?.type === 'literal') binding = { raw: JSON.stringify(expr.arg.value) };
-    else if (expr.arg?.type === 'variable') binding = { ...this.resolve(expr.arg.name) };
-    else binding = { raw: 'undefined' };
+    if (expr.arg?.type === 'literal') {
+      binding = { raw: JSON.stringify(expr.arg.value) };
+    } else if (expr.arg?.type === 'variable') {
+      binding = { ...this.resolve(expr.arg.name) };
+    } else {
+      binding = { raw: 'undefined' };
+    }
     const own = expr.functionRef;
     if (own) {
-      this.checkFn(own);
+      checkFn(own);
       const inherited = binding.fn?.name === own.name ? binding.fn.options : undefined;
       binding.fn = inherited ? { ...own, options: { ...inherited, ...own.options } } : own;
     }
     return binding;
   }
 
-  declare(decl: Model.Declaration) {
+  declare(decl: Model.Declaration): void {
     const binding = this.effective(decl.value);
-    if (decl.type === 'input') binding.param = decl.name;
+    if (decl.type === 'input') {
+      binding.param = decl.name;
+    }
     this.vars.set(decl.name, binding);
-    if (binding.param && binding.fn) this.record(binding.param, kindOf(binding.fn));
+    if (binding.param && binding.fn) {
+      this.record(binding.param, kindOf(binding.fn));
+    }
   }
 
   private expression(expr: Model.Expression): string {
     const b = this.effective(expr);
-    if (b.param) this.record(b.param, kindOf(b.fn));
-    if (!b.fn) return `$.str(${b.raw})`;
+    if (b.param) {
+      this.record(b.param, kindOf(b.fn));
+    }
+    if (!b.fn) {
+      return `$.str(${b.raw})`;
+    }
     return `$.f(${JSON.stringify(b.fn.name)}, ${b.raw}${this.options(b.fn)})`;
   }
 
   pattern(pattern: Model.Pattern): { code: string; rich: boolean } {
-    const root: string[] = [];
-    const stack: { name: string; items: string[] }[] = [];
+    const root: Array<string> = [];
+    const stack: Array<{ name: string; items: Array<string> }> = [];
     let rich = false;
-    const top = () => stack.at(-1)?.items ?? root;
+    const top = (): Array<string> => stack.at(-1)?.items ?? root;
     for (const part of pattern) {
       if (typeof part === 'string') {
-        if (part) top().push(JSON.stringify(part));
+        if (part) {
+          top().push(JSON.stringify(part));
+        }
       } else if (part.type === 'expression') {
         top().push(this.expression(part));
       } else {
         rich = true;
         this.info.markup.add(part.name);
-        if (part.kind === 'open') stack.push({ name: part.name, items: [] });
-        else if (part.kind === 'standalone') top().push(`$.tag(p, ${JSON.stringify(part.name)}, [])`);
-        else {
+        if (part.kind === 'open') {
+          stack.push({ name: part.name, items: [] });
+        } else if (part.kind === 'standalone') {
+          top().push(`$.tag(p, ${JSON.stringify(part.name)}, [])`);
+        } else {
           const open = stack.pop();
-          if (open?.name !== part.name) throw new CompileError(`closing markup {/${part.name}} has no matching open`);
+          if (open?.name !== part.name) {
+            throw new CompileError(`closing markup {/${part.name}} has no matching open`);
+          }
           top().push(`$.tag(p, ${JSON.stringify(part.name)}, [${open.items.join(', ')}])`);
         }
       }
     }
-    if (stack.length) throw new CompileError(`markup {#${stack.at(-1)!.name}} is never closed`);
+    const unclosed = stack.at(-1);
+    if (unclosed) {
+      throw new CompileError(`markup {#${unclosed.name}} is never closed`);
+    }
     if (rich) {
       this.info.rich = true;
       return { code: `$.rich([${root.join(', ')}])`, rich };
     }
-    return { code: root.length ? root.join(' + ') : '""', rich };
+    return { code: root.length > 0 ? root.join(' + ') : '""', rich };
   }
 
   select(msg: Model.SelectMessage): string {
     const selectors = msg.selectors.map((sel, i) => {
       const b = this.resolve(sel.name);
-      if (!b.fn) throw new CompileError(`selector $${sel.name} needs an annotation such as :number or :string`);
+      if (!b.fn) {
+        throw new CompileError(
+          `selector $${sel.name} needs an annotation such as :number or :string`,
+        );
+      }
       if (NUMERIC.has(b.fn.name)) {
-        if (b.param) this.record(b.param, { kind: 'number' });
+        if (b.param) {
+          this.record(b.param, { kind: 'number' });
+        }
         return `$.sn(${b.raw}${this.options(b.fn)})`;
       }
       if (b.fn.name === 'string') {
@@ -162,9 +210,12 @@ class MessageCompiler {
           const keys = new Set<string>();
           let open = false;
           for (const v of msg.variants) {
-            const key = v.keys[i]!;
-            if (key.type === '*') open = true;
-            else keys.add(key.value);
+            const key = v.keys[i];
+            if (key?.type === '*') {
+              open = true;
+            } else if (key) {
+              keys.add(key.value);
+            }
           }
           this.record(b.param, { kind: 'select', keys: [...keys], open });
         }
@@ -179,9 +230,14 @@ class MessageCompiler {
   }
 }
 
-export function compileMessage(msg: Model.Message, scope: ModuleScope = new ModuleScope()): CompiledMessage {
+export function compileMessage(
+  msg: Model.Message,
+  scope: ModuleScope = new ModuleScope(),
+): CompiledMessage {
   const c = new MessageCompiler(scope);
-  for (const decl of msg.declarations) c.declare(decl);
+  for (const decl of msg.declarations) {
+    c.declare(decl);
+  }
   const body = msg.type === 'message' ? c.pattern(msg.pattern).code : c.select(msg);
   return { code: `(p, $) => ${body}`, info: c.info };
 }

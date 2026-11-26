@@ -1,30 +1,38 @@
-import { createRuntime, type MessageRuntime, type WrapRich } from './runtime.js';
+import { createRuntime } from './runtime.ts';
+import type { MessageRuntime, WrapRich } from './runtime.ts';
 
-export { createRuntime, type MessageRuntime, type SelectorValue, type WrapRich } from './runtime.js';
+export {
+  createRuntime,
+  type MessageRuntime,
+  type SelectorValue,
+  type WrapRich,
+} from './runtime.ts';
 
 /**
  * Augmented by generated code (`locale`, `namespaces`) and by framework adapters (`richNode`).
  * Do not augment it by hand.
  */
-// biome-ignore lint/suspicious/noEmptyInterface: augmentation target
+// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface Register {}
 
 type Registered<K extends string, Fallback> = Register extends Record<K, infer V> ? V : Fallback;
 
 export type Locale = Registered<'locale', string>;
-export type Namespaces = Registered<'namespaces', Record<string, any>>;
-export type Namespace = keyof Namespaces & string;
+export type Namespaces = Registered<'namespaces', Record<string, object>>;
+export type Namespace = keyof Namespaces;
 /** What a message with markup returns: `ReactNode` with `@parlajs/react`. */
 export type RichNode = Registered<'richNode', unknown>;
 
 export type CompiledMessage = (params: Record<string, unknown>, rt: MessageRuntime) => unknown;
-export type MessageModule = { default: Record<string, CompiledMessage> };
+export interface MessageModule {
+  default: Record<string, CompiledMessage>;
+}
 export type Loader = () => Promise<MessageModule>;
 
 /** Emitted by `parla build` as `catalog.js`. */
 export interface Catalog {
-  readonly locales: readonly string[];
-  readonly sourceLocale: string;
+  readonly locales: ReadonlyArray<Locale>;
+  readonly sourceLocale: Locale;
   readonly namespaces: Readonly<Record<string, Readonly<Record<string, Loader>>>>;
 }
 
@@ -42,58 +50,100 @@ export interface Snapshot {
 
 export interface Parla {
   readonly locale: Locale;
-  readonly locales: readonly Locale[];
+  readonly locales: ReadonlyArray<Locale>;
   /** Loads every namespace in use for `locale`, then switches, so nothing suspends. */
-  setLocale(locale: Locale): Promise<void>;
+  readonly setLocale: (locale: Locale) => Promise<void>;
   /** Loads a namespace once per locale. Returns the same promise on every call. */
-  load<N extends Namespace>(namespace: N, locale?: Locale): Promise<Namespaces[N]>;
+  readonly load: <N extends Namespace>(namespace: N, locale?: Locale) => Promise<Namespaces[N]>;
   /** The accessor if the namespace is loaded for the current locale. */
-  getT<N extends Namespace>(namespace: N): Namespaces[N] | undefined;
+  readonly getT: <N extends Namespace>(namespace: N) => Namespaces[N] | undefined;
   /** Loads namespaces ahead of render, e.g. on the server or before hydration. */
-  preload(namespaces: readonly Namespace[], locale?: Locale): Promise<void>;
-  subscribe(listener: () => void): () => void;
-  getSnapshot(): Snapshot;
+  readonly preload: (namespaces: ReadonlyArray<Namespace>, locale?: Locale) => Promise<void>;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly getSnapshot: () => Snapshot;
 }
 
 const INSTANCE = Symbol.for('parlajs.core');
 const marker = {};
 const g = globalThis as { [INSTANCE]?: object };
 if (g[INSTANCE] && g[INSTANCE] !== marker) {
-  console.warn('[parla] Several copies of @parlajs/core are loaded. Make it a peerDependency so adapters share one instance.');
+  // oxlint-disable-next-line no-console -- two instances split locale state with no error
+  console.warn(
+    '[parla] Several copies of @parlajs/core are loaded. Make it a peerDependency so adapters share one instance.',
+  );
 }
 g[INSTANCE] = marker;
 
+type Message = (params?: Record<string, unknown>) => unknown;
+interface AccessorNode {
+  [key: string]: AccessorNode | Message;
+}
+
 function buildAccessor(messages: Record<string, CompiledMessage>, rt: MessageRuntime): unknown {
-  const root: Record<string, any> = {};
+  const root: AccessorNode = {};
   for (const [key, fn] of Object.entries(messages)) {
     const path = key.split('.');
+    const leaf = path.pop() ?? key;
     let node = root;
-    for (const segment of path.slice(0, -1)) node = node[segment] ??= {};
-    node[path.at(-1)!] = (params?: Record<string, unknown>) => fn(params ?? {}, rt);
+    for (const segment of path) {
+      let child = node[segment];
+      if (typeof child !== 'object') {
+        child = {};
+        node[segment] = child;
+      }
+      node = child;
+    }
+    node[leaf] = (params?: Record<string, unknown>): unknown => fn(params ?? {}, rt);
   }
   return root;
 }
 
 export function createParla(options: ParlaOptions): Parla {
   const { catalog, wrapRich } = options;
-  const locales = catalog.locales as readonly Locale[];
-  let snapshot: Snapshot = { locale: (options.locale ?? catalog.sourceLocale) as Locale };
+  const { locales } = catalog;
+  let snapshot: Snapshot = { locale: options.locale ?? catalog.sourceLocale };
   const listeners = new Set<() => void>();
   const runtimes = new Map<string, MessageRuntime>();
   const promises = new Map<string, Promise<unknown>>();
   const accessors = new Map<string, unknown>();
-  const used = new Set<string>();
+  const used = new Set<Namespace>();
   let switchToken = 0;
 
-  const assertLocale = (locale: string) => {
-    if (!catalog.locales.includes(locale)) throw new Error(`[parla] unknown locale "${locale}". Known: ${catalog.locales.join(', ')}`);
+  const assertLocale = (locale: Locale): void => {
+    if (!locales.includes(locale)) {
+      throw new Error(`[parla] unknown locale "${locale}". Known: ${locales.join(', ')}`);
+    }
   };
   assertLocale(snapshot.locale);
 
-  const runtime = (locale: string) => {
+  const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
-    if (!rt) runtimes.set(locale, (rt = createRuntime(locale, wrapRich)));
+    if (!rt) {
+      rt = createRuntime(locale, wrapRich);
+      runtimes.set(locale, rt);
+    }
     return rt;
+  };
+
+  const fetchAccessor = async (
+    namespace: string,
+    locale: string,
+    key: string,
+  ): Promise<unknown> => {
+    const loader = catalog.namespaces[namespace]?.[locale];
+    if (!loader) {
+      throw new Error(`[parla] unknown namespace "${namespace}" for locale "${locale}"`);
+    }
+    try {
+      const mod = await loader();
+      const accessor = buildAccessor(mod.default, runtime(locale));
+      accessors.set(key, accessor);
+      return accessor;
+    } catch (error) {
+      // A failed download is retried on the next call.
+      promises.delete(key);
+      throw error;
+    }
   };
 
   const parla: Parla = {
@@ -101,42 +151,44 @@ export function createParla(options: ParlaOptions): Parla {
       return snapshot.locale;
     },
     locales,
+    // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
     load(namespace, locale = snapshot.locale) {
       const key = `${locale}\u0000${namespace}`;
       used.add(namespace);
       let promise = promises.get(key);
       if (!promise) {
-        const loader = catalog.namespaces[namespace]?.[locale];
-        promise = loader
-          ? loader().then((mod) => {
-              const accessor = buildAccessor(mod.default, runtime(locale));
-              accessors.set(key, accessor);
-              return accessor;
-            })
-          : Promise.reject(new Error(`[parla] unknown namespace "${namespace}" for locale "${locale}"`));
-        promise.catch(() => promises.delete(key));
+        promise = fetchAccessor(namespace, locale, key);
         promises.set(key, promise);
       }
-      return promise as Promise<any>;
+      return promise as Promise<Namespaces[typeof namespace]>;
     },
     getT(namespace) {
       used.add(namespace);
-      return accessors.get(`${snapshot.locale}\u0000${namespace}`) as any;
+      return accessors.get(`${snapshot.locale}\u0000${namespace}`) as
+        | Namespaces[typeof namespace]
+        | undefined;
     },
     async preload(namespaces, locale = snapshot.locale) {
-      await Promise.all(namespaces.map((ns) => parla.load(ns, locale)));
+      await Promise.all(namespaces.map(async (ns) => parla.load(ns, locale)));
     },
     async setLocale(locale) {
       assertLocale(locale);
-      const token = ++switchToken;
-      await parla.preload([...used] as Namespace[], locale);
-      if (token !== switchToken || locale === snapshot.locale) return;
+      switchToken += 1;
+      const token = switchToken;
+      await parla.preload([...used], locale);
+      if (token !== switchToken || locale === snapshot.locale) {
+        return;
+      }
       snapshot = { locale };
-      for (const l of listeners) l();
+      for (const listener of listeners) {
+        listener();
+      }
     },
     subscribe(listener) {
       listeners.add(listener);
-      return () => listeners.delete(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     getSnapshot: () => snapshot,
   };
@@ -144,14 +196,20 @@ export function createParla(options: ParlaOptions): Parla {
 }
 
 /** Picks the best supported locale from a preference list such as `navigator.languages`. */
-export function matchLocale<L extends string>(requested: readonly string[], supported: readonly L[], fallback: L): L {
-  const lower = supported.map((l) => l.toLowerCase());
+export function matchLocale<L extends string>(
+  requested: ReadonlyArray<string>,
+  supported: ReadonlyArray<L>,
+  fallback: L,
+): L {
   for (const req of requested) {
-    const r = req.toLowerCase();
-    const exact = lower.indexOf(r);
-    if (exact !== -1) return supported[exact]!;
-    const base = lower.findIndex((l) => l === r.split('-')[0] || l.split('-')[0] === r.split('-')[0]);
-    if (base !== -1) return supported[base]!;
+    const lower = req.toLowerCase();
+    const [base] = lower.split('-');
+    const match =
+      supported.find((l) => l.toLowerCase() === lower) ??
+      supported.find((l) => l.toLowerCase().split('-')[0] === base);
+    if (match !== undefined) {
+      return match;
+    }
   }
   return fallback;
 }

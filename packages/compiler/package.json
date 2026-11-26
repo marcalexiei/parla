@@ -2,32 +2,57 @@
   "name": "@parlajs/compiler",
   "version": "0.0.0",
   "description": "Compiles Parla catalogs into per-locale chunks and typed accessors.",
+  "keywords": [
+    "codegen",
+    "compiler",
+    "i18n",
+    "icu",
+    "messageformat",
+    "mf2",
+    "vite-plugin"
+  ],
+  "homepage": "https://github.com/marcalexiei/parla",
+  "bugs": {
+    "url": "https://github.com/marcalexiei/parla/issues"
+  },
   "license": "MIT",
-  "type": "module",
+  "author": {
+    "name": "Marco Pasqualetti",
+    "url": "https://github.com/marcalexiei"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcalexiei/parla.git",
     "directory": "packages/compiler"
   },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./vite": {
-      "types": "./dist/vite.d.ts",
-      "default": "./dist/vite.js"
-    }
+  "bin": {
+    "parla": "./build/cli.js"
   },
   "files": [
-    "dist"
+    "build",
+    "src",
+    "README.md"
   ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@parlajs/source": "./src/index.ts",
+      "default": "./build/index.js"
+    },
+    "./vite": {
+      "@parlajs/source": "./src/vite.ts",
+      "default": "./build/vite.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit"
-  },
-  "bin": {
-    "parla": "./dist/cli.js"
+    "prepack": "pnpm run build",
+    "lint:publish": "attw --pack . --profile esm-only && publint --strict",
+    "test": "vitest",
+    "typecheck": "tsc -p tsconfig.typecheck.json"
   },
   "dependencies": {
     "@parlajs/format-icu": "workspace:^",
@@ -36,7 +61,9 @@
   },
   "devDependencies": {
     "@parlajs/core": "workspace:^",
-    "vite": "8.3.8"
+    "@types/node": "26.6.6",
+    "vite": "8.3.8",
+    "vitest": "catalog:default"
   },
   "peerDependencies": {
     "vite": ">=6"
@@ -45,5 +72,8 @@
     "vite": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": "^24 || >=26"
   }
 }

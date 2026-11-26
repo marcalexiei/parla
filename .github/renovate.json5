@@ -1,0 +1,105 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+
+  extends: ['config:recommended', 'helpers:pinGitHubActionDigests'],
+
+  timezone: 'Etc/UTC',
+
+  // Not `auto`, which drops the prefixes when it scores the recent history low.
+  semanticCommits: 'enabled',
+
+  // pnpm's own `minimumReleaseAge` guards the install; this one guards the PR.
+  minimumReleaseAge: '7 days',
+
+  // The hourly default of 2 would dribble a grouped update out over hours.
+  prConcurrentLimit: 10,
+  prHourlyLimit: 0,
+
+  automergeStrategy: 'squash',
+
+  packageRules: [
+    // Commit prefixes. Scope defaults to `deps`.
+    { matchPackageNames: ['*'], semanticCommitType: 'build' },
+    // Catalog entries are not `devDependencies`.
+    { matchDepTypes: ['devDependencies', 'pnpm.catalog.default'], semanticCommitScope: 'deps-dev' },
+    { matchManagers: ['github-actions'], semanticCommitType: 'ci' },
+
+    // The workflow runs daily; npm updates land twice a week.
+    { matchManagers: ['npm'], schedule: ['* * * * 3,6'] },
+
+    // Our own packages, as pnpm's `minimumReleaseAgeExclude`: waiting on them guards against nothing.
+    {
+      matchPackageNames: ['@marcalexiei/oxfmt-config', '@marcalexiei/oxlint-config'],
+      minimumReleaseAge: null,
+    },
+
+    // Groups.
+    { matchPackageNames: ['vitest', '@vitest/*'], groupName: 'vitest' },
+    { matchPackageNames: ['typescript', '@types/*'], groupName: 'typescript' },
+    {
+      matchPackageNames: ['react', 'react-dom', '@types/react', '@types/react-dom'],
+      groupName: 'react',
+    },
+    { matchPackageNames: ['messageformat', '@messageformat/*'], groupName: 'messageformat' },
+    { matchPackageNames: ['@testing-library/*'], groupName: 'testing-library' },
+    { matchPackageNames: ['@changesets/*'], groupName: 'changesets' },
+    { matchPackageNames: ['oxfmt', '@marcalexiei/oxfmt-config'], groupName: 'oxfmt' },
+    {
+      matchPackageNames: ['oxlint', 'oxlint-tsgolint', '@marcalexiei/oxlint-config'],
+      groupName: 'oxlint',
+    },
+
+    // Held back, after the groups so a group cannot re-enable them.
+    { matchPackageNames: ['@types/node'], matchUpdateTypes: ['major'], enabled: false },
+
+    // Automerged behind `CI OK`: neither reaches the published output. A major stays manual,
+    // and a `dependencies` bump needs a changeset anyway.
+    {
+      matchDepTypes: ['devDependencies', 'pnpm.catalog.default'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'digest'],
+      automerge: true,
+    },
+    // A workflow's actions and runners reach only CI, which `CI OK` itself exercises.
+    {
+      matchManagers: ['github-actions'],
+      matchUpdateTypes: ['minor', 'patch', 'pin', 'digest'],
+      automerge: true,
+    },
+
+    // A runtime dependency is installed alongside the package, so its bump is that package's
+    // release; `updateInternalDependencies: patch` carries it to the dependents.
+    {
+      matchManagers: ['npm'],
+      matchDepTypes: ['dependencies'],
+      matchFileNames: ['packages/*/package.json'],
+      postUpgradeTasks: {
+        commands: [
+          '.github/scripts/renovate-changeset.sh {{{depNameSanitized}}} {{{packageFileDir}}} "build: update {{{depName}}} to {{{newValue}}}"',
+        ],
+        fileFilters: ['.changeset/*.md'],
+        executionMode: 'update',
+      },
+    },
+
+    // The CI matrix's runners.
+    {
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['github-runners'],
+      semanticCommitType: 'ci',
+    },
+  ],
+
+  customManagers: [
+    // The `github-actions` manager reads a literal `runs-on`, never a `matrix.os` list.
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/[^/]+\\.ya?ml$/'],
+      matchStringsStrategy: 'recursive',
+      matchStrings: [
+        'os: \\[[^\\]]*\\]',
+        '(?<depName>ubuntu|macos|windows)-(?<currentValue>[\\d.]+)',
+      ],
+      datasourceTemplate: 'github-runners',
+    },
+  ],
+}

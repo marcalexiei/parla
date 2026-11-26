@@ -1,7 +1,22 @@
 node_modules
-dist
-*.tsbuildinfo
+
+# OS
 .DS_Store
+
+# Project
 coverage
+build
+*.tsbuildinfo
 .tmp
 .packs
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.code-workspace
+
+# Agent scratch — everything but the skills, which are repo tooling and are committed
+.claude/*
+!.claude/skills/
