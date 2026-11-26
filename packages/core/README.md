@@ -19,13 +19,13 @@ t.checkout.cart.items({ count: 3 }); // "3 items"
 await parla.setLocale('it'); // loads what's loaded so far, then switches
 ```
 
-| API                         |                                                         |
-| --------------------------- | ------------------------------------------------------- |
-| `parla.load(ns[])`          | `t` keyed by namespace; the same list, the same promise |
-| `parla.setLocale(locale)`   | Loads first, then notifies subscribers                  |
-| `parla.subscribe(listener)` | Called after each switch                                |
-| `Translations<'a' \| 'b'>`  | The type of `t` for those namespaces                    |
-| `matchLocale(req, sup, fb)` | Best supported locale from a preference list            |
+| API                         |                                                                      |
+| --------------------------- | -------------------------------------------------------------------- |
+| `parla.load(ns[])`          | `t` keyed by namespace; the same list, the same promise              |
+| `parla.setLocale(locale)`   | Loads first, then notifies; rejects, unswitched, if a download fails |
+| `parla.subscribe(listener)` | Called after each switch                                             |
+| `Translations<'a' \| 'b'>`  | The type of `t` for those namespaces                                 |
+| `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
 
 `createParla` also takes `functions` and `markup`, required with every name the config's
 `functions` and `markup` declare:
