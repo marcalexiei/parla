@@ -145,6 +145,13 @@ describe('MF2', () => {
     expect(run('mf2', '{$n :integer}', { n: 2.7 })).toBe('3');
   });
 
+  it('writes numeric options a module can parse', () => {
+    const scope = new ModuleScope();
+    compileMessage(mf2.parse('{$n :number minimumIntegerDigits=02}'), scope);
+    expect(scope.consts).toStrictEqual(['const v0 = { "minimumIntegerDigits": 2 };']);
+    expect(run('mf2', '{$n :number minimumIntegerDigits=02}', { n: 3 })).toBe('03');
+  });
+
   it('renders markup', () => {
     const out = run('mf2', 'Read the {#link}guide{/link}{#br/}now', {
       link: (c: unknown) => ({ a: c }),
