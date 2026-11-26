@@ -54,7 +54,8 @@ interface Binding {
 
 function literalValue(value: string): string {
   if (/^-?\d+(?:\.\d+)?$/.test(value)) {
-    return value;
+    // `02` would be a legacy octal literal: a syntax error in the chunk, which is a module
+    return String(Number(value));
   }
   if (value === 'true' || value === 'false') {
     return value;
