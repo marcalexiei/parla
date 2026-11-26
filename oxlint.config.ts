@@ -92,7 +92,7 @@ export default defineConfig({
 
   overrides: [
     {
-      files: ['**/*.{spec,test}.{ts,tsx}'],
+      files: ['**/*.{spec,test}.{ts,tsx}', 'bench/*.bench.ts'],
       ...vitestConfig,
       // Enabling `jest` alongside `vitest` reports every shared rule twice.
       plugins: ['vitest'],
@@ -138,8 +138,21 @@ export default defineConfig({
     },
     {
       // Only these run on Node alone; the runtime also runs in the browser.
-      files: ['**/*.config.ts', 'scripts/**', 'packages/compiler/src/**'],
+      files: ['**/*.config.ts', 'scripts/**', 'bench/**', 'packages/compiler/src/**'],
       ...nodeConfig,
+    },
+    {
+      // A bench times one thing at a time, and says when it could not compare against `main`.
+      files: ['bench/**'],
+      plugins: ['vitest'],
+      rules: {
+        'no-await-in-loop': 'off',
+        'no-console': 'off',
+        // `ab` asserts the branch is no slower.
+        'vitest/expect-expect': ['error', { assertFunctionNames: ['expect', 'ab'] }],
+        // Unlike `.each`, `.for` passes the test context, which holds `bench`.
+        'vitest/consistent-each-for': 'off',
+      },
     },
     {
       // A library must still load through `require(esm)`, which top-level await breaks; the CLI is an entry point.

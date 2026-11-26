@@ -3,7 +3,8 @@
  * @file Every check CI runs, cheapest failure first.
  *
  * Keep it in step with `.github/workflows/ci.yml`: a check that runs there and not
- * here is a check that fails after the push instead of before it.
+ * here is a check that fails after the push instead of before it. The one exception is
+ * `bench`, which needs a checkout of `main` and a quiet minute.
  */
 
 import { spawnSync } from 'node:child_process';

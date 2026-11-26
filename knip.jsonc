@@ -5,7 +5,7 @@
   },
   "workspaces": {
     ".": {
-      "entry": ["scripts/*.ts"]
+      "entry": ["scripts/*.ts", "bench/*.bench.ts"]
     },
     "packages/*": {},
     "packages/format-icu": {

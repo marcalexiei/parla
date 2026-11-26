@@ -7,6 +7,7 @@
     "build:packages": "pnpm -r --filter \"./packages/*\" run build",
     "test": "vitest --run",
     "test:coverage": "vitest --run --config vitest.config.coverage.ts",
+    "bench": "vitest bench --run --config vitest.config.bench.ts",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint",
