@@ -95,6 +95,13 @@ describe(createRuntime, () => {
     expect(made).toHaveBeenCalledTimes(1);
   });
 
+  it('joins text parts, and wraps every part once one is not text', () => {
+    const node = { node: true };
+    const wrapped = createRuntime('en', (parts) => ({ wrapped: parts }));
+    expect(wrapped.rich(['a', 'b'])).toBe('ab');
+    expect(wrapped.rich(['a ', node, ' b'])).toStrictEqual({ wrapped: ['a ', node, ' b'] });
+  });
+
   it('keeps markup children when no callback is passed', () => {
     expect(rt.tag({}, 'b', ['bold'])).toBe('bold');
   });

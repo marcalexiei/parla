@@ -285,7 +285,14 @@ export function createRuntime(
       return cb ? cb(inner) : inner;
     },
     rich(parts) {
-      return parts.every((p) => typeof p === 'string') ? parts.join('') : wrapRich(parts);
+      let joined = '';
+      for (const part of parts) {
+        if (typeof part !== 'string') {
+          return wrapRich(parts);
+        }
+        joined += part;
+      }
+      return joined;
     },
   };
   return rt;
