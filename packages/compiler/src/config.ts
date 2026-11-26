@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { BUILTIN_FUNCTIONS } from './compile.ts';
 import type { FunctionKind } from './compile.ts';
@@ -11,9 +12,8 @@ export interface NamespaceConfig {
   path: string;
 }
 
-/** `parla.config.json`, or the `parla` field of a package's `package.json`. */
+/** `parla.config.ts`, or the `parla` field of a package's `package.json`. */
 export interface ParlaConfig {
-  $schema?: string;
   locales?: Array<string>;
   sourceLocale?: string;
   /** Extra fallback chain per locale; the source locale is always last. */
@@ -99,26 +99,46 @@ function findPackageDir(name: string, from: string): string {
   }
 }
 
-/** Reads a config from `parla.config.json` or `package.json#parla` in `dir`. */
-function readConfigAt(
+const CONFIG_FILE = 'parla.config.ts';
+
+/** Types a `parla.config.ts`: `export default defineConfig({ … })`. */
+export function defineConfig(config: ParlaConfig): ParlaConfig {
+  return config;
+}
+
+async function importConfig(file: string): Promise<ParlaConfig> {
+  // The mtime busts Node's module cache, so a watcher sees an edited config.
+  const url = `${pathToFileURL(file).href}?t=${statSync(file, { bigint: true }).mtimeNs}`;
+  let mod: unknown;
+  try {
+    mod = await import(url);
+  } catch (error) {
+    throw new ConfigError(`Cannot load ${file}: ${(error as Error).message}`);
+  }
+  const config = (mod as { default?: unknown }).default;
+  if (typeof config !== 'object' || config === null) {
+    throw new ConfigError(`${file} must \`export default defineConfig({ … })\``);
+  }
+  return config;
+}
+
+/** A package's `parla` field: packages are data, read from `node_modules` too. */
+function readPackageConfig(dir: string): { file: string; config: ParlaConfig } | undefined {
+  const pkg = join(dir, 'package.json');
+  const field = existsSync(pkg) ? (readJson(pkg) as PackageJson).parla : undefined;
+  return field ? { file: pkg, config: field } : undefined;
+}
+
+/** `parla.config.ts`, or else the `parla` field of `package.json`. */
+async function readProjectConfig(
   dir: string,
   explicit?: string,
-): { file: string; config: ParlaConfig } | undefined {
-  if (explicit) {
-    return { file: explicit, config: readJson(explicit) as ParlaConfig };
+): Promise<{ file: string; config: ParlaConfig } | undefined> {
+  const file = explicit ?? join(dir, CONFIG_FILE);
+  if (explicit || existsSync(file)) {
+    return { file, config: await importConfig(file) };
   }
-  const own = join(dir, 'parla.config.json');
-  if (existsSync(own)) {
-    return { file: own, config: readJson(own) as ParlaConfig };
-  }
-  const pkg = join(dir, 'package.json');
-  if (existsSync(pkg)) {
-    const field = (readJson(pkg) as PackageJson).parla;
-    if (field) {
-      return { file: pkg, config: field };
-    }
-  }
-  return undefined;
+  return readPackageConfig(dir);
 }
 
 const RUNTIMES = ['@parlajs/react', '@parlajs/core'];
@@ -148,11 +168,11 @@ const NAMESPACE_NAME = /^[\w-]+(?:\.[\w-]+)*$/;
 /** A BCP 47-like tag: `en`, `pt-BR`, `zh-Hant-TW`. */
 const LOCALE_TAG = /^[A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*$/;
 
-export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
+export async function loadConfig(cwd: string, configFile?: string): Promise<ResolvedConfig> {
   const explicit = configFile ? resolve(cwd, configFile) : undefined;
-  const found = readConfigAt(cwd, explicit);
+  const found = await readProjectConfig(cwd, explicit);
   if (!found) {
-    throw new ConfigError(`No parla.config.json or package.json "parla" field in ${cwd}`);
+    throw new ConfigError(`No ${CONFIG_FILE} or package.json "parla" field in ${cwd}`);
   }
   const root = dirname(found.file);
   const { config } = found;
@@ -209,7 +229,7 @@ export function loadConfig(cwd: string, configFile?: string): ResolvedConfig {
     }
     for (const pkgName of cfg.packages ?? []) {
       const pkgDir = findPackageDir(pkgName, dir);
-      const sub = readConfigAt(pkgDir);
+      const sub = readPackageConfig(pkgDir);
       if (!sub) {
         throw new ConfigError(`Package "${pkgName}" has no "parla" field in its package.json`);
       }

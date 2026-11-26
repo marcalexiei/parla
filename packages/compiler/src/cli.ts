@@ -14,7 +14,7 @@ Commands
   check    Validate catalogs without writing anything
 
 Options
-  -c, --config <file>   Config file (default: parla.config.json or package.json "parla")
+  -c, --config <file>   Config file (default: parla.config.ts or package.json "parla")
   -w, --watch           Rebuild on change (build, types)
       --strict          Treat warnings as errors
       --json            Print diagnostics as JSON (check)
@@ -40,9 +40,9 @@ if (values.help || !command || !['build', 'types', 'check'].includes(command)) {
 const WRITE: Record<string, BuildOptions['write']> = { build: 'all', types: 'types', check: false };
 const write = WRITE[command] ?? false;
 
-function run(): { failed: boolean; files: Array<string> } {
+async function run(): Promise<{ failed: boolean; files: Array<string> }> {
   const started = performance.now();
-  const result = build({ config: values.config, write });
+  const result = await build({ config: values.config, write });
   const { diagnostics, config } = result;
   const errors = diagnostics.filter((d) => d.level === 'error').length;
   const warnings = diagnostics.length - errors;
@@ -66,23 +66,25 @@ function run(): { failed: boolean; files: Array<string> } {
   };
 }
 
-function rebuild(): void {
+async function rebuild(): Promise<void> {
   try {
-    run();
+    await run();
   } catch (error) {
     console.error(`parla: ${(error as Error).message}`);
   }
 }
 
 try {
-  const first = run();
+  const first = await run();
   if (!values.watch || !write) {
     process.exit(first.failed ? 1 : 0);
   }
   let timer: NodeJS.Timeout | undefined;
   const schedule = (): void => {
     clearTimeout(timer);
-    timer = setTimeout(rebuild, 50);
+    timer = setTimeout(() => {
+      void rebuild();
+    }, 50);
   };
   const dirs = new Set(first.files.map((f) => dirname(f)));
   for (const dir of dirs) {

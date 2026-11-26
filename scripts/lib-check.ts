@@ -124,7 +124,7 @@ export const Provider = ParlaProvider;
 const { build } = (await import(
   pathToFileURL(join(repo, 'packages/compiler/build/index.js')).href
 )) as { build: typeof Build };
-const built = build({ cwd: app });
+const built = await build({ cwd: app });
 if (built.diagnostics.length > 0) {
   console.error('lib-check: the fixture catalog has diagnostics', built.diagnostics);
   process.exit(1);
