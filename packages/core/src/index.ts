@@ -186,6 +186,16 @@ export function createParla(options: ParlaOptions): Parla {
     return promise;
   };
 
+  // Every namespace loaded so far, again until none is missing: one first loaded meanwhile is ready too.
+  const loadAll = async (locale: Locale): Promise<void> => {
+    const missing = [...loaded].filter((ns) => !settled.has(`${locale}\u0000${ns}`));
+    if (missing.length === 0) {
+      return;
+    }
+    await Promise.all(missing.map(async (ns) => accessor(ns, locale)));
+    await loadAll(locale);
+  };
+
   return {
     get locale() {
       return current;
@@ -196,7 +206,7 @@ export function createParla(options: ParlaOptions): Parla {
       assertLocale(locale);
       switchToken += 1;
       const token = switchToken;
-      await Promise.all([...loaded].map(async (ns) => accessor(ns, locale)));
+      await loadAll(locale);
       if (token !== switchToken || locale === current) {
         return;
       }

@@ -76,6 +76,40 @@ describe(createParla, () => {
     expect((t['common'] as Common).nav.home()).toBe('Inizio');
   });
 
+  it('also loads, before switching, a namespace first loaded during the switch', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { catalog } = makeCatalog();
+    const italianCommon = catalog.namespaces['common']?.['it'];
+    if (!italianCommon) {
+      throw new Error('the fixture has an Italian `common`');
+    }
+    const slow: Catalog = {
+      ...catalog,
+      namespaces: {
+        ...catalog.namespaces,
+        common: {
+          ...catalog.namespaces['common'],
+          it: async () => {
+            await held;
+            return italianCommon();
+          },
+        },
+      },
+    };
+    const parla = createParla({ catalog: slow });
+    await parla.load(['common']);
+    const switching = parla.setLocale('it');
+    // a component mounting while `common` downloads for `it`
+    await parla.load(['checkout']);
+    release();
+    await switching;
+    expect(parla.locale).toBe('it');
+    expect(parla.load(['checkout'])).toHaveProperty('status', 'fulfilled');
+  });
+
   it('keeps the last of several concurrent switches', async () => {
     const { catalog } = makeCatalog();
     const parla = createParla({ catalog });
