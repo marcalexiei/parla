@@ -112,7 +112,7 @@ describe('ICU', () => {
     expect(compile('icu', 'Hi {name}').sig).toBe('(params: { name: string | number }): string');
     expect(compile('icu', 'Plain').sig).toBe('(): string');
     expect(compile('icu', 'See <b>this</b>').sig).toBe(
-      '(params: { b: (children: RichNode) => RichNode }): RichNode',
+      '(params: { b: (children: Node) => Node }): Node',
     );
   });
 
@@ -151,11 +151,11 @@ describe(signature, () => {
   it('makes default markup optional, and the params too when nothing else is needed', () => {
     const { info } = compile('icu', 'See <b>this</b>');
     expect(signature(info, new Set(['b']))).toBe(
-      '(params?: { b?: (children: RichNode) => RichNode }): RichNode',
+      '(params?: { b?: (children: Node) => Node }): Node',
     );
     const { info: named } = compile('icu', 'See <b>{name}</b>');
     expect(signature(named, new Set(['b']))).toBe(
-      '(params: { name: string | number; b?: (children: RichNode) => RichNode }): RichNode',
+      '(params: { name: string | number; b?: (children: Node) => Node }): Node',
     );
   });
 });

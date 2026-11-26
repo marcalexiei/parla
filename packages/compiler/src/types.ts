@@ -63,11 +63,11 @@ export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new
   for (const tag of [...info.markup].toSorted()) {
     if (!info.params.has(tag)) {
       const optional = defaults.has(tag);
-      fields.push(`${prop(tag)}${optional ? '?' : ''}: (children: RichNode) => RichNode`);
+      fields.push(`${prop(tag)}${optional ? '?' : ''}: (children: Node) => Node`);
       required += optional ? 0 : 1;
     }
   }
-  const ret = info.rich ? 'RichNode' : 'string';
+  const ret = info.rich ? 'Node' : 'string';
   if (fields.length === 0) {
     return `(): ${ret}`;
   }
@@ -116,5 +116,5 @@ export function namespaceInterface(
     }
     node[leaf] = { leaf: signature(info, defaults), doc: source };
   }
-  return `export interface ${name} {\n${render(tree, '  ')}\n}`;
+  return `export interface ${name}<Node> {\n${render(tree, '  ')}\n}`;
 }

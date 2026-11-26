@@ -40,6 +40,8 @@ createRoot(root).render(
 - A locale switch never suspends: `setLocale` loads first. If a download fails, it rejects and
   keeps the current locale: handle it (`.catch`), or it is an unhandled rejection.
 - A failed download reaches the nearest error boundary.
+- `Parla`, `ParlaOptions`, `Translations` and `Namespaces` type rich text as `ReactNode`;
+  `@parlajs/core`'s stay `string`.
 
 ## License
 

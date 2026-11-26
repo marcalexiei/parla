@@ -9,10 +9,10 @@ import type { Catalog, Parla, Translations } from '../src/index.ts';
 
 // What `parla build` would generate for this catalog.
 declare module '@parlajs/core' {
-  interface NamespaceRegistry {
+  interface NamespaceRegistry<Node> {
     shop: {
       title: () => string;
-      terms: (params: { link: (children: ReactNode) => ReactNode }) => ReactNode;
+      terms: (params: { link: (children: Node) => Node }) => Node;
     };
     extra: {
       hello: () => string;

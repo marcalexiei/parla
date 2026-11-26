@@ -39,6 +39,9 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
 - **Types reach consumers through registries**: `catalog.d.ts` augments the runtime the package
   depends on (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale,
   namespace, function or tag, so a package's types and the app's add up instead of clashing.
+- **Rich text's type follows the instance**: generated types fill `NamespaceRegistry<Node>`, and
+  `Parla<Node>` picks `Node` (`string` in core, `ReactNode` in `@parlajs/react`). Augmentations merge
+  only with the same parameter name.
 - **A namespace has one owner package**; a second is a build error.
 - **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
   integer `?t=` mtime busts the module cache for watchers. Packages declare namespaces in

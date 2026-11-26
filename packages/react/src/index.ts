@@ -1,5 +1,13 @@
 import { createParla as createCoreParla } from '@parlajs/core';
-import type { Locale, Namespace, Parla, ParlaOptions, Translations } from '@parlajs/core';
+import type {
+  Locale,
+  Namespace,
+  Namespaces as CoreNamespaces,
+  Parla as CoreParla,
+  ParlaOptions as CoreParlaOptions,
+  Translations as CoreTranslations,
+  WrapRich as CoreWrapRich,
+} from '@parlajs/core';
 import {
   createContext,
   createElement,
@@ -10,7 +18,7 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 
-// Named rather than `export *`, which would clash with this module's `createParla`.
+// Named rather than `export *`, which would clash with this module's own exports.
 export {
   createRuntime,
   matchLocale,
@@ -28,29 +36,22 @@ export {
   type MessageRuntime,
   type Namespace,
   type NamespaceRegistry,
-  type Namespaces,
-  type Parla,
-  type ParlaOptions,
-  type Register,
-  type RichNode,
   type SelectorValue,
-  type Translations,
-  type WrapRich,
 } from '@parlajs/core';
 
-declare module '@parlajs/core' {
-  interface Register {
-    richNode: ReactNode;
-  }
-}
+/* Core's types with rich text as a `ReactNode`. */
+export type Namespaces = CoreNamespaces<ReactNode>;
+export type Parla = CoreParla<ReactNode>;
+export type ParlaOptions = CoreParlaOptions<ReactNode>;
+export type Translations<NS extends Namespace> = CoreTranslations<NS, ReactNode>;
+export type WrapRich = CoreWrapRich<ReactNode>;
 
 /** Children passed as arguments, so React does not ask for keys. */
-const wrapRich = (parts: Array<unknown>): ReactNode =>
-  createElement(Fragment, null, ...(parts as Array<ReactNode>));
+const wrapRich: WrapRich = (parts) => createElement(Fragment, null, ...parts);
 
 /** `createParla` from `@parlajs/core`, with rich text rendered as React nodes. */
 export function createParla(options: ParlaOptions): Parla {
-  return createCoreParla({ wrapRich, ...options });
+  return createCoreParla<ReactNode>({ wrapRich, ...options });
 }
 
 const ParlaContext = createContext<Parla | null>(null);
