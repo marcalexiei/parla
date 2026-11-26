@@ -10,12 +10,6 @@ export {
   type WrapRich,
 } from './runtime.ts';
 
-/**
- * Augmented by framework adapters (`richNode`). Do not augment it by hand.
- */
-// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
-export interface Register {}
-
 /*
  * Augmented by generated code, one member per name. Several generated files (a package's
  * `parla types`, the app's `parla build`) add to the same registry instead of replacing it.
@@ -23,25 +17,25 @@ export interface Register {}
  */
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface LocaleRegistry {}
-// oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
-export interface NamespaceRegistry {}
+// Ambient, so `noUnusedLocals` allows `Node`, which only augmentations use.
+// oxlint-disable-next-line typescript/no-empty-object-type, no-unused-vars -- the augmentation target
+export declare interface NamespaceRegistry<Node> {}
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface FunctionRegistry {}
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface MarkupRegistry {}
 
-type Registered<K extends string, Fallback> = Register extends Record<K, infer V> ? V : Fallback;
-
 /** Every locale a generated catalog declares; `string` before any is registered. */
 export type Locale = [keyof LocaleRegistry] extends [never]
   ? string
   : Extract<keyof LocaleRegistry, string>;
-export type Namespaces = [keyof NamespaceRegistry] extends [never]
+/* oxlint-disable typescript/no-generated-empty-object-type -- empty until generated types augment it */
+/** `Node`: what a message with markup returns, `ReactNode` with `@parlajs/react`. */
+export type Namespaces<Node = string> = [keyof NamespaceRegistry<Node>] extends [never]
   ? Record<string, object>
-  : NamespaceRegistry;
+  : NamespaceRegistry<Node>;
+/* oxlint-enable typescript/no-generated-empty-object-type */
 export type Namespace = keyof Namespaces;
-/** What a message with markup returns: `ReactNode` with `@parlajs/react`. */
-export type RichNode = Registered<'richNode', unknown>;
 /** The config's `functions`: each needs an implementation in `createParla({ functions })`. */
 export type FunctionName = Extract<keyof FunctionRegistry, string>;
 /** The config's `markup`: each needs a renderer in `createParla({ markup })`. */
@@ -61,12 +55,12 @@ export interface Catalog {
   readonly namespaces: Readonly<Record<string, Readonly<Record<string, Loader>>>>;
 }
 
-interface BaseOptions {
+interface BaseOptions<Node> {
   catalog: Catalog;
   /** Initial locale. Defaults to the catalog's source locale. */
   locale?: Locale;
   /** Turns message parts with markup into one node. Set by framework adapters. */
-  wrapRich?: WrapRich;
+  wrapRich?: WrapRich<Node>;
 }
 
 /** Required, with every declared name, once the config declares any. */
@@ -74,14 +68,17 @@ type Declared<K extends string, Name extends string, V> = [Name] extends [never]
   ? Partial<Record<K, undefined>>
   : Record<K, Readonly<Record<Name, V>>>;
 
-export type ParlaOptions = BaseOptions &
+// `Node` is inferred from `wrapRich` alone, so a renderer returning another type is an error.
+export type ParlaOptions<Node = string> = BaseOptions<Node> &
   Declared<'functions', FunctionName, MessageFunction> &
-  Declared<'markup', MarkupName, (children: RichNode) => RichNode>;
+  Declared<'markup', MarkupName, (children: NoInfer<Node>) => NoInfer<Node>>;
 
 /** Messages keyed by namespace: `t.checkout.title()`. Holding one proves its namespaces loaded. */
-export type Translations<NS extends Namespace> = { readonly [K in NS]: Namespaces[K] };
+export type Translations<NS extends Namespace, Node = string> = {
+  readonly [K in NS]: Namespaces<Node>[K];
+};
 
-export interface Parla {
+export interface Parla<Node = string> {
   readonly locale: Locale;
   readonly locales: ReadonlyArray<Locale>;
   /** Loads every namespace loaded so far for `locale`, then switches, so nothing suspends. */
@@ -91,7 +88,9 @@ export interface Parla {
    * `status` and `value` once settled, which React's `use()` reads without suspending. A failure
    * is returned for a second, then retried.
    */
-  readonly load: <NS extends Namespace>(namespaces: ReadonlyArray<NS>) => Promise<Translations<NS>>;
+  readonly load: <NS extends Namespace>(
+    namespaces: ReadonlyArray<NS>,
+  ) => Promise<Translations<NS, Node>>;
   /** Called after each locale switch. */
   readonly subscribe: (listener: () => void) => () => void;
 }
@@ -119,7 +118,8 @@ if (g[INSTANCE] && g[INSTANCE] !== marker) {
 }
 g[INSTANCE] = marker;
 
-export function createParla(options: ParlaOptions): Parla {
+/** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
+export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
   const { catalog, wrapRich } = options;
   const extensions = {
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
@@ -145,7 +145,7 @@ export function createParla(options: ParlaOptions): Parla {
   const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
     if (!rt) {
-      rt = createRuntime(locale, wrapRich, extensions);
+      rt = createRuntime(locale, wrapRich as WrapRich<unknown> | undefined, extensions);
       runtimes.set(locale, rt);
     }
     return rt;

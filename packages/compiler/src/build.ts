@@ -360,16 +360,16 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
     const registries = [
       registry('LocaleRegistry', config.locales),
       registry(
-        'NamespaceRegistry',
+        'NamespaceRegistry<Node>',
         config.namespaces.map((ns) => ns.name),
-        nameOf,
+        (ns) => `${nameOf(ns)}<Node>`,
       ),
       registry('FunctionRegistry', Object.keys(config.functions)),
       registry('MarkupRegistry', config.markup),
     ].join('');
     writeIfChanged(
       join(out, 'catalog.d.ts'),
-      `${HEADER}import type { Catalog, RichNode } from '${config.runtime}';\n\n${interfaces.join('\n\n')}\n\nexport type Locale = ${localeType};\n\nexport declare const catalog: Catalog & { readonly locales: readonly Locale[]; readonly sourceLocale: ${JSON.stringify(config.sourceLocale)} };\n\ndeclare module '${config.runtime}' {\n${registries}}\n`,
+      `${HEADER}import type { Catalog } from '${config.runtime}';\n\n${interfaces.join('\n\n')}\n\nexport type Locale = ${localeType};\n\nexport declare const catalog: Catalog & { readonly locales: readonly Locale[]; readonly sourceLocale: ${JSON.stringify(config.sourceLocale)} };\n\ndeclare module '${config.runtime}' {\n${registries}}\n`,
       written,
     );
     if (write === 'all') {

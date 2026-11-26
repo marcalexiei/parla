@@ -27,7 +27,7 @@ export interface MessageRuntime {
   readonly rich: (parts: Array<unknown>) => unknown;
 }
 
-export type WrapRich = (parts: Array<unknown>) => unknown;
+export type WrapRich<Node> = (parts: Array<Node | string>) => Node;
 
 /** A message function beyond the built-in ones, declared in the config's `functions`. */
 export type MessageFunction = (
@@ -178,7 +178,7 @@ const CACHE_SIZE = 256;
 
 export function createRuntime(
   locale: string,
-  wrapRich: WrapRich = (parts) => parts,
+  wrapRich: WrapRich<unknown> = (parts) => parts,
   extensions: RuntimeExtensions = {},
 ): MessageRuntime {
   const functions = new Map(Object.entries(extensions.functions ?? {}));

@@ -38,6 +38,9 @@ createParla({
 });
 ```
 
+Rich text is a `string` here and a `ReactNode` through `@parlajs/react`, so one catalog serves
+both, e.g. emails beside the app. Another adapter passes `wrapRich` and types `Parla<Node>`.
+
 ## License
 
 [MIT](./LICENSE)

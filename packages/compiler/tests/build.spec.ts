@@ -122,7 +122,7 @@ describe(build, () => {
   it('generates types that catch wrong calls', () => {
     const dts = readFileSync(join(app, 'src/parla/catalog.d.ts'), 'utf8');
     expect(dts).toContain('items(params: { count: number }): string;');
-    expect(dts).toContain('terms(params: { link: (children: RichNode) => RichNode }): RichNode;');
+    expect(dts).toContain('terms(params: { link: (children: Node) => Node }): Node;');
     expect(dts).toContain('greeting(params: { name: string | number }): string;');
     put(
       'src/usage.ts',
@@ -192,7 +192,7 @@ import './parla/catalog.js';
 const { t } = useParla(['widget']);
 export const title: string = t.widget.title();
 export const terms: ReactNode = t.widget.terms({ link: (children) => children });
-// @ts-expect-error a ReactNode is not a number, so the adapter's RichNode reached the types
+// @ts-expect-error a ReactNode is not a number, so the adapter's node type reached the types
 export const wrong: number = t.widget.terms({ link: (children) => children });
 // @ts-expect-error only the listed namespaces are in \`t\`
 t.other.title();
@@ -227,6 +227,85 @@ export const unloaded: Translations<'widget'> = await parla.load([]);
     const tsc = join(repo, 'node_modules/.bin/tsc');
     expect(() =>
       execFileSync(tsc, ['-p', join(pkg, 'tsconfig.json')], { encoding: 'utf8' }),
+    ).not.toThrow();
+  });
+});
+
+describe('one catalog, two node types', () => {
+  const dir = join(repo, '.tmp', 'build-test-nodes');
+  const write = (file: string, content: unknown): void => {
+    const path = join(dir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+  };
+
+  it("types each instance's rich text as its own node: ReactNode beside string", async () => {
+    rmSync(dir, { recursive: true, force: true });
+    write(
+      'parla.config.ts',
+      configModule({
+        locales: ['en'],
+        markup: ['strong'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    write('locales/en/app.json', { title: 'Title', terms: 'Read the <link>terms</link>' });
+    await build({ cwd: dir, write: 'types' });
+
+    write(
+      'src/usage.ts',
+      `import { createElement } from 'react';
+import type { ReactNode } from 'react';
+import { createParla as createCore } from '@parlajs/core';
+import type { Translations } from '@parlajs/core';
+import { createParla as createReact } from '@parlajs/react';
+import type { WrapRich } from '@parlajs/react';
+import { catalog } from './parla/catalog.js';
+
+const web = createReact({ catalog, markup: { strong: (c) => createElement('b', null, c) } });
+const email = createCore({ catalog, markup: { strong: (c) => \`**\${c}**\` } });
+const { app: w } = await web.load(['app']);
+const { app: e } = await email.load(['app']);
+export const titles: string[] = [w.title(), e.title()];
+export const node: ReactNode = w.terms({ link: (c) => createElement('a', null, c) });
+export const text: string = e.terms({ link: (c) => \`[\${c}]\` });
+// @ts-expect-error a React instance's rich text is a ReactNode, not a string
+export const notText: string = w.terms({ link: (c) => c });
+// @ts-expect-error a string instance's markup callback returns a string
+e.terms({ link: () => createElement('a') });
+// @ts-expect-error a React \`t\` is not a string instance's
+export const wrongT: Translations<'app'> = await web.load(['app']);
+// @ts-expect-error a string instance's markup renderer returns a string
+createCore({ catalog, markup: { strong: () => createElement('b') } });
+// @ts-expect-error a React markup renderer returns a ReactNode
+createReact({ catalog, markup: { strong: () => new Date() } });
+// @ts-expect-error a string instance's wrapRich returns a string
+createCore<string>({ catalog, markup: { strong: (c) => c }, wrapRich: (parts) => parts });
+// @ts-expect-error a React wrapRich returns a ReactNode
+export const wrap: WrapRich = () => new Date();
+`,
+    );
+    const reactTypes = join(repo, 'packages/react/node_modules/@types/react');
+    write('tsconfig.json', {
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        module: 'preserve',
+        moduleResolution: 'bundler',
+        skipLibCheck: false,
+        allowImportingTsExtensions: true,
+        types: [],
+        paths: {
+          '@parlajs/core': [join(repo, 'packages/core/src/index.ts')],
+          '@parlajs/react': [join(repo, 'packages/react/src/index.ts')],
+          react: [join(reactTypes, 'index.d.ts')],
+        },
+      },
+      include: ['src'],
+    });
+    const tsc = join(repo, 'node_modules/.bin/tsc');
+    expect(() =>
+      execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
     ).not.toThrow();
   });
 });
@@ -331,9 +410,13 @@ describe('interface names', () => {
     writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
     await build({ cwd: dir, write: 'types' });
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
-    expect(dts).toContain('export interface FooBarMessages {\n  /** Dash */\n  dash(): string;');
-    expect(dts).toContain('export interface FooBar2Messages {\n  /** Under */\n  under(): string;');
-    expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
+    expect(dts).toContain(
+      'export interface FooBarMessages<Node> {\n  /** Dash */\n  dash(): string;',
+    );
+    expect(dts).toContain(
+      'export interface FooBar2Messages<Node> {\n  /** Under */\n  under(): string;',
+    );
+    expect(dts).toMatch(/"foo-bar": FooBarMessages<Node>;\s+"foo_bar": FooBar2Messages<Node>;/);
   });
 });
 
@@ -374,9 +457,7 @@ describe('custom functions and default markup', () => {
     expect(dts).toContain(
       '  interface FunctionRegistry {\n    "capitalize": true;\n  }\n  interface MarkupRegistry {\n    "strong": true;\n  }\n',
     );
-    expect(dts).toContain(
-      'bold(params?: { strong?: (children: RichNode) => RichNode }): RichNode;',
-    );
+    expect(dts).toContain('bold(params?: { strong?: (children: Node) => Node }): Node;');
 
     const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
       catalog: Catalog;
@@ -388,7 +469,7 @@ describe('custom functions and default markup', () => {
           String(value).charAt(0).toUpperCase() + String(value).slice(1),
       },
       markup: { strong: (children: unknown) => `**${String(children)}**` },
-      // This spec's program has no generated `Register`, so the options are not typed here.
+      // This spec's program has no generated registries, so the options are not typed here.
     } as never);
     const loaded = await parla.load(['app']);
     const t = loaded['app'] as {
