@@ -28,6 +28,19 @@ describe(createRuntime, () => {
     expect(rt.f('number', 5, { offset: 1 })).toBe('4');
   });
 
+  it('keeps a formatter per name and options, and a plural rule per type', () => {
+    const fresh = createRuntime('en');
+    expect(fresh.f('number', 1.5)).toBe('1.5');
+    expect(fresh.f('number', 1.5, { maximumFractionDigits: 0 })).toBe('2');
+    expect(fresh.f('integer', 1.5)).toBe('2');
+    // the compiler hoists one object for every message with the same options
+    const shared = { currency: 'EUR' };
+    expect(fresh.f('currency', 1, shared)).toBe('€1.00');
+    expect(fresh.f('number', 1, shared)).toBe('1');
+    expect(fresh.sn(2, { select: 'ordinal' })).toStrictEqual({ n: 2, cat: 'two' });
+    expect(fresh.sn(2)).toStrictEqual({ n: 2, cat: 'other' });
+  });
+
   it('formats dates, honouring explicit fields over a style', () => {
     expect(rt.f('date', when, { year: 'numeric', style: 'full' })).toBe(intl({ year: 'numeric' }));
     expect(rt.f('time', when, { precision: 'second' })).toBe(intl({ timeStyle: 'medium' }));
@@ -54,6 +67,17 @@ describe(createRuntime, () => {
     expect(rt.pick([], [['a']])).toBe(0);
   });
 
+  it('lets the first differing key decide between variants, then the earlier variant', () => {
+    const variants = [
+      ['one', null],
+      [null, 'x'],
+      [null, null],
+      ['one', null],
+    ];
+    expect(rt.pick([rt.sn(1), rt.ss('x')], variants)).toBe(0);
+    expect(rt.pick([rt.sn(2), rt.ss('x')], variants)).toBe(1);
+  });
+
   it('keeps a bounded formatter cache, dropping the oldest', () => {
     const fresh = createRuntime('en');
     const made = vi.spyOn(Intl, 'NumberFormat');
@@ -69,6 +93,13 @@ describe(createRuntime, () => {
     made.mockClear();
     fresh.f('number', 1, numberOptions(0));
     expect(made).toHaveBeenCalledTimes(1);
+  });
+
+  it('joins text parts, and wraps every part once one is not text', () => {
+    const node = { node: true };
+    const wrapped = createRuntime('en', (parts) => ({ wrapped: parts }));
+    expect(wrapped.rich(['a', 'b'])).toBe('ab');
+    expect(wrapped.rich(['a ', node, ' b'])).toStrictEqual({ wrapped: ['a ', node, ' b'] });
   });
 
   it('keeps markup children when no callback is passed', () => {
