@@ -8,6 +8,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { parla } from '../src/vite.ts';
 
+/** A `parla.config.ts` exporting `config`. */
+const configModule = (config: object): string =>
+  `export default ${JSON.stringify(config, null, 2)};\n`;
+
 const tmp = fileURLToPath(new URL('../../../.tmp/vite-test', import.meta.url));
 const app = join(tmp, 'app');
 
@@ -21,15 +25,18 @@ function catalog(dir: string, withExtra: boolean): void {
   const namespaces: Record<string, string> = withExtra
     ? { app: 'locales', extra: 'more/locales' }
     : { app: 'locales' };
-  put(join(dir, 'parla.config.json'), {
-    locales: ['en'],
-    namespaces: Object.fromEntries(
-      Object.entries(namespaces).map(([ns, folder]) => [
-        ns,
-        { format: 'icu', path: `${folder}/{locale}/${ns}.json` },
-      ]),
-    ),
-  });
+  put(
+    join(dir, 'parla.config.ts'),
+    configModule({
+      locales: ['en'],
+      namespaces: Object.fromEntries(
+        Object.entries(namespaces).map(([ns, folder]) => [
+          ns,
+          { format: 'icu', path: `${folder}/{locale}/${ns}.json` },
+        ]),
+      ),
+    }),
+  );
 }
 
 /** The generated chunk of `ns`, or '' before it exists. */

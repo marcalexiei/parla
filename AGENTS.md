@@ -39,6 +39,9 @@ The benchmark lives in `parla-benchmark`, keeping its dependencies out of here.
   depends on (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale,
   namespace, function or tag, so a package's types and the app's add up instead of clashing.
 - **A namespace has one owner package**; a second is a build error.
+- **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
+  integer `?t=` mtime busts the module cache for watchers. Packages declare namespaces in
+  `package.json`: Node strips no types under `node_modules`.
 
 ## Commands
 

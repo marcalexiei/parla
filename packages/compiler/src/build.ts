@@ -235,11 +235,11 @@ function writeIfChanged(file: string, content: string, written: Array<string>): 
   written.push(file);
 }
 
-export function build(options: BuildOptions = {}): BuildResult {
+export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   const cwd = options.cwd ?? process.cwd();
   const formats = { ...defaultFormats, ...options.formats };
   const write = options.write ?? 'all';
-  const config = loadConfig(cwd, options.config);
+  const config = await loadConfig(cwd, options.config);
   const diagnostics: Array<Diagnostic> = [];
   const written: Array<string> = [];
   const chunks = new Map<string, string>();
