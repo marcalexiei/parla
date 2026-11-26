@@ -261,7 +261,6 @@ export function createParla(options: ParlaOptions): Parla {
   };
 }
 
-/** Picks the best supported locale from a preference list such as `navigator.languages`. */
 /** `zh-TW` → `zh-Hant-TW`: the likely script and region, to compare tags that omit them. */
 function maximize(tag: string): Intl.Locale | undefined {
   try {
@@ -271,6 +270,7 @@ function maximize(tag: string): Intl.Locale | undefined {
   }
 }
 
+/** Picks the best supported locale from a preference list such as `navigator.languages`. */
 export function matchLocale<L extends string>(
   requested: ReadonlyArray<string>,
   supported: ReadonlyArray<L>,

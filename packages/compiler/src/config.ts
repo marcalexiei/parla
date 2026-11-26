@@ -2,6 +2,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 
 import { BUILTIN_FUNCTIONS } from './compile.ts';
+import type { FunctionKind } from './compile.ts';
 
 export interface NamespaceConfig {
   /** Message syntax: `icu` or `mf2`. */
@@ -11,8 +12,6 @@ export interface NamespaceConfig {
 }
 
 /** `parla.config.json`, or the `parla` field of a package's `package.json`. */
-export type FunctionKind = 'string' | 'number' | 'date';
-
 export interface ParlaConfig {
   $schema?: string;
   locales?: Array<string>;

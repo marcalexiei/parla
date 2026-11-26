@@ -69,22 +69,16 @@ const TIME_PRECISION: Record<string, Intl.DateTimeFormatOptions> = {
   second: { timeStyle: 'medium' },
 };
 
+const NUMBER_STYLE: Record<string, Intl.NumberFormatOptions> = {
+  integer: { maximumFractionDigits: 0 },
+  currency: { style: 'currency' },
+  percent: { style: 'percent' },
+  unit: { style: 'unit' },
+};
+
 function numberOptions(name: string, options: Record<string, unknown>): Intl.NumberFormatOptions {
   const { select: _select, offset: _offset, ...rest } = options;
-  const opts = rest as Intl.NumberFormatOptions;
-  if (name === 'integer') {
-    return { ...opts, maximumFractionDigits: 0 };
-  }
-  if (name === 'currency') {
-    return { ...opts, style: 'currency' };
-  }
-  if (name === 'percent') {
-    return { ...opts, style: 'percent' };
-  }
-  if (name === 'unit') {
-    return { ...opts, style: 'unit' };
-  }
-  return opts;
+  return { ...rest, ...NUMBER_STYLE[name] };
 }
 
 function dateOptions(name: string, options: Record<string, unknown>): Intl.DateTimeFormatOptions {
@@ -187,7 +181,8 @@ export function createRuntime(
   wrapRich: WrapRich = (parts) => parts,
   extensions: RuntimeExtensions = {},
 ): MessageRuntime {
-  const { functions = {}, markup = {} } = extensions;
+  const functions = new Map(Object.entries(extensions.functions ?? {}));
+  const markup = new Map(Object.entries(extensions.markup ?? {}));
   const cache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>();
   const cached = <T extends Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>(
     key: string,
@@ -234,7 +229,7 @@ export function createRuntime(
       if (name === 'string') {
         return text(value);
       }
-      const custom = Object.hasOwn(functions, name) ? functions[name] : undefined;
+      const custom = functions.get(name);
       if (custom) {
         return custom(value, options, locale);
       }
@@ -266,10 +261,7 @@ export function createRuntime(
     },
     tag(params, name, children) {
       const own = params[name];
-      let cb = typeof own === 'function' ? (own as MarkupRenderer) : undefined;
-      if (!cb && Object.hasOwn(markup, name)) {
-        cb = markup[name];
-      }
+      const cb = typeof own === 'function' ? (own as MarkupRenderer) : markup.get(name);
       const inner = rt.rich(children);
       return cb ? cb(inner) : inner;
     },
