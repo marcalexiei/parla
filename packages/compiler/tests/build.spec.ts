@@ -140,6 +140,8 @@ describe(build, () => {
 
   it('generates types that catch wrong calls', () => {
     const dts = readFileSync(join(app, 'src/parla/types/checkout.d.ts'), 'utf8');
+    expect(dts).toContain("import type { Text } from '@parlajs/core';");
+    expect(dts).toContain('  /** Checkout */\n  title: Text;');
     expect(dts).toContain('items(params: { count: number }): string;');
     expect(dts).toContain('terms(params: { link: (children: Node) => Node }): Node;');
     expect(readFileSync(join(app, 'src/parla/types/common.d.ts'), 'utf8')).toContain(
@@ -147,9 +149,12 @@ describe(build, () => {
     );
     put(
       'src/usage.ts',
-      `import type { Namespaces } from '@parlajs/core';
+      `import type { Namespaces, Text } from '@parlajs/core';
 import './parla/catalog.js';
 declare const t: Namespaces['checkout'];
+export const title: Text = t.title;
+// @ts-expect-error a plain message takes no params
+t.title({});
 declare const c: Namespaces['common'];
 export const ok: string[] = [t.title(), t.cart.items({ count: 2 }), t.total({ amount: 3 }), c.greeting({ name: 'Ada' })];
 // @ts-expect-error count must be a number
@@ -281,7 +286,7 @@ describe('one catalog, two node types', () => {
     write('locales/en/plain.json', { save: 'Save' });
     await build({ cwd: dir, write: 'types' });
     const appTypes = readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8');
-    expect(appTypes).toContain('export interface AppText {\n  /** Title */\n  title(): string;\n}');
+    expect(appTypes).toContain('export interface AppText {\n  /** Title */\n  title: Text;\n}');
     expect(appTypes).toMatch(/export interface AppMessages<Node> extends AppText \{\n\s+nav: \{/);
     expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toMatch(
       /"app": AppMessages<Node>;\s+"plain": PlainMessages;/,
@@ -450,20 +455,24 @@ describe('interface names', () => {
         namespaces: {
           'foo-bar': { format: 'icu', path: 'locales/{locale}/foo-bar.json' },
           foo_bar: { format: 'icu', path: 'locales/{locale}/foo_bar.json' },
+          '-': { format: 'icu', path: 'locales/{locale}/dash.json' },
         },
       }),
     );
+    writeFileSync(join(dir, 'locales/en/dash.json'), JSON.stringify({ go: 'Go', b: '<b>B</b>' }));
     writeFileSync(join(dir, 'locales/en/foo-bar.json'), JSON.stringify({ dash: 'Dash' }));
     writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
     await build({ cwd: dir, write: 'types' });
     const types = (ns: string): string =>
       readFileSync(join(dir, `src/parla/types/${ns}.d.ts`), 'utf8');
     expect(types('foo-bar')).toContain(
-      'export interface FooBarMessages {\n  /** Dash */\n  dash(): string;',
+      'export interface FooBarMessages {\n  /** Dash */\n  dash: Text;',
     );
     expect(types('foo_bar')).toContain(
-      'export interface FooBar2Messages {\n  /** Under */\n  under(): string;',
+      'export interface FooBar2Messages {\n  /** Under */\n  under: Text;',
     );
+    // not `Text`, which would shadow the imported one
+    expect(types('-')).toContain('export interface _Messages<Node> extends _Text {');
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
     expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
   });

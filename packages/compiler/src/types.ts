@@ -10,7 +10,8 @@ function interfaceName(namespace: string): string {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join('');
-  return `${/^\d/.test(pascal) ? '_' : ''}${pascal}Messages`;
+  // `_` keeps a name like `-` from becoming `Messages`, whose plain part would shadow `Text`
+  return `${/^(?:\d|$)/.test(pascal) ? '_' : ''}${pascal}Messages`;
 }
 
 /** {@link interfaceName} per namespace, numbered where two collide (`foo-bar`, `foo_bar`). */
@@ -67,10 +68,10 @@ export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new
       required += optional ? 0 : 1;
     }
   }
-  const ret = info.rich ? 'Node' : 'string';
   if (fields.length === 0) {
-    return `(): ${ret}`;
+    return info.rich ? '(): Node' : ': Text';
   }
+  const ret = info.rich ? 'Node' : 'string';
   return `(params${required === 0 ? '?' : ''}: { ${fields.join('; ')} }): ${ret}`;
 }
 
@@ -123,6 +124,8 @@ function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]
 }
 
 /**
+ * `runtime`: the module `Text` comes from.
+ *
  * Plain messages in a non-generic `XText`, and those with markup in `XMessages<Node> extends XText`,
  * so a wider `t` checks against a narrower one without instantiating every plain message.
  */
@@ -130,6 +133,7 @@ export function namespaceTypes(
   messages: Map<string, { info: MessageInfo; source: string }>,
   name: string,
   defaults: ReadonlySet<string>,
+  runtime: string,
 ): NamespaceTypes {
   const keys = [...messages.keys()];
   // A group goes whole into one interface: an extending interface cannot add to a base's group.
@@ -144,20 +148,19 @@ export function namespaceTypes(
     (richTop.has(path[0] ?? key) ? rich : plain).push([path, leaf]);
   }
   const body = (entries: typeof plain): string => render(treeOf(entries), '  ');
-  if (rich.length === 0) {
-    return { code: `export interface ${name} {\n${body(plain)}\n}`, names: [name], generic: false };
-  }
-  if (plain.length === 0) {
-    return {
-      code: `export interface ${name}<Node> {\n${body(rich)}\n}`,
-      names: [name],
-      generic: true,
-    };
-  }
   const text = name.replace(/Messages$/, 'Text');
+  let code = `export interface ${name}<Node> extends ${text} {\n${body(rich)}\n}`;
+  if (rich.length === 0) {
+    code = `export interface ${name} {\n${body(plain)}\n}`;
+  } else if (plain.length === 0) {
+    code = `export interface ${name}<Node> {\n${body(rich)}\n}`;
+  } else {
+    code = `export interface ${text} {\n${body(plain)}\n}\n\n${code}`;
+  }
+  const usesText = plain.some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text');
   return {
-    code: `export interface ${text} {\n${body(plain)}\n}\n\nexport interface ${name}<Node> extends ${text} {\n${body(rich)}\n}`,
-    names: [text, name],
-    generic: true,
+    code: usesText ? `import type { Text } from '${runtime}';\n\n${code}` : code,
+    names: rich.length > 0 && plain.length > 0 ? [text, name] : [name],
+    generic: rich.length > 0,
   };
 }

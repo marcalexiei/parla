@@ -365,7 +365,12 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
         `${HEADER}${consts}export default ($) => (${emitGroup(treeOf(messages), '')});\n`,
       );
     }
-    const nsTypes = namespaceTypes(sourceInfo, nameOf(ns.name), new Set(config.markup));
+    const nsTypes = namespaceTypes(
+      sourceInfo,
+      nameOf(ns.name),
+      new Set(config.markup),
+      config.runtime,
+    );
     typed.set(ns.name, nsTypes);
     types.set(typeFile(ns.name), `${HEADER}${nsTypes.code}\n`);
   }

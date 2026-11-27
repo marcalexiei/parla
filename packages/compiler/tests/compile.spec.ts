@@ -110,7 +110,7 @@ describe('ICU', () => {
       '(params: { d: Date | number }): string',
     );
     expect(compile('icu', 'Hi {name}').sig).toBe('(params: { name: string | number }): string');
-    expect(compile('icu', 'Plain').sig).toBe('(): string');
+    expect(compile('icu', 'Plain').sig).toBe(': Text');
     expect(compile('icu', 'See <b>this</b>').sig).toBe(
       '(params: { b: (children: Node) => Node }): Node',
     );
@@ -128,7 +128,7 @@ describe('ICU', () => {
       '<b>{x}</b> and ',
       { link: '1' },
     ]);
-    expect(compile('icu', "'<head>' only").sig).toBe('(): string');
+    expect(compile('icu', "'<head>' only").sig).toBe(': Text');
     // `''` is an escaped apostrophe: the tag after it stays markup
     expect(run('icu', "Say ''<b>hi</b>''", { b: link })).toStrictEqual([
       "Say '",

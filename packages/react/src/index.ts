@@ -37,6 +37,7 @@ export {
   type Namespace,
   type NamespaceRegistry,
   type SelectorValue,
+  type Text,
 } from '@parlajs/core';
 
 /* Core's types with rich text as a `ReactNode`. */
