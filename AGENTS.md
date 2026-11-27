@@ -40,6 +40,8 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
 - **V8 builds literals past 127 keys ~100× slower**, so bigger groups are split. Hoisting messages
   out of the factory measured no faster and 40% more gzip.
 - **`core`, `react` and `format-*` run in browsers**: no Node globals (`no-restricted-globals`).
+- **`Intl` constructors go through `intl(name)`** in `runtime.ts`: Hermes lacks `PluralRules`, and
+  the error names the polyfill.
 - **Registries carry what is global**: `catalog.d.ts` augments the runtime the package depends on
   (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale, function or tag,
   so two catalogs in one program add up instead of clashing.
