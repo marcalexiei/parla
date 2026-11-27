@@ -1,0 +1,52 @@
+---
+description: Parla is out, a type-safe i18n library where the types know what loaded.
+showAskAi: false
+---
+
+# Introducing Parla: i18n where the types know what loaded
+
+Most i18n bugs aren't translation bugs. A key that doesn't exist, a `{count}` nobody passed, a
+namespace read before it loaded: each renders a blank or a raw key, and each is something TypeScript
+could catch. Today's libraries type the keys but not the params, or type both but leave "is it loaded
+yet?" to a `ready` flag or an empty string.
+
+Parla is my answer: a type-safe i18n library for TypeScript, with React bindings. A compiler turns
+ICU or MessageFormat 2 catalogs into typed functions and lazy chunks, one per locale and namespace.
+
+```tsx
+import { checkout } from './parla/namespaces/checkout.js';
+
+const { t } = useParla([checkout]);
+
+t.checkout.cart.items({ count: 3 }); // count: number, required
+t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
+```
+
+What that buys you:
+
+- **Params come from the message.** A plural needs its number, each branch of a select types its own
+  params, a rich-text tag needs its renderer.
+- **`t` is proof of loading.** It holds only the namespaces you loaded; reading another is a type
+  error, not an empty string.
+- **Namespaces are imports.** The bundler ships only what you import, and tooling follows the imports.
+- **One way to call it.** `parla.load([…])` and `useParla([…])`, always with a list.
+- **No flash on switch.** `setLocale` loads the new locale first, then switches.
+- **ICU and MF2**, per namespace, through one data model.
+- **No locale data to ship.** Formatting uses `Intl`; React Native works with `Intl` polyfills.
+- **Monorepos.** Each namespace has one owner package; apps import it.
+
+It's small and fast: 2.7 kB gzipped with the React bindings, and a plain message formats at over
+35M/s, against about 0.9M/s for i18next, on the same 200 messages. The numbers are in
+[parla-benchmark](https://github.com/marcalexiei/parla-benchmark); how i18next, react-intl, Lingui, Paraglide and typesafe-i18n compare is on
+[Why Parla](/why).
+
+```sh
+pnpm add @parlajs/react
+pnpm add -D @parlajs/compiler
+```
+
+Start with [Getting started](/getting-started), or try the
+[playground](https://github.com/marcalexiei/parla-playground). The source is on
+[GitHub](https://github.com/marcalexiei/parla).
+
+Parla is built with the help of AI coding tools.

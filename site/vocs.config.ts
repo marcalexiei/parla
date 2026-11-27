@@ -20,6 +20,7 @@ export default defineConfig({
   topNav: [
     { text: 'Guides', link: '/guides/namespaces', match: '/guides' },
     { text: 'Reference', link: '/reference/cli', match: '/reference' },
+    { text: 'Blog', link: '/blog/introducing-parla', match: '/blog' },
     { text: 'Playground', link: 'https://github.com/marcalexiei/parla-playground' },
   ],
   sidebar: [
