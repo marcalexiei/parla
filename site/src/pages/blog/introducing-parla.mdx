@@ -40,6 +40,15 @@ It's small and fast: 2.7 kB gzipped with the React bindings, and a plain message
 [parla-benchmark](https://github.com/marcalexiei/parla-benchmark); how i18next, react-intl, Lingui, Paraglide and typesafe-i18n compare is on
 [Why Parla](/why).
 
+None of these ideas is new on its own. Parla combines them:
+
+- namespaces and fallbacks, from [i18next](https://www.i18next.com);
+- ICU messages formatted through `Intl`, from [FormatJS](https://formatjs.github.io);
+- catalogs compiled ahead of time, from [Lingui](https://lingui.dev);
+- messages as tree-shakable functions, from [Paraglide](https://paraglidejs.com);
+- params typed from the message, from [typesafe-i18n](https://github.com/codingcommons/typesafe-i18n);
+- [MessageFormat 2](https://messageformat.unicode.org), the Unicode standard for message syntax.
+
 ```sh
 pnpm add @parlajs/react
 pnpm add -D @parlajs/compiler
