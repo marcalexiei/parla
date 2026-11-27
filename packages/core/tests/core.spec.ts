@@ -191,23 +191,28 @@ describe('namespace objects', () => {
     }).toThrow('[parla] namespace "empty" was built for no locale, not en, it');
   });
 
-  it('dedupe a second object of one name, keeping the first and warning once', async () => {
-    const first = makeNamespaces();
-    const second = makeNamespaces();
-    const warn = vi.spyOn(console, 'warn').mockReturnValue();
-    onTestFinished(() => {
-      warn.mockRestore();
-    });
+  it('load apart when two objects share a name, so each `t` gets its own', async () => {
+    const app = makeNamespaces();
+    const ui = makeNamespaces();
+    const uiCommon = {
+      ...ui.common,
+      load: {
+        en: ui.common.load['en'] as Loader,
+        it: async (): Promise<MessageModule> => Promise.resolve(chunk({ nav: { home: 'UI' } })),
+      },
+    };
     const parla = createParla({ catalog });
-    const t = await parla.load([first.common, second.common]);
-    await parla.load([second.common, second.checkout]);
-    expect(Object.keys(t)).toStrictEqual(['common']);
-    expect(first.calls).toStrictEqual(['en/common']);
-    expect(second.calls).toStrictEqual(['en/checkout']);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/two namespace objects are named "common"/),
-    );
+    const t = await parla.load([app.common, app.common]);
+    await parla.setLocale('it');
+    const tUi = await parla.load([uiCommon, ui.checkout]);
+    expect((t['common'] as Common).nav.home()).toBe('Home');
+    const tIt = await parla.load([app.common]);
+    expect((tIt['common'] as Common).nav.home()).toBe('Inizio');
+    expect((tUi['common'] as Common).nav.home()).toBe('UI');
+    expect(app.calls).toStrictEqual(['en/common', 'it/common']);
+    expect(() => {
+      void parla.load([app.common, uiCommon]);
+    }).toThrow('[parla] two namespaces named "common" in one load: t holds one per name');
   });
 });
 

@@ -51,8 +51,9 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
 - **A select's params are typed per branch** when one `:string` selector decides them: one union
   member per key, and `string`, which may hold any key, needs them all. Cost: ~2 types per such message.
 - **A namespace has one owner package**, which fixes its locales and fallbacks: an app may have
-  fewer locales, not more, and one missing fails in types and at the first `load`. A second object
-  of one name is caught only at runtime: the first wins, with a warning.
+  fewer locales, not more, and one missing fails in types and at the first `load`. The runtime keys
+  a namespace by its object, so two of one name (two owners, two copies) load apart; one `load` of
+  both throws, as `t` holds one per name.
 - **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
   integer `?t=` mtime busts the module cache for watchers.
 

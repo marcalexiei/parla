@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createParla } from '@parlajs/core';
 import type { Parla } from '@parlajs/core';
 import { build as viteBuild } from 'vite';
-import { beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import { build } from '../src/build.ts';
 
@@ -175,7 +175,7 @@ void parla.setLocale('fr');
     expect(typecheck(root)).toBe('');
   });
 
-  it('bundles a second copy of the owner twice, and the runtime uses the first', async () => {
+  it('bundles a second copy of the owner twice, and each feature reads its own', async () => {
     await owner('packages/i18n-v2', '2');
     link('node_modules/@feature/legacy/node_modules', '@utils/i18n', 'packages/i18n-v2');
     feature('legacy', ['common']);
@@ -189,15 +189,9 @@ void parla.setLocale('fr');
       'common:en:2',
     ]);
 
-    const warn = vi.spyOn(console, 'warn').mockReturnValue();
-    onTestFinished(() => {
-      warn.mockRestore();
-    });
     const app = await run(createParla({ catalog }));
     await expect(app['cart']?.()).resolves.toStrictEqual(['checkout:en:1', 'common:en:1']);
-    await expect(app['legacy']?.()).resolves.toStrictEqual(['common:en:1']);
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/two namespace objects are named "common"/),
-    );
+    // its own copy's messages, as its types say, though `cart` loaded `common` first
+    await expect(app['legacy']?.()).resolves.toStrictEqual(['common:en:2']);
   });
 });

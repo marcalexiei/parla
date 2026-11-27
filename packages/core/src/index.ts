@@ -173,16 +173,17 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
     markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
   };
-  const registered = new Map<string, Loadable>();
+  // By object, not name: two packages may each own a `common`, and each `t` gets its own.
+  const ids = new WeakMap<Loadable, number>();
+  const registered = new Map<number, Loadable>();
   let current: Locale = options.locale ?? sourceLocale;
   const listeners = new Set<() => void>();
   const runtimes = new Map<string, MessageRuntime>();
   const accessors = new Map<string, Promise<unknown>>();
   const settled = new Map<string, unknown>();
   const translations = new Map<string, Promise<object>>();
-  const loaded = new Set<string>();
+  const loaded = new Set<number>();
   let switchToken = 0;
-  const warned = new Set<string>();
 
   const assertLocale = (locale: Locale): void => {
     if (!locales.includes(locale)) {
@@ -200,13 +201,9 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     return rt;
   };
 
-  const fetchAccessor = async (
-    namespace: string,
-    locale: string,
-    key: string,
-  ): Promise<unknown> => {
-    // `adopt` checked every locale, and only adopted names reach here.
-    const loader = registered.get(namespace)?.load[locale] as Loader;
+  const fetchAccessor = async (id: number, locale: string, key: string): Promise<unknown> => {
+    // `adopt` checked every locale, and only adopted objects reach here.
+    const loader = registered.get(id)?.load[locale] as Loader;
     const mod = await loader();
     const value = mod.default(runtime(locale));
     settled.set(key, value);
@@ -223,11 +220,11 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
   };
 
   // oxlint-disable-next-line typescript/promise-function-async -- the promise is cached
-  const accessor = (namespace: string, locale: string): Promise<unknown> => {
-    const key = `${locale}\u0000${namespace}`;
+  const accessor = (id: number, locale: string): Promise<unknown> => {
+    const key = `${locale}\u0000${id}`;
     let promise = accessors.get(key);
     if (!promise) {
-      promise = fetchAccessor(namespace, locale, key);
+      promise = fetchAccessor(id, locale, key);
       accessors.set(key, promise);
       void forgetOnFailure(promise, key);
     }
@@ -235,13 +232,13 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
   };
 
   const fetchTranslations = async (
-    list: ReadonlyArray<string>,
+    list: ReadonlyArray<readonly [name: string, id: number]>,
     locale: string,
     key: string,
   ): Promise<object> => {
     try {
-      const values = await Promise.all(list.map(async (ns) => accessor(ns, locale)));
-      return Object.fromEntries(list.map((ns, i) => [ns, values[i]]));
+      const values = await Promise.all(list.map(async ([, id]) => accessor(id, locale)));
+      return Object.fromEntries(list.map(([name], i) => [name, values[i]]));
     } catch (error) {
       // Kept a while so React's retry render reads the error instead of loading again.
       setTimeout(() => {
@@ -251,50 +248,50 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     }
   };
 
-  // A second object of one name is a second copy of its package: the first one's loaders win.
-  const adopt = (ns: Loadable): string => {
+  const adopt = (ns: Loadable): number => {
     if (!isLoadable(ns)) {
       throw new TypeError(
         `[parla] load takes namespace objects, not ${describe(ns)}: import it from the generated namespaces/`,
       );
     }
-    const known = registered.get(ns.name);
-    if (known === ns) {
-      return ns.name;
-    }
-    if (known) {
-      if (!warned.has(ns.name)) {
-        warned.add(ns.name);
-        // oxlint-disable-next-line no-console -- two copies may hold different messages
-        console.warn(
-          `[parla] two namespace objects are named "${ns.name}"; the first is used. Is its package bundled twice?`,
+    let id = ids.get(ns);
+    if (id === undefined) {
+      const missing = locales.filter((l) => !Object.hasOwn(ns.load, l));
+      if (missing.length > 0) {
+        throw new Error(
+          `[parla] namespace "${ns.name}" was built for ${Object.keys(ns.load).join(', ') || 'no locale'}, not ${missing.join(', ')}`,
         );
       }
-      return ns.name;
+      id = registered.size;
+      ids.set(ns, id);
+      registered.set(id, ns);
     }
-    const missing = locales.filter((l) => !Object.hasOwn(ns.load, l));
-    if (missing.length > 0) {
-      throw new Error(
-        `[parla] namespace "${ns.name}" was built for ${Object.keys(ns.load).join(', ') || 'no locale'}, not ${missing.join(', ')}`,
-      );
-    }
-    registered.set(ns.name, ns);
-    return ns.name;
+    return id;
   };
 
   // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
   const load = (namespaces: ReadonlyArray<Loadable>, locale: Locale): Promise<object> => {
-    const list = [...new Set(namespaces.map((ns) => adopt(ns)))].toSorted();
-    const key = `${locale}\u0000${list.join('\u0000')}`;
+    const byName = new Map<string, number>();
+    for (const ns of namespaces) {
+      const id = adopt(ns);
+      if ((byName.get(ns.name) ?? id) !== id) {
+        throw new Error(
+          `[parla] two namespaces named "${ns.name}" in one load: t holds one per name`,
+        );
+      }
+      byName.set(ns.name, id);
+    }
+    const list = [...byName].toSorted(([a], [b]) => a.localeCompare(b));
+    const key = `${locale}\u0000${list.map(([, id]) => id).join('\u0000')}`;
     let promise = translations.get(key);
     if (!promise) {
-      for (const ns of list) {
-        loaded.add(ns);
+      for (const [, id] of list) {
+        loaded.add(id);
       }
-      const keys = list.map((ns) => [ns, `${locale}\u0000${ns}`] as const);
+      const keys = list.map(([name, id]) => [name, `${locale}\u0000${id}`] as const);
       if (keys.every(([, k]) => settled.has(k))) {
         // Loaded already, e.g. by `setLocale`: fulfilled from the start, so a switch never suspends.
-        const value = Object.fromEntries(keys.map(([ns, k]) => [ns, settled.get(k)]));
+        const value = Object.fromEntries(keys.map(([name, k]) => [name, settled.get(k)]));
         promise = Object.assign(Promise.resolve(value), { status: 'fulfilled', value });
       } else {
         promise = fetchTranslations(list, locale, key);
@@ -307,11 +304,11 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
 
   // Every namespace loaded so far, again until none is missing: one first loaded meanwhile is ready too.
   const loadAll = async (locale: Locale): Promise<void> => {
-    const missing = [...loaded].filter((ns) => !settled.has(`${locale}\u0000${ns}`));
+    const missing = [...loaded].filter((id) => !settled.has(`${locale}\u0000${id}`));
     if (missing.length === 0) {
       return;
     }
-    await Promise.all(missing.map(async (ns) => accessor(ns, locale)));
+    await Promise.all(missing.map(async (id) => accessor(id, locale)));
     await loadAll(locale);
   };
 

@@ -166,8 +166,8 @@ const parla = createParla({ catalog });
 - Outside Vite, build the owner first (`dependsOn: ['^build']`).
 - The owner fixes locales and fallbacks: an app may have fewer locales, not more. A namespace
   built without one of the app's locales fails in types and at its first `load`.
-- A second object with the same name, such as from a second copy of the owner, is skipped with a
-  warning.
+- Two namespaces of one name, such as an app's `common` beside a package's, or two copies of the
+  owner, each load their own messages; one `load` of both throws.
 - A published owner ships its `outDir` and peers on `@parlajs/react` or `@parlajs/core`.
 
 ## CLI
