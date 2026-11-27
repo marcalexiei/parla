@@ -132,8 +132,8 @@ export default defineConfig({ packages: ['@acme/ui'] /* … */ });
 ## CLI
 
 ```
-parla build [--watch]   chunks + catalog.js + catalog.d.ts
-parla types             catalog.d.ts only
+parla build [--watch]   chunks + catalog.js + catalog.d.ts + types/
+parla types             catalog.d.ts + types/ only
 parla check [--json]    validate; exit 1 on errors
             [--strict]  warnings fail too
 ```

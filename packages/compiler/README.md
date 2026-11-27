@@ -1,7 +1,8 @@
 # @parlajs/compiler
 
 [Parla](https://github.com/marcalexiei/parla)'s CLI and Vite plugin: catalogs → one chunk per
-locale × namespace, a `catalog.js` that loads them, and a `catalog.d.ts` that types them.
+locale × namespace, a `catalog.js` that loads them, and a `catalog.d.ts` that types them, with
+one `types/{namespace}.d.ts` per namespace.
 
 ```ts
 import { parla } from '@parlajs/compiler/vite';
@@ -13,8 +14,8 @@ The plugin rebuilds on every catalog change in `vite` and `vite build --watch`, 
 config later included, so a Vite app needs no `parla build --watch`.
 
 ```
-parla build [--watch]   chunks + catalog.js + catalog.d.ts
-parla types             catalog.d.ts only
+parla build [--watch]   chunks + catalog.js + catalog.d.ts + types/
+parla types             catalog.d.ts + types/ only
 parla check [--json]    validate; exit 1 on errors
             [--strict]  warnings fail too
 ```

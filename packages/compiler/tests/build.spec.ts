@@ -92,6 +92,25 @@ describe(build, () => {
     expect(chunk).not.toContain('Checkout');
   });
 
+  it('writes one types file per namespace, which catalog.d.ts imports, and removes stale ones', async () => {
+    const out = join(app, 'src/parla');
+    expect(readdirSync(join(out, 'types')).toSorted()).toStrictEqual([
+      'checkout.d.ts',
+      'common.d.ts',
+    ]);
+    const catalog = readFileSync(join(out, 'catalog.d.ts'), 'utf8');
+    expect(catalog).toContain(
+      'import type { CheckoutMessages } from "./types/checkout.js";\nexport type { CheckoutMessages } from "./types/checkout.js";',
+    );
+    expect(catalog).not.toContain('interface CheckoutMessages');
+    writeFileSync(join(out, 'types/removed.d.ts'), 'a namespace since removed');
+    await build({ cwd: app, write: 'types' });
+    expect(readdirSync(join(out, 'types')).toSorted()).toStrictEqual([
+      'checkout.d.ts',
+      'common.d.ts',
+    ]);
+  });
+
   it('reports translation problems', () => {
     const codes = result.diagnostics.map(
       (d) => `${d.level}:${d.code}:${d.namespace}:${d.locale}:${d.key ?? ''}`,
@@ -120,10 +139,12 @@ describe(build, () => {
   });
 
   it('generates types that catch wrong calls', () => {
-    const dts = readFileSync(join(app, 'src/parla/catalog.d.ts'), 'utf8');
+    const dts = readFileSync(join(app, 'src/parla/types/checkout.d.ts'), 'utf8');
     expect(dts).toContain('items(params: { count: number }): string;');
     expect(dts).toContain('terms(params: { link: (children: Node) => Node }): Node;');
-    expect(dts).toContain('greeting(params: { name: string | number }): string;');
+    expect(readFileSync(join(app, 'src/parla/types/common.d.ts'), 'utf8')).toContain(
+      'greeting(params: { name: string | number }): string;',
+    );
     put(
       'src/usage.ts',
       `import type { Namespaces } from '@parlajs/core';
@@ -384,7 +405,7 @@ describe('select keys', () => {
     );
     const built = await build({ cwd: dir, write: 'types' });
     expect(built.diagnostics).toStrictEqual([]);
-    expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toContain(
+    expect(readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8')).toContain(
       'reply(params: { g: "female" | "male" | (string & {}) }): string;',
     );
   });
@@ -409,13 +430,15 @@ describe('interface names', () => {
     writeFileSync(join(dir, 'locales/en/foo-bar.json'), JSON.stringify({ dash: 'Dash' }));
     writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
     await build({ cwd: dir, write: 'types' });
-    const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
-    expect(dts).toContain(
+    const types = (ns: string): string =>
+      readFileSync(join(dir, `src/parla/types/${ns}.d.ts`), 'utf8');
+    expect(types('foo-bar')).toContain(
       'export interface FooBarMessages<Node> {\n  /** Dash */\n  dash(): string;',
     );
-    expect(dts).toContain(
+    expect(types('foo_bar')).toContain(
       'export interface FooBar2Messages<Node> {\n  /** Under */\n  under(): string;',
     );
+    const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
     expect(dts).toMatch(/"foo-bar": FooBarMessages<Node>;\s+"foo_bar": FooBar2Messages<Node>;/);
   });
 });
@@ -457,7 +480,9 @@ describe('custom functions and default markup', () => {
     expect(dts).toContain(
       '  interface FunctionRegistry {\n    "capitalize": true;\n  }\n  interface MarkupRegistry {\n    "strong": true;\n  }\n',
     );
-    expect(dts).toContain('bold(params?: { strong?: (children: Node) => Node }): Node;');
+    expect(readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8')).toContain(
+      'bold(params?: { strong?: (children: Node) => Node }): Node;',
+    );
 
     const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
       catalog: Catalog;
