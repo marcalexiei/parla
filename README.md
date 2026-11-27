@@ -236,6 +236,8 @@ pnpm pack:all   # tarballs in .packs/
 
 Working example: [parla-playground](https://github.com/marcalexiei/parla-playground).
 
+Parla is built with the help of AI coding tools.
+
 ## License
 
 [MIT](./LICENSE)
