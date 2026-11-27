@@ -144,7 +144,13 @@ export default defineConfig({
     },
     {
       // Only these run on Node alone; the runtime also runs in the browser.
-      files: ['**/*.config.ts', 'scripts/**', 'bench/**', 'packages/compiler/src/**'],
+      files: [
+        '**/*.config.ts',
+        'scripts/**',
+        'bench/**',
+        'packages/compiler/src/**',
+        'packages/x18n/src/**',
+      ],
       ...nodeConfig,
     },
     {

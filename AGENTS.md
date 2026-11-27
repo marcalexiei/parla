@@ -19,6 +19,7 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 | `packages/compiler`   | `parla` CLI and Vite plugin: catalogs → typed namespaces   |
 | `packages/format-icu` | ICU → MF2 data model                                       |
 | `packages/format-mf2` | MF2 → MF2 data model                                       |
+| `packages/x18n`       | x18n plugin: catalogs, `t.ns.key()` usages, params         |
 | `scripts/`            | Repo tooling (`check-all.ts`), via `tsconfig.scripts.json` |
 | `bench/`              | Benchmarks against `main`, via `vitest.config.bench.ts`    |
 
