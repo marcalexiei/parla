@@ -150,6 +150,9 @@ parla check [--json]    validate; exit 1 on errors
 | Dates        | `date`, `time`                            | `:date`, `:time`, `:datetime`                           |
 | Rich text    | `<link>…</link>`                          | `{#link}…{/link}`, `{#br/}`                             |
 
+A select's params are typed per branch: `{ context: 'part_one' }` needs only what that branch
+reads, and any other value needs the `other` branch's.
+
 Formatting uses `Intl`: no locale data to ship.
 
 ## Development

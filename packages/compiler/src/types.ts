@@ -55,24 +55,51 @@ export function paramType(kinds: Array<ParamKind>): string {
   return 'string | number';
 }
 
-/** `defaults`: markup the runtime renders when a call leaves it out (the config's `markup`). */
-export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new Set()): string {
-  const fields = [...info.params.entries()]
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([name, kinds]) => `${prop(name)}: ${paramType(kinds)}`);
-  let required = fields.length;
+/** One params object: `names` typed by their uses, `selected` overriding a selector's type. */
+function fields(
+  info: MessageInfo,
+  names: Iterable<string>,
+  defaults: ReadonlySet<string>,
+  selected?: [param: string, type: string],
+): { fields: Array<string>; required: number } {
+  const out = [...names]
+    .toSorted((a, b) => a.localeCompare(b))
+    .map((name) => {
+      const type = name === selected?.[0] ? selected[1] : paramType(info.params.get(name) ?? []);
+      return `${prop(name)}: ${type}`;
+    });
+  let required = out.length;
   for (const tag of [...info.markup].toSorted()) {
     if (!info.params.has(tag)) {
       const optional = defaults.has(tag);
-      fields.push(`${prop(tag)}${optional ? '?' : ''}: (children: Node) => Node`);
+      out.push(`${prop(tag)}${optional ? '?' : ''}: (children: Node) => Node`);
       required += optional ? 0 : 1;
     }
   }
-  if (fields.length === 0) {
+  return { fields: out, required };
+}
+
+/** `defaults`: markup the runtime renders when a call leaves it out (the config's `markup`). */
+export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new Set()): string {
+  const ret = info.rich ? 'Node' : 'string';
+  const { branches } = info;
+  if (branches) {
+    // One member per key, so a key's own params are required only with it; `string` last.
+    const members = [...branches.needs]
+      .toSorted(
+        ([a], [b]) => Number(a === null) - Number(b === null) || String(a).localeCompare(String(b)),
+      )
+      .map(([key, names]) => {
+        const type = key === null ? 'string' : JSON.stringify(key);
+        return `{ ${fields(info, names, defaults, [branches.param, type]).fields.join('; ')} }`;
+      });
+    return `(params: ${members.join(' | ')}): ${ret}`;
+  }
+  const own = fields(info, info.params.keys(), defaults);
+  if (own.fields.length === 0) {
     return info.rich ? '(): Node' : ': Text';
   }
-  const ret = info.rich ? 'Node' : 'string';
-  return `(params${required === 0 ? '?' : ''}: { ${fields.join('; ')} }): ${ret}`;
+  return `(params${own.required === 0 ? '?' : ''}: { ${own.fields.join('; ')} }): ${ret}`;
 }
 
 interface Tree {

@@ -220,6 +220,27 @@ function mismatches(own: MessageInfo, source: MessageInfo): Array<string> {
       out.push(`uses markup "${tag}", which the source message does not have`);
     }
   }
+  const { branches } = source;
+  if (branches) {
+    // The source's type lets a call leave out what its value's branch does not read.
+    const ownBranches = own.branches?.param === branches.param ? own.branches : undefined;
+    const needs = (info: MessageInfo, key: string | null): Set<string> => {
+      const map = info === source ? branches : ownBranches;
+      return map?.needs.get(key) ?? map?.needs.get(null) ?? new Set(info.params.keys());
+    };
+    const keys = new Set([...branches.needs.keys(), ...(ownBranches?.needs.keys() ?? [])]);
+    const reported = new Set<string>();
+    for (const key of keys) {
+      const allowed = needs(source, key);
+      for (const param of needs(own, key)) {
+        if (source.params.has(param) && !allowed.has(param) && !reported.has(param)) {
+          reported.add(param);
+          const when = key === null ? 'another value' : JSON.stringify(key);
+          out.push(`needs $${param} when $${branches.param} is ${when}, but the source does not`);
+        }
+      }
+    }
+  }
   return out;
 }
 

@@ -158,6 +158,32 @@ describe(signature, () => {
       '(params: { name: string | number; b?: (children: Node) => Node }): Node',
     );
   });
+
+  it("types a select's params per branch, and once when every branch needs the same", () => {
+    expect(
+      compile('icu', '{context, select, part_one {Part one} other {Part {part} / {title}}}').sig,
+    ).toBe(
+      '(params: { context: "part_one" } | { context: string; part: string | number; title: string | number }): string',
+    );
+    expect(compile('icu', '{g, select, a {A {n}} other {B {n}}}').sig).toBe(
+      '(params: { g: "a" | (string & {}); n: string | number }): string',
+    );
+    // A nested plural is a second selector: the outer key still decides alone.
+    expect(
+      compile(
+        'icu',
+        '{g, select, male {{n, plural, one {# {x}} other {#}}} other {{n, number} {y}}}',
+      ).sig,
+    ).toBe(
+      '(params: { g: "male"; n: number; x: string | number } | { g: string; n: number; y: string | number }): string',
+    );
+    // Not first, so `a` may fall through to `*` for some `n`.
+    const later =
+      '.input {$n :number}\n.input {$g :string}\n.match $n $g\none a {{{$x}}}\n* * {{{$y}}}';
+    expect(compile('mf2', later).sig).toBe(
+      '(params: { g: "a"; n: number; x: string | number; y: string | number } | { g: string; n: number; y: string | number }): string',
+    );
+  });
 });
 
 describe('MF2', () => {

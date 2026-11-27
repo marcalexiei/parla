@@ -44,6 +44,8 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
   `Parla<Node>` picks `Node` (`string` in core, `ReactNode` in `@parlajs/react`). Augmentations merge
   only with the same parameter name. Only markup takes `Node` (`XMessages<Node> extends XText`):
   passing a wider `t` then instantiates ~10× fewer types.
+- **A select's params are typed per branch** when one `:string` selector decides them: one union
+  member per key, `string` for the rest. Cost: ~2 types per such message.
 - **A namespace has one owner package**; a second is a build error.
 - **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
   integer `?t=` mtime busts the module cache for watchers. Packages declare namespaces in
