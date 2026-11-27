@@ -9,6 +9,8 @@ import { beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { build } from '../src/build.ts';
 
+import { typecheck } from './typecheck.ts';
+
 const root = fileURLToPath(new URL('../../../.tmp/workspace-test', import.meta.url));
 
 function put(file: string, content: unknown): void {
@@ -29,12 +31,22 @@ const catalog = { locales: ['en', 'it'], sourceLocale: 'en' };
 
 /** `@utils/i18n` owns every namespace and builds them once, in its own folder. */
 async function owner(dir: string, version: string): Promise<void> {
-  put(`${dir}/package.json`, { name: '@utils/i18n', version, type: 'module' });
+  put(`${dir}/package.json`, {
+    name: '@utils/i18n',
+    version,
+    type: 'module',
+    exports: {
+      './catalog.js': './src/parla/catalog.js',
+      './namespaces/*': './src/parla/namespaces/*',
+    },
+  });
   put(
     `${dir}/parla.config.ts`,
     `export default ${JSON.stringify({
       locales: catalog.locales,
       runtime: '@parlajs/core',
+      functions: { shout: 'string' },
+      markup: ['strong'],
       namespaces: Object.fromEntries(
         NAMESPACES.map((ns) => [ns, { format: 'icu', path: `locales/{locale}/${ns}.json` }]),
       ),
@@ -56,7 +68,7 @@ function feature(name: string, namespaces: Array<string>): void {
     exports: { '.': './index.js' },
   });
   const imports = namespaces
-    .map((ns) => `import { ${ns} } from '@utils/i18n/src/parla/namespaces/${ns}.js';\n`)
+    .map((ns) => `import { ${ns} } from '@utils/i18n/namespaces/${ns}.js';\n`)
     .join('');
   const list = namespaces.join(', ');
   put(
@@ -137,6 +149,30 @@ describe('a workspace whose owner package builds the namespace objects', () => {
     await expect(app['account']?.()).resolves.toStrictEqual(['profile:en:1', 'common:en:1']);
     await parla.setLocale('it');
     await expect(app['cart']?.()).resolves.toStrictEqual(['checkout:it:1', 'common:it:1']);
+  });
+
+  it('types an app that builds nothing from the owner’s catalog', () => {
+    put(
+      'src/app.ts',
+      `import { createParla } from '@parlajs/core';
+import { catalog } from '@utils/i18n/catalog.js';
+import { checkout } from '@utils/i18n/namespaces/checkout.js';
+
+const parla = createParla({
+  catalog,
+  functions: { shout: (value) => String(value).toUpperCase() },
+  markup: { strong: (children) => children },
+});
+const t = await parla.load([checkout]);
+export const title: string = t.checkout.title();
+
+// @ts-expect-error the owner's functions and markup need implementations
+createParla({ catalog });
+// @ts-expect-error the owner was built for en and it only
+void parla.setLocale('fr');
+`,
+    );
+    expect(typecheck(root)).toBe('');
   });
 
   it('bundles a second copy of the owner twice, and the runtime uses the first', async () => {

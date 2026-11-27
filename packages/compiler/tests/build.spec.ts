@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -9,6 +8,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { build, formatDiagnostic } from '../src/build.ts';
 import type { BuildResult } from '../src/build.ts';
+
+import { typecheck } from './typecheck.ts';
 
 /** A `parla.config.ts` exporting `config`. */
 const configModule = (config: object): string =>
@@ -21,36 +22,6 @@ function put(dir: string, file: string, content: unknown): void {
   const path = join(dir, file);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-}
-
-/** Type-checks `include` in `dir` as an app would: tsc's errors, or '' when there are none. */
-function typecheck(
-  dir: string,
-  {
-    include = ['src'],
-    skipLibCheck = false,
-  }: { include?: Array<string>; skipLibCheck?: boolean } = {},
-): string {
-  put(dir, 'tsconfig.json', {
-    compilerOptions: {
-      strict: true,
-      noEmit: true,
-      module: 'preserve',
-      moduleResolution: 'bundler',
-      skipLibCheck,
-      allowImportingTsExtensions: true,
-      types: [],
-      paths: {
-        '@parlajs/core': [join(repo, 'packages/core/src/index.ts')],
-        '@parlajs/react': [join(repo, 'packages/react/src/index.ts')],
-        react: [join(repo, 'packages/react/node_modules/@types/react/index.d.ts')],
-      },
-    },
-    include,
-  });
-  return spawnSync(join(repo, 'node_modules/.bin/tsc'), ['-p', join(dir, 'tsconfig.json')], {
-    encoding: 'utf8',
-  }).stdout;
 }
 
 const importFrom = async <T>(file: string): Promise<T> =>
