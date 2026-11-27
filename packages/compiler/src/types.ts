@@ -96,17 +96,20 @@ function render(tree: Tree, indent: string): string {
   return lines.join('\n');
 }
 
-export function namespaceInterface(
-  messages: Map<string, { info: MessageInfo; source: string }>,
-  name: string,
-  defaults: ReadonlySet<string>,
-): string {
+export interface NamespaceTypes {
+  readonly code: string;
+  /** The interfaces `code` exports. */
+  readonly names: ReadonlyArray<string>;
+  /** Whether the namespace's interface takes `Node`: only markup needs it. */
+  readonly generic: boolean;
+}
+
+function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]>): Tree {
   const tree: Tree = {};
-  for (const [key, { info, source }] of messages) {
-    const path = key.split('.');
-    const leaf = path.pop() ?? key;
+  for (const [path, leaf] of entries) {
+    const last = path.at(-1) ?? '';
     let node = tree;
-    for (const segment of path) {
+    for (const segment of path.slice(0, -1)) {
       let child = node[segment];
       if (!child || isLeaf(child)) {
         child = {};
@@ -114,7 +117,47 @@ export function namespaceInterface(
       }
       node = child;
     }
-    node[leaf] = { leaf: signature(info, defaults), doc: source };
+    node[last] = leaf;
   }
-  return `export interface ${name}<Node> {\n${render(tree, '  ')}\n}`;
+  return tree;
+}
+
+/**
+ * Plain messages in a non-generic `XText`, and those with markup in `XMessages<Node> extends XText`,
+ * so a wider `t` checks against a narrower one without instantiating every plain message.
+ */
+export function namespaceTypes(
+  messages: Map<string, { info: MessageInfo; source: string }>,
+  name: string,
+  defaults: ReadonlySet<string>,
+): NamespaceTypes {
+  const keys = [...messages.keys()];
+  // A group goes whole into one interface: an extending interface cannot add to a base's group.
+  const richTop = new Set(
+    keys.filter((k) => messages.get(k)?.info.rich).map((k) => k.split('.')[0] ?? k),
+  );
+  const plain: Array<[Array<string>, Tree[string]]> = [];
+  const rich: Array<[Array<string>, Tree[string]]> = [];
+  for (const [key, { info, source }] of messages) {
+    const path = key.split('.');
+    const leaf = { leaf: signature(info, defaults), doc: source };
+    (richTop.has(path[0] ?? key) ? rich : plain).push([path, leaf]);
+  }
+  const body = (entries: typeof plain): string => render(treeOf(entries), '  ');
+  if (rich.length === 0) {
+    return { code: `export interface ${name} {\n${body(plain)}\n}`, names: [name], generic: false };
+  }
+  if (plain.length === 0) {
+    return {
+      code: `export interface ${name}<Node> {\n${body(rich)}\n}`,
+      names: [name],
+      generic: true,
+    };
+  }
+  const text = name.replace(/Messages$/, 'Text');
+  return {
+    code: `export interface ${text} {\n${body(plain)}\n}\n\nexport interface ${name}<Node> extends ${text} {\n${body(rich)}\n}`,
+    names: [text, name],
+    generic: true,
+  };
 }

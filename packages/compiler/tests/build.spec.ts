@@ -100,7 +100,7 @@ describe(build, () => {
     ]);
     const catalog = readFileSync(join(out, 'catalog.d.ts'), 'utf8');
     expect(catalog).toContain(
-      'import type { CheckoutMessages } from "./types/checkout.js";\nexport type { CheckoutMessages } from "./types/checkout.js";',
+      'import type { CheckoutMessages } from "./types/checkout.js";\nexport type { CheckoutText, CheckoutMessages } from "./types/checkout.js";',
     );
     expect(catalog).not.toContain('interface CheckoutMessages');
     writeFileSync(join(out, 'types/removed.d.ts'), 'a namespace since removed');
@@ -267,11 +267,25 @@ describe('one catalog, two node types', () => {
       configModule({
         locales: ['en'],
         markup: ['strong'],
-        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+        namespaces: {
+          app: { format: 'icu', path: 'locales/{locale}/app.json' },
+          plain: { format: 'icu', path: 'locales/{locale}/plain.json' },
+        },
       }),
     );
-    write('locales/en/app.json', { title: 'Title', terms: 'Read the <link>terms</link>' });
+    write('locales/en/app.json', {
+      title: 'Title',
+      nav: { home: 'Home', help: 'Read the <link>help</link>' },
+      terms: 'Read the <link>terms</link>',
+    });
+    write('locales/en/plain.json', { save: 'Save' });
     await build({ cwd: dir, write: 'types' });
+    const appTypes = readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8');
+    expect(appTypes).toContain('export interface AppText {\n  /** Title */\n  title(): string;\n}');
+    expect(appTypes).toMatch(/export interface AppMessages<Node> extends AppText \{\n\s+nav: \{/);
+    expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toMatch(
+      /"app": AppMessages<Node>;\s+"plain": PlainMessages;/,
+    );
 
     write(
       'src/usage.ts',
@@ -282,11 +296,23 @@ import type { Translations } from '@parlajs/core';
 import { createParla as createReact } from '@parlajs/react';
 import type { WrapRich } from '@parlajs/react';
 import { catalog } from './parla/catalog.js';
+import type { AppMessages, AppText, PlainMessages } from './parla/catalog.js';
 
 const web = createReact({ catalog, markup: { strong: (c) => createElement('b', null, c) } });
 const email = createCore({ catalog, markup: { strong: (c) => \`**\${c}**\` } });
 const { app: w } = await web.load(['app']);
 const { app: e } = await email.load(['app']);
+// @ts-expect-error a namespace without markup takes no node type
+export type PlainOfString = PlainMessages<string>;
+// @ts-expect-error the plain part of a namespace with markup takes no node type
+export type TextOfString = AppText<string>;
+export const plainPart: AppText = {} as AppMessages<ReactNode>;
+const { plain: wp } = await web.load(['plain']);
+const { plain: ep } = await email.load(['plain']);
+export const saves: string[] = [wp.save(), ep.save()];
+export const help: ReactNode = w.nav.help({ link: (c) => c });
+// @ts-expect-error a group with markup follows the instance's node type
+export const helpText: string = w.nav.help({ link: (c) => c });
 export const titles: string[] = [w.title(), e.title()];
 export const node: ReactNode = w.terms({ link: (c) => createElement('a', null, c) });
 export const text: string = e.terms({ link: (c) => \`[\${c}]\` });
@@ -433,13 +459,13 @@ describe('interface names', () => {
     const types = (ns: string): string =>
       readFileSync(join(dir, `src/parla/types/${ns}.d.ts`), 'utf8');
     expect(types('foo-bar')).toContain(
-      'export interface FooBarMessages<Node> {\n  /** Dash */\n  dash(): string;',
+      'export interface FooBarMessages {\n  /** Dash */\n  dash(): string;',
     );
     expect(types('foo_bar')).toContain(
-      'export interface FooBar2Messages<Node> {\n  /** Under */\n  under(): string;',
+      'export interface FooBar2Messages {\n  /** Under */\n  under(): string;',
     );
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
-    expect(dts).toMatch(/"foo-bar": FooBarMessages<Node>;\s+"foo_bar": FooBar2Messages<Node>;/);
+    expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
   });
 });
 

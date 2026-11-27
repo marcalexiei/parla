@@ -42,7 +42,8 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
   namespace's interface is its own `types/{ns}.d.ts`, so editing a message changes one file.
 - **Rich text's type follows the instance**: generated types fill `NamespaceRegistry<Node>`, and
   `Parla<Node>` picks `Node` (`string` in core, `ReactNode` in `@parlajs/react`). Augmentations merge
-  only with the same parameter name.
+  only with the same parameter name. Only markup takes `Node` (`XMessages<Node> extends XText`):
+  passing a wider `t` then instantiates ~10× fewer types.
 - **A namespace has one owner package**; a second is a build error.
 - **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
   integer `?t=` mtime busts the module cache for watchers. Packages declare namespaces in

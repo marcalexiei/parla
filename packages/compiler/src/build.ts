@@ -17,7 +17,8 @@ import { CompileError, compileMessage, ModuleScope } from './compile.ts';
 import type { MessageInfo } from './compile.ts';
 import { fallbackChain, loadConfig } from './config.ts';
 import type { ResolvedConfig, ResolvedNamespace } from './config.ts';
-import { interfaceNames, namespaceInterface, paramType } from './types.ts';
+import { interfaceNames, namespaceTypes, paramType } from './types.ts';
+import type { NamespaceTypes } from './types.ts';
 
 export interface FormatAdapter {
   readonly name: string;
@@ -256,6 +257,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   const written: Array<string> = [];
   const chunks = new Map<string, string>();
   const types = new Map<string, string>();
+  const typed = new Map<string, NamespaceTypes>();
   const names = interfaceNames(config.namespaces.map((ns) => ns.name));
   const nameOf = (namespace: string): string => names.get(namespace) ?? '';
   // The source locale first, so every translation has its source message to compare against.
@@ -363,27 +365,29 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
         `${HEADER}${consts}export default ($) => (${emitGroup(treeOf(messages), '')});\n`,
       );
     }
-    types.set(
-      typeFile(ns.name),
-      `${HEADER}${namespaceInterface(sourceInfo, nameOf(ns.name), new Set(config.markup))}\n`,
-    );
+    const nsTypes = namespaceTypes(sourceInfo, nameOf(ns.name), new Set(config.markup));
+    typed.set(ns.name, nsTypes);
+    types.set(typeFile(ns.name), `${HEADER}${nsTypes.code}\n`);
   }
 
   if (write) {
     const out = config.outDir;
-    // A namespace that failed to build has no types file to import.
-    const typed = config.namespaces.map((ns) => ns.name).filter((ns) => types.has(typeFile(ns)));
     const localeType = config.locales.map((l) => JSON.stringify(l)).join(' | ');
     const registries = [
       registry('LocaleRegistry', config.locales),
-      registry('NamespaceRegistry<Node>', typed, (ns) => `${nameOf(ns)}<Node>`),
+      registry(
+        'NamespaceRegistry<Node>',
+        [...typed.keys()],
+        (ns) => `${nameOf(ns)}${typed.get(ns)?.generic ? '<Node>' : ''}`,
+      ),
       registry('FunctionRegistry', Object.keys(config.functions)),
       registry('MarkupRegistry', config.markup),
     ].join('');
-    const typeImports = typed
-      .map((ns) => {
+    // A namespace that failed to build has no types to import.
+    const typeImports = [...typed]
+      .map(([ns, { names: exported }]) => {
         const from = JSON.stringify(`./types/${ns}.js`);
-        return `import type { ${nameOf(ns)} } from ${from};\nexport type { ${nameOf(ns)} } from ${from};\n`;
+        return `import type { ${nameOf(ns)} } from ${from};\nexport type { ${exported.join(', ')} } from ${from};\n`;
       })
       .join('');
     writeIfChanged(
