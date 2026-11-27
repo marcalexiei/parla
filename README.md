@@ -132,8 +132,8 @@ export default defineConfig({ packages: ['@acme/ui'] /* … */ });
 ## CLI
 
 ```
-parla build [--watch]   chunks + catalog.js + catalog.d.ts
-parla types             catalog.d.ts only
+parla build [--watch]   chunks + catalog.js + catalog.d.ts + types/
+parla types             catalog.d.ts + types/ only
 parla check [--json]    validate; exit 1 on errors
             [--strict]  warnings fail too
 ```
@@ -149,6 +149,9 @@ parla check [--json]    validate; exit 1 on errors
 | Numbers      | `number`, `::currency/EUR`, `percent`     | `:number`, `:integer`, `:currency`, `:percent`, `:unit` |
 | Dates        | `date`, `time`                            | `:date`, `:time`, `:datetime`                           |
 | Rich text    | `<link>…</link>`                          | `{#link}…{/link}`, `{#br/}`                             |
+
+A select's params are typed per branch: `{ context: 'part_one' }` needs only what that branch
+reads, and any other value needs the `other` branch's.
 
 Formatting uses `Intl`: no locale data to ship.
 

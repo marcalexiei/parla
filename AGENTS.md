@@ -38,10 +38,14 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
 - **`core`, `react` and `format-*` run in browsers**: no Node globals (`no-restricted-globals`).
 - **Types reach consumers through registries**: `catalog.d.ts` augments the runtime the package
   depends on (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale,
-  namespace, function or tag, so a package's types and the app's add up instead of clashing.
+  namespace, function or tag, so a package's types and the app's add up instead of clashing. Each
+  namespace's interface is its own `types/{ns}.d.ts`, so editing a message changes one file.
 - **Rich text's type follows the instance**: generated types fill `NamespaceRegistry<Node>`, and
   `Parla<Node>` picks `Node` (`string` in core, `ReactNode` in `@parlajs/react`). Augmentations merge
-  only with the same parameter name.
+  only with the same parameter name. Only markup takes `Node` (`XMessages<Node> extends XText`):
+  passing a wider `t` then instantiates ~10× fewer types.
+- **A select's params are typed per branch** when one `:string` selector decides them: one union
+  member per key, `string` for the rest. Cost: ~2 types per such message.
 - **A namespace has one owner package**; a second is a build error.
 - **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
   integer `?t=` mtime busts the module cache for watchers. Packages declare namespaces in

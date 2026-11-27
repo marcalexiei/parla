@@ -41,6 +41,9 @@ export type FunctionName = Extract<keyof FunctionRegistry, string>;
 /** The config's `markup`: each needs a renderer in `createParla({ markup })`. */
 export type MarkupName = Extract<keyof MarkupRegistry, string>;
 
+/** A message without params or markup, shared so a catalog of them builds one type. */
+export type Text = () => string;
+
 /** A compiled chunk: called once per locale with its runtime, it returns the namespace's accessor. */
 export type MessageFactory = (rt: MessageRuntime) => unknown;
 export interface MessageModule {

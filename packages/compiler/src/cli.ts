@@ -10,7 +10,7 @@ const HELP = `Usage: parla <command> [options]
 
 Commands
   build    Compile catalogs into per-locale chunks and typed accessors
-  types    Write only catalog.d.ts (for workspace packages)
+  types    Write only the .d.ts files (for workspace packages)
   check    Validate catalogs without writing anything
 
 Options

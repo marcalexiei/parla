@@ -10,7 +10,8 @@ function interfaceName(namespace: string): string {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join('');
-  return `${/^\d/.test(pascal) ? '_' : ''}${pascal}Messages`;
+  // `_` keeps a name like `-` from becoming `Messages`, whose plain part would shadow `Text`
+  return `${/^(?:\d|$)/.test(pascal) ? '_' : ''}${pascal}Messages`;
 }
 
 /** {@link interfaceName} per namespace, numbered where two collide (`foo-bar`, `foo_bar`). */
@@ -54,24 +55,51 @@ export function paramType(kinds: Array<ParamKind>): string {
   return 'string | number';
 }
 
-/** `defaults`: markup the runtime renders when a call leaves it out (the config's `markup`). */
-export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new Set()): string {
-  const fields = [...info.params.entries()]
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([name, kinds]) => `${prop(name)}: ${paramType(kinds)}`);
-  let required = fields.length;
+/** One params object: `names` typed by their uses, `selected` overriding a selector's type. */
+function fields(
+  info: MessageInfo,
+  names: Iterable<string>,
+  defaults: ReadonlySet<string>,
+  selected?: [param: string, type: string],
+): { fields: Array<string>; required: number } {
+  const out = [...names]
+    .toSorted((a, b) => a.localeCompare(b))
+    .map((name) => {
+      const type = name === selected?.[0] ? selected[1] : paramType(info.params.get(name) ?? []);
+      return `${prop(name)}: ${type}`;
+    });
+  let required = out.length;
   for (const tag of [...info.markup].toSorted()) {
     if (!info.params.has(tag)) {
       const optional = defaults.has(tag);
-      fields.push(`${prop(tag)}${optional ? '?' : ''}: (children: Node) => Node`);
+      out.push(`${prop(tag)}${optional ? '?' : ''}: (children: Node) => Node`);
       required += optional ? 0 : 1;
     }
   }
+  return { fields: out, required };
+}
+
+/** `defaults`: markup the runtime renders when a call leaves it out (the config's `markup`). */
+export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new Set()): string {
   const ret = info.rich ? 'Node' : 'string';
-  if (fields.length === 0) {
-    return `(): ${ret}`;
+  const { branches } = info;
+  if (branches) {
+    // One member per key, so a key's own params are required only with it; `string` last.
+    const members = [...branches.needs]
+      .toSorted(
+        ([a], [b]) => Number(a === null) - Number(b === null) || String(a).localeCompare(String(b)),
+      )
+      .map(([key, names]) => {
+        const type = key === null ? 'string' : JSON.stringify(key);
+        return `{ ${fields(info, names, defaults, [branches.param, type]).fields.join('; ')} }`;
+      });
+    return `(params: ${members.join(' | ')}): ${ret}`;
   }
-  return `(params${required === 0 ? '?' : ''}: { ${fields.join('; ')} }): ${ret}`;
+  const own = fields(info, info.params.keys(), defaults);
+  if (own.fields.length === 0) {
+    return info.rich ? '(): Node' : ': Text';
+  }
+  return `(params${own.required === 0 ? '?' : ''}: { ${own.fields.join('; ')} }): ${ret}`;
 }
 
 interface Tree {
@@ -96,17 +124,20 @@ function render(tree: Tree, indent: string): string {
   return lines.join('\n');
 }
 
-export function namespaceInterface(
-  messages: Map<string, { info: MessageInfo; source: string }>,
-  name: string,
-  defaults: ReadonlySet<string>,
-): string {
+export interface NamespaceTypes {
+  readonly code: string;
+  /** The interfaces `code` exports. */
+  readonly names: ReadonlyArray<string>;
+  /** Whether the namespace's interface takes `Node`: only markup needs it. */
+  readonly generic: boolean;
+}
+
+function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]>): Tree {
   const tree: Tree = {};
-  for (const [key, { info, source }] of messages) {
-    const path = key.split('.');
-    const leaf = path.pop() ?? key;
+  for (const [path, leaf] of entries) {
+    const last = path.at(-1) ?? '';
     let node = tree;
-    for (const segment of path) {
+    for (const segment of path.slice(0, -1)) {
       let child = node[segment];
       if (!child || isLeaf(child)) {
         child = {};
@@ -114,7 +145,49 @@ export function namespaceInterface(
       }
       node = child;
     }
-    node[leaf] = { leaf: signature(info, defaults), doc: source };
+    node[last] = leaf;
   }
-  return `export interface ${name}<Node> {\n${render(tree, '  ')}\n}`;
+  return tree;
+}
+
+/**
+ * `runtime`: the module `Text` comes from.
+ *
+ * Plain messages in a non-generic `XText`, and those with markup in `XMessages<Node> extends XText`,
+ * so a wider `t` checks against a narrower one without instantiating every plain message.
+ */
+export function namespaceTypes(
+  messages: Map<string, { info: MessageInfo; source: string }>,
+  name: string,
+  defaults: ReadonlySet<string>,
+  runtime: string,
+): NamespaceTypes {
+  const keys = [...messages.keys()];
+  // A group goes whole into one interface: an extending interface cannot add to a base's group.
+  const richTop = new Set(
+    keys.filter((k) => messages.get(k)?.info.rich).map((k) => k.split('.')[0] ?? k),
+  );
+  const plain: Array<[Array<string>, Tree[string]]> = [];
+  const rich: Array<[Array<string>, Tree[string]]> = [];
+  for (const [key, { info, source }] of messages) {
+    const path = key.split('.');
+    const leaf = { leaf: signature(info, defaults), doc: source };
+    (richTop.has(path[0] ?? key) ? rich : plain).push([path, leaf]);
+  }
+  const body = (entries: typeof plain): string => render(treeOf(entries), '  ');
+  const text = name.replace(/Messages$/, 'Text');
+  let code = `export interface ${name}<Node> extends ${text} {\n${body(rich)}\n}`;
+  if (rich.length === 0) {
+    code = `export interface ${name} {\n${body(plain)}\n}`;
+  } else if (plain.length === 0) {
+    code = `export interface ${name}<Node> {\n${body(rich)}\n}`;
+  } else {
+    code = `export interface ${text} {\n${body(plain)}\n}\n\n${code}`;
+  }
+  const usesText = plain.some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text');
+  return {
+    code: usesText ? `import type { Text } from '${runtime}';\n\n${code}` : code,
+    names: rich.length > 0 && plain.length > 0 ? [text, name] : [name],
+    generic: rich.length > 0,
+  };
 }

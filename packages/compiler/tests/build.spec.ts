@@ -92,6 +92,25 @@ describe(build, () => {
     expect(chunk).not.toContain('Checkout');
   });
 
+  it('writes one types file per namespace, which catalog.d.ts imports, and removes stale ones', async () => {
+    const out = join(app, 'src/parla');
+    expect(readdirSync(join(out, 'types')).toSorted()).toStrictEqual([
+      'checkout.d.ts',
+      'common.d.ts',
+    ]);
+    const catalog = readFileSync(join(out, 'catalog.d.ts'), 'utf8');
+    expect(catalog).toContain(
+      'import type { CheckoutMessages } from "./types/checkout.js";\nexport type { CheckoutText, CheckoutMessages } from "./types/checkout.js";',
+    );
+    expect(catalog).not.toContain('interface CheckoutMessages');
+    writeFileSync(join(out, 'types/removed.d.ts'), 'a namespace since removed');
+    await build({ cwd: app, write: 'types' });
+    expect(readdirSync(join(out, 'types')).toSorted()).toStrictEqual([
+      'checkout.d.ts',
+      'common.d.ts',
+    ]);
+  });
+
   it('reports translation problems', () => {
     const codes = result.diagnostics.map(
       (d) => `${d.level}:${d.code}:${d.namespace}:${d.locale}:${d.key ?? ''}`,
@@ -120,15 +139,22 @@ describe(build, () => {
   });
 
   it('generates types that catch wrong calls', () => {
-    const dts = readFileSync(join(app, 'src/parla/catalog.d.ts'), 'utf8');
+    const dts = readFileSync(join(app, 'src/parla/types/checkout.d.ts'), 'utf8');
+    expect(dts).toContain("import type { Text } from '@parlajs/core';");
+    expect(dts).toContain('  /** Checkout */\n  title: Text;');
     expect(dts).toContain('items(params: { count: number }): string;');
     expect(dts).toContain('terms(params: { link: (children: Node) => Node }): Node;');
-    expect(dts).toContain('greeting(params: { name: string | number }): string;');
+    expect(readFileSync(join(app, 'src/parla/types/common.d.ts'), 'utf8')).toContain(
+      'greeting(params: { name: string | number }): string;',
+    );
     put(
       'src/usage.ts',
-      `import type { Namespaces } from '@parlajs/core';
+      `import type { Namespaces, Text } from '@parlajs/core';
 import './parla/catalog.js';
 declare const t: Namespaces['checkout'];
+export const title: Text = t.title;
+// @ts-expect-error a plain message takes no params
+t.title({});
 declare const c: Namespaces['common'];
 export const ok: string[] = [t.title(), t.cart.items({ count: 2 }), t.total({ amount: 3 }), c.greeting({ name: 'Ada' })];
 // @ts-expect-error count must be a number
@@ -246,11 +272,25 @@ describe('one catalog, two node types', () => {
       configModule({
         locales: ['en'],
         markup: ['strong'],
-        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+        namespaces: {
+          app: { format: 'icu', path: 'locales/{locale}/app.json' },
+          plain: { format: 'icu', path: 'locales/{locale}/plain.json' },
+        },
       }),
     );
-    write('locales/en/app.json', { title: 'Title', terms: 'Read the <link>terms</link>' });
+    write('locales/en/app.json', {
+      title: 'Title',
+      nav: { home: 'Home', help: 'Read the <link>help</link>' },
+      terms: 'Read the <link>terms</link>',
+    });
+    write('locales/en/plain.json', { save: 'Save' });
     await build({ cwd: dir, write: 'types' });
+    const appTypes = readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8');
+    expect(appTypes).toContain('export interface AppText {\n  /** Title */\n  title: Text;\n}');
+    expect(appTypes).toMatch(/export interface AppMessages<Node> extends AppText \{\n\s+nav: \{/);
+    expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toMatch(
+      /"app": AppMessages<Node>;\s+"plain": PlainMessages;/,
+    );
 
     write(
       'src/usage.ts',
@@ -261,11 +301,23 @@ import type { Translations } from '@parlajs/core';
 import { createParla as createReact } from '@parlajs/react';
 import type { WrapRich } from '@parlajs/react';
 import { catalog } from './parla/catalog.js';
+import type { AppMessages, AppText, PlainMessages } from './parla/catalog.js';
 
 const web = createReact({ catalog, markup: { strong: (c) => createElement('b', null, c) } });
 const email = createCore({ catalog, markup: { strong: (c) => \`**\${c}**\` } });
 const { app: w } = await web.load(['app']);
 const { app: e } = await email.load(['app']);
+// @ts-expect-error a namespace without markup takes no node type
+export type PlainOfString = PlainMessages<string>;
+// @ts-expect-error the plain part of a namespace with markup takes no node type
+export type TextOfString = AppText<string>;
+export const plainPart: AppText = {} as AppMessages<ReactNode>;
+const { plain: wp } = await web.load(['plain']);
+const { plain: ep } = await email.load(['plain']);
+export const saves: string[] = [wp.save(), ep.save()];
+export const help: ReactNode = w.nav.help({ link: (c) => c });
+// @ts-expect-error a group with markup follows the instance's node type
+export const helpText: string = w.nav.help({ link: (c) => c });
 export const titles: string[] = [w.title(), e.title()];
 export const node: ReactNode = w.terms({ link: (c) => createElement('a', null, c) });
 export const text: string = e.terms({ link: (c) => \`[\${c}]\` });
@@ -384,9 +436,83 @@ describe('select keys', () => {
     );
     const built = await build({ cwd: dir, write: 'types' });
     expect(built.diagnostics).toStrictEqual([]);
-    expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toContain(
+    expect(readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8')).toContain(
       'reply(params: { g: "female" | "male" | (string & {}) }): string;',
     );
+  });
+});
+
+describe('select params', () => {
+  const dir = join(repo, '.tmp', 'build-test-branches');
+  const write = (file: string, content: unknown): void => {
+    const path = join(dir, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+  };
+
+  it("are required only in their branch, and a translation's branch needs no more", async () => {
+    rmSync(dir, { recursive: true, force: true });
+    write(
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'it'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    const ref = '{kind, select, part {Part {part}} chapter {Chapter {chapter}} other {{title}}}';
+    write('locales/en/app.json', {
+      ref,
+      heading: '{context, select, part_one {Part one} other {Part {part} / {title}}}',
+    });
+    write('locales/it/app.json', {
+      ref: '{kind, select, part {Parte {part}} chapter {Capitolo {chapter}} other {{title}}}',
+      heading: '{context, select, part_one {Parte {part}} other {Parte {part} / {title}}}',
+    });
+    const built = await build({ cwd: dir, write: 'types' });
+    expect(
+      built.diagnostics.map((d) => `${d.code}:${d.locale}:${d.key}:${d.message}`),
+    ).toStrictEqual([
+      'param-mismatch:it:heading:needs $part when $context is "part_one", but the source does not',
+    ]);
+    write(
+      'src/usage.ts',
+      `import type { Namespaces } from '@parlajs/core';
+import './parla/catalog.js';
+declare const t: Namespaces['app'];
+export const ok: string[] = [
+  t.ref({ kind: 'part', part: 1 }),
+  t.ref({ kind: 'chapter', chapter: 2 }),
+  t.ref({ kind: 'book', title: 'Dune' }),
+  t.heading({ context: 'part_one' }),
+  t.heading({ context: 'part_two', part: 2, title: 'Dune' }),
+];
+// @ts-expect-error \`part\` is needed when kind is "part"
+t.ref({ kind: 'part', chapter: 2 });
+// @ts-expect-error \`chapter\` is needed when kind is "chapter"
+t.ref({ kind: 'chapter' });
+// @ts-expect-error any other kind needs \`title\`
+t.ref({ kind: 'book' });
+// @ts-expect-error any other context needs \`part\` and \`title\`
+t.heading({ context: 'part_two' });
+`,
+    );
+    write('tsconfig.json', {
+      compilerOptions: {
+        strict: true,
+        noEmit: true,
+        module: 'preserve',
+        moduleResolution: 'bundler',
+        skipLibCheck: false,
+        allowImportingTsExtensions: true,
+        types: [],
+        paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
+      },
+      include: ['src'],
+    });
+    const tsc = join(repo, 'node_modules/.bin/tsc');
+    expect(() =>
+      execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
+    ).not.toThrow();
   });
 });
 
@@ -403,20 +529,26 @@ describe('interface names', () => {
         namespaces: {
           'foo-bar': { format: 'icu', path: 'locales/{locale}/foo-bar.json' },
           foo_bar: { format: 'icu', path: 'locales/{locale}/foo_bar.json' },
+          '-': { format: 'icu', path: 'locales/{locale}/dash.json' },
         },
       }),
     );
+    writeFileSync(join(dir, 'locales/en/dash.json'), JSON.stringify({ go: 'Go', b: '<b>B</b>' }));
     writeFileSync(join(dir, 'locales/en/foo-bar.json'), JSON.stringify({ dash: 'Dash' }));
     writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
     await build({ cwd: dir, write: 'types' });
+    const types = (ns: string): string =>
+      readFileSync(join(dir, `src/parla/types/${ns}.d.ts`), 'utf8');
+    expect(types('foo-bar')).toContain(
+      'export interface FooBarMessages {\n  /** Dash */\n  dash: Text;',
+    );
+    expect(types('foo_bar')).toContain(
+      'export interface FooBar2Messages {\n  /** Under */\n  under: Text;',
+    );
+    // not `Text`, which would shadow the imported one
+    expect(types('-')).toContain('export interface _Messages<Node> extends _Text {');
     const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
-    expect(dts).toContain(
-      'export interface FooBarMessages<Node> {\n  /** Dash */\n  dash(): string;',
-    );
-    expect(dts).toContain(
-      'export interface FooBar2Messages<Node> {\n  /** Under */\n  under(): string;',
-    );
-    expect(dts).toMatch(/"foo-bar": FooBarMessages<Node>;\s+"foo_bar": FooBar2Messages<Node>;/);
+    expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
   });
 });
 
@@ -457,7 +589,9 @@ describe('custom functions and default markup', () => {
     expect(dts).toContain(
       '  interface FunctionRegistry {\n    "capitalize": true;\n  }\n  interface MarkupRegistry {\n    "strong": true;\n  }\n',
     );
-    expect(dts).toContain('bold(params?: { strong?: (children: Node) => Node }): Node;');
+    expect(readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8')).toContain(
+      'bold(params?: { strong?: (children: Node) => Node }): Node;',
+    );
 
     const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
       catalog: Catalog;

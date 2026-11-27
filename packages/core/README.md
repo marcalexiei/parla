@@ -26,6 +26,7 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | `parla.register(catalog)`   | Adds a catalog's namespaces; the same locales only                   |
 | `parla.subscribe(listener)` | Called after each switch                                             |
 | `Translations<'a' \| 'b'>`  | The type of `t` for those namespaces                                 |
+| `Text`                      | A message without params or markup: `() => string`                   |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
 
 `createParla` also takes `functions` and `markup`, required with every name the config's

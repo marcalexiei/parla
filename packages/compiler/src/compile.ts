@@ -24,6 +24,11 @@ export interface MessageInfo {
   params: Map<string, Array<ParamKind>>;
   markup: Set<string>;
   rich: boolean;
+  /**
+   * Set when a `:string` selector's value decides which params a call needs: the params each key
+   * needs, `null` for any other string. Unset when every key needs the same.
+   */
+  branches?: { param: string; needs: Map<string | null, Set<string>> };
 }
 
 export interface CompiledMessage {
@@ -92,6 +97,9 @@ class MessageCompiler {
   private readonly scope: ModuleScope;
   private readonly custom: CustomKinds;
   readonly info: MessageInfo = { params: new Map(), markup: new Set(), rich: false };
+  /** The params read outside any variant, and those the variant being compiled reads. */
+  private readonly shared = new Set<string>();
+  private reads: Set<string> | undefined;
 
   constructor(scope: ModuleScope, custom: CustomFunctions) {
     this.scope = scope;
@@ -102,6 +110,7 @@ class MessageCompiler {
     const list = this.info.params.get(param) ?? [];
     list.push(kind);
     this.info.params.set(param, list);
+    (this.reads ?? this.shared).add(param);
   }
 
   private resolve(name: string): Binding {
@@ -237,7 +246,14 @@ class MessageCompiler {
     });
     const keys = msg.variants.map((v) => v.keys.map((k) => (k.type === '*' ? null : k.value)));
     const pick = `$.pick([${selectors.join(', ')}], ${this.scope.hoist(JSON.stringify(keys))})`;
-    const codes = msg.variants.map((v) => this.pattern(v.value).code);
+    const reads: Array<Set<string>> = [];
+    const codes = msg.variants.map((v) => {
+      this.reads = new Set();
+      reads.push(this.reads);
+      return this.pattern(v.value).code;
+    });
+    this.reads = undefined;
+    this.branch(msg, reads);
     // `one`/`other` is the commonest select, and a ternary a fraction of a switch's size.
     if (codes.length === 2) {
       const [first, second] = codes as [string, string];
@@ -245,6 +261,60 @@ class MessageCompiler {
     }
     const cases = codes.map((code, i) => `case ${i}: return ${code};`);
     return `{ switch (${pick}) { ${cases.join(' ')} } }`;
+  }
+
+  /** Fills `info.branches` when exactly one selector is a `:string` param's. */
+  private branch(msg: Model.SelectMessage, reads: ReadonlyArray<Set<string>>): void {
+    const strings = msg.selectors.flatMap((sel, i) => {
+      const b = this.resolve(sel.name);
+      return b.fn?.name === 'string' && b.param ? [{ i, param: b.param }] : [];
+    });
+    const [only] = strings;
+    const kinds = only && this.info.params.get(only.param);
+    if (
+      strings.length !== 1 ||
+      !only ||
+      kinds?.some((k) => k.kind !== 'select' && k.kind !== 'string' && k.kind !== 'any')
+    ) {
+      return;
+    }
+    const keyOf = (v: Model.Variant): string | null => {
+      const key = v.keys[only.i];
+      return !key || key.type === '*' ? null : key.value;
+    };
+    const readBy = (match: (v: Model.Variant) => boolean): Set<string> => {
+      const out = new Set(this.shared);
+      for (const [n, v] of msg.variants.entries()) {
+        for (const param of match(v) ? (reads[n] ?? []) : []) {
+          out.add(param);
+        }
+      }
+      return out;
+    };
+    const needs = new Map<string | null, Set<string>>();
+    for (const key of new Set(msg.variants.map(keyOf))) {
+      if (key === null) {
+        needs.set(
+          null,
+          readBy((v) => keyOf(v) === null),
+        );
+        continue;
+      }
+      // First, the selector decides alone where a variant has `*` for every other selector.
+      const covered =
+        only.i === 0 &&
+        msg.variants.some(
+          (v) => keyOf(v) === key && v.keys.every((k, j) => j === 0 || k.type === '*'),
+        );
+      needs.set(
+        key,
+        readBy((v) => keyOf(v) === key || (!covered && keyOf(v) === null)),
+      );
+    }
+    const sets = [...needs.values()];
+    if (sets.some((set) => set.size !== sets[0]?.size || [...set].some((p) => !sets[0]?.has(p)))) {
+      this.info.branches = { param: only.param, needs };
+    }
   }
 }
 
