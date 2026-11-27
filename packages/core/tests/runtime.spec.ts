@@ -119,6 +119,14 @@ describe(createRuntime, () => {
     expect(() => ext.f('toString', 1)).toThrow(/unknown message function/);
   });
 
+  it('formats with the first fallback Intl has data for', () => {
+    // `qaa` is a private-use code: no engine has data for it.
+    const fur = createRuntime('qaa', undefined, {}, ['it', 'en']);
+    expect(fur.str(12_345.5)).toBe('12.345,5');
+    expect(fur.f('currency', 2, { currency: 'EUR' })).toBe('2,00\u00A0€');
+    expect(fur.sn(1_000_000)).toStrictEqual({ n: 1_000_000, cat: 'many' });
+  });
+
   it('renders default markup unless the call passes its own', () => {
     const ext = createRuntime('en', undefined, { markup: { b: (c) => `*${String(c)}*` } });
     expect(ext.tag({}, 'b', ['bold'])).toBe('*bold*');

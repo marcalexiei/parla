@@ -1,7 +1,14 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createParla, matchLocale } from '../src/index.ts';
-import type { Catalog, Loader, MessageModule, Namespace, NamespaceKind } from '../src/index.ts';
+import type {
+  Catalog,
+  Loader,
+  MessageModule,
+  MessageRuntime,
+  Namespace,
+  NamespaceKind,
+} from '../src/index.ts';
 
 interface Common {
   nav: { home: () => string };
@@ -20,6 +27,12 @@ const accessorOf = (messages: Messages): object =>
 const chunk = (messages: Messages): MessageModule => ({ default: () => accessorOf(messages) });
 
 const catalog: Catalog = { locales: ['en', 'it'], sourceLocale: 'en' };
+
+// A chunk that formats a number, so the locale `Intl` picked shows.
+const amountChunk: Loader = async () =>
+  Promise.resolve({
+    default: (rt: MessageRuntime): object => ({ n: (): string => rt.str(12_345.5) }),
+  });
 
 type Built = Namespace<string, NamespaceKind, 'en' | 'it'>;
 
@@ -53,6 +66,19 @@ function makeNamespaces(): {
 }
 
 describe(createParla, () => {
+  it('formats with the catalog fallbacks where Intl lacks the locale', async () => {
+    const amount: Namespace<string, NamespaceKind, 'en' | 'qaa'> = {
+      name: 'amount',
+      load: { en: amountChunk, qaa: amountChunk },
+    };
+    const parla = createParla({
+      catalog: { locales: ['en', 'qaa'], sourceLocale: 'en', fallbacks: { qaa: ['it', 'en'] } },
+      locale: 'qaa',
+    });
+    const t = await parla.load([amount]);
+    expect((t['amount'] as { n: () => string }).n()).toBe('12.345,5');
+  });
+
   it('loads each namespace once and returns messages keyed by name', async () => {
     const { common, checkout, calls } = makeNamespaces();
     const parla = createParla({ catalog });
