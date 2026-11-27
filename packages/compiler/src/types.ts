@@ -14,15 +14,18 @@ function interfaceName(namespace: string): string {
   return `${/^(?:\d|$)/.test(pascal) ? '_' : ''}${pascal}Messages`;
 }
 
-// Not valid as a `const` name in a module.
+// Not valid as a `const` name in a module, or a built-in TypeScript rejects as one.
 const RESERVED = new Set(
-  'arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield'.split(
+  'arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function globalThis if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof undefined var void while with yield'.split(
     ' ',
   ),
 );
 
-/** The namespace object's export: `checkout`, `fooBar`, `_1x`. */
-export function exportName(iface: string): string {
+/** The name itself where it is an identifier, to match `t`'s key; else `foo-bar` → `fooBar`. */
+export function exportName(namespace: string, iface: string): string {
+  if (IDENT.test(namespace) && !RESERVED.has(namespace)) {
+    return namespace;
+  }
   const base = iface.replace(/Messages$/, '');
   const camel = base.charAt(0).toLowerCase() + base.slice(1);
   return RESERVED.has(camel) ? `_${camel}` : camel;

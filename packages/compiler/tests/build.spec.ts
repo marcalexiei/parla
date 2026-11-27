@@ -499,7 +499,16 @@ describe('names', () => {
 
   it('are numbered when two namespaces would share one, and never shadow an import or a keyword', async () => {
     rmSync(dir, { recursive: true, force: true });
-    const files = { 'foo-bar': {}, foo_bar: {}, '-': {}, namespace: {}, default: {}, nav: {} };
+    const files = {
+      'foo-bar': {},
+      foo_bar: {},
+      '-': {},
+      namespace: {},
+      default: {},
+      undefined: {},
+      scope_audit: {},
+      nav: {},
+    };
     put(
       dir,
       'parla.config.ts',
@@ -518,6 +527,8 @@ describe('names', () => {
     put(dir, 'locales/en/foo_bar.json', { under: 'Under' });
     put(dir, 'locales/en/namespace.json', { ns: 'Namespace' });
     put(dir, 'locales/en/default.json', { def: 'Default' });
+    put(dir, 'locales/en/undefined.json', { undef: 'Undefined' });
+    put(dir, 'locales/en/scope_audit.json', { scope: 'Scope' });
     // `Text` only inside a group with markup still needs its import.
     put(dir, 'locales/en/nav.json', { nav: { home: 'Home', help: '<b>Help</b>' } });
     await build({ cwd: dir });
@@ -530,12 +541,17 @@ describe('names', () => {
     expect(types('foo_bar')).toContain(
       'export interface FooBar2Messages {\n  /** Under */\n  under: Text;',
     );
-    expect(types('foo_bar')).toContain('export declare const fooBar2: Namespace<"foo_bar"');
+    // the name itself where it is an identifier, matching `t.foo_bar`
+    expect(types('foo_bar')).toContain('export declare const foo_bar: Namespace<"foo_bar"');
+    expect(types('scope_audit')).toContain(
+      'export declare const scope_audit: Namespace<"scope_audit"',
+    );
     // not `Text`, which would shadow the imported one
     expect(types('-')).toContain('export interface _Messages<Node> extends _Text {');
     // not `NamespaceKind`, which would shadow the imported one
     expect(types('namespace')).toContain('export interface Namespace2Kind extends NamespaceKind');
     expect(types('default')).toContain('export declare const _default: Namespace<"default"');
+    expect(types('undefined')).toContain('export declare const _undefined: Namespace<"undefined"');
     // without it, `Text` would be the DOM's text node
     expect(types('nav')).toContain(
       "import type { Namespace, NamespaceKind, Text } from '@parlajs/core';",

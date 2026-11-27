@@ -286,7 +286,7 @@ export interface ${kind} extends NamespaceKind {
   readonly messages: ${iface}${types.generic ? "<this['node']>" : ''};
 }
 
-export declare const ${exportName(iface)}: Namespace<${JSON.stringify(namespace)}, ${kind}, ${localeType(config)}>;
+export declare const ${exportName(namespace, iface)}: Namespace<${JSON.stringify(namespace)}, ${kind}, ${localeType(config)}>;
 `;
 }
 
@@ -298,7 +298,7 @@ function namespaceModule(namespace: string, iface: string, locales: ReadonlyArra
         `    ${JSON.stringify(l)}: () => import(${JSON.stringify(`../messages/${l}/${namespace}.js`)}),`,
     )
     .join('\n');
-  return `${HEADER}export const ${exportName(iface)} = {\n  name: ${JSON.stringify(namespace)},\n  load: {\n${loaders}\n  },\n};\n`;
+  return `${HEADER}export const ${exportName(namespace, iface)} = {\n  name: ${JSON.stringify(namespace)},\n  load: {\n${loaders}\n  },\n};\n`;
 }
 
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {

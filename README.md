@@ -87,8 +87,8 @@ createRoot(root).render(
 
 ## Loading
 
-Each namespace compiles to `<outDir>/namespaces/<name>.js`. Import it, and pass a list; `t` is
-keyed by name:
+Each namespace compiles to `<outDir>/namespaces/<name>.js`, exporting it under that name (`foo-bar`
+becomes `fooBar`). Import it, and pass a list; `t` is keyed by name:
 
 ```tsx
 import { checkout } from './parla/namespaces/checkout.js';
