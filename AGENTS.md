@@ -49,7 +49,7 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
   either instance's `t` fits it. `Translations` is `in out Node`: TypeScript cannot see `Node`
   through the kind.
 - **A select's params are typed per branch** when one `:string` selector decides them: one union
-  member per key, `string` for the rest. Cost: ~2 types per such message.
+  member per key, and `string`, which may hold any key, needs them all. Cost: ~2 types per such message.
 - **A namespace has one owner package**, which fixes its locales and fallbacks: an app may have
   fewer locales, not more, and one missing fails in types and at the first `load`. A second object
   of one name is caught only at runtime: the first wins, with a warning.

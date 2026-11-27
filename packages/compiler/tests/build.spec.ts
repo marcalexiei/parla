@@ -473,10 +473,11 @@ describe('select params', () => {
       'src/usage.ts',
       `import type { AppMessages } from './parla/namespaces/app.js';
 declare const t: AppMessages;
+declare const kind: string;
 export const ok: string[] = [
   t.ref({ kind: 'part', part: 1 }),
   t.ref({ kind: 'chapter', chapter: 2 }),
-  t.ref({ kind: 'book', title: 'Dune' }),
+  t.ref({ kind, part: 1, chapter: 2, title: 'Dune' }),
   t.heading({ context: 'part_one' }),
   t.heading({ context: 'part_two', part: 2, title: 'Dune' }),
 ];
@@ -484,8 +485,8 @@ export const ok: string[] = [
 t.ref({ kind: 'part', chapter: 2 });
 // @ts-expect-error \`chapter\` is needed when kind is "chapter"
 t.ref({ kind: 'chapter' });
-// @ts-expect-error any other kind needs \`title\`
-t.ref({ kind: 'book' });
+// @ts-expect-error a plain string may be any kind, so it needs every branch's params
+t.ref({ kind, title: 'Dune' });
 // @ts-expect-error any other context needs \`part\` and \`title\`
 t.heading({ context: 'part_two' });
 `,

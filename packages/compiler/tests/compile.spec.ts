@@ -168,20 +168,20 @@ describe(signature, () => {
     expect(compile('icu', '{g, select, a {A {n}} other {B {n}}}').sig).toBe(
       '(params: { g: "a" | (string & {}); n: string | number }): string',
     );
-    // A nested plural is a second selector: the outer key still decides alone.
+    // A nested plural is a second selector: the outer key still decides alone. A plain string needs every param.
     expect(
       compile(
         'icu',
         '{g, select, male {{n, plural, one {# {x}} other {#}}} other {{n, number} {y}}}',
       ).sig,
     ).toBe(
-      '(params: { g: "male"; n: number; x: string | number } | { g: string; n: number; y: string | number }): string',
+      '(params: { g: "male"; n: number; x: string | number } | { g: string; n: number; x: string | number; y: string | number }): string',
     );
     // Not first, so `a` may fall through to `*` for some `n`.
     const later =
       '.input {$n :number}\n.input {$g :string}\n.match $n $g\none a {{{$x}}}\n* * {{{$y}}}';
     expect(compile('mf2', later).sig).toBe(
-      '(params: { g: "a"; n: number; x: string | number; y: string | number } | { g: string; n: number; y: string | number }): string',
+      '(params: { g: "a"; n: number; x: string | number; y: string | number } | { g: string; n: number; x: string | number; y: string | number }): string',
     );
   });
 });

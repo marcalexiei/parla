@@ -110,6 +110,15 @@ function Total({ t }: { t: Translations<typeof checkout> }) {
 `useLocale()` returns `{ locale, locales, setLocale }`. To load by name from data, keep a map:
 `{ checkout, common }[name]`.
 
+Nothing lists every namespace, so an app cannot ship them all by accident. A test that loads them
+all can glob them with Vite:
+
+```ts
+const all = Object.values(
+  import.meta.glob<Record<string, Namespace>>('./parla/namespaces/*.js', { eager: true }),
+).flatMap((mod) => Object.values(mod));
+```
+
 ## Monorepos and polyrepos
 
 One package owns each namespace and builds it; every other package imports its built objects.
@@ -168,7 +177,7 @@ parla check [--json]    validate; exit 1 on errors
 | Rich text    | `<link>…</link>`                          | `{#link}…{/link}`, `{#br/}`                             |
 
 A select's params are typed per branch: `{ context: 'part_one' }` needs only what that branch
-reads, and any other value needs the `other` branch's.
+reads, and any other value, or a plain `string`, needs every branch's.
 
 Formatting uses `Intl`: no locale data to ship.
 

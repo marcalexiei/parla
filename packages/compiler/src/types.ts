@@ -103,13 +103,15 @@ export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new
   const { branches } = info;
   if (branches) {
     // One member per key, so a key's own params are required only with it; `string` last.
+    const every = new Set([...branches.needs.values()].flatMap((names) => [...names]));
     const members = [...branches.needs]
       .toSorted(
         ([a], [b]) => Number(a === null) - Number(b === null) || String(a).localeCompare(String(b)),
       )
       .map(([key, names]) => {
-        const type = key === null ? 'string' : JSON.stringify(key);
-        return `{ ${fields(info, names, defaults, [branches.param, type]).fields.join('; ')} }`;
+        // a plain `string` may hold any key, so it needs every branch's params
+        const [type, needed] = key === null ? ['string', every] : [JSON.stringify(key), names];
+        return `{ ${fields(info, needed, defaults, [branches.param, type]).fields.join('; ')} }`;
       });
     return `(params: ${members.join(' | ')}): ${ret}`;
   }
