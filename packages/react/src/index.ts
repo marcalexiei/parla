@@ -2,7 +2,6 @@ import { createParla as createCoreParla } from '@parlajs/core';
 import type {
   Locale,
   Namespace,
-  Namespaces as CoreNamespaces,
   Parla as CoreParla,
   ParlaOptions as CoreParlaOptions,
   Translations as CoreTranslations,
@@ -35,13 +34,12 @@ export {
   type MessageModule,
   type MessageRuntime,
   type Namespace,
-  type NamespaceRegistry,
+  type NamespaceKind,
   type SelectorValue,
   type Text,
 } from '@parlajs/core';
 
 /* Core's types with rich text as a `ReactNode`. */
-export type Namespaces = CoreNamespaces<ReactNode>;
 export type Parla = CoreParla<ReactNode>;
 export type ParlaOptions = CoreParlaOptions<ReactNode>;
 export type Translations<NS extends Namespace> = CoreTranslations<NS, ReactNode>;

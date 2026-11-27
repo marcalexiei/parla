@@ -61,14 +61,16 @@ write('package.json', {
   private: true,
   type: 'module',
   dependencies: { '@parlajs/react': '*' },
-  parla: {
+});
+write(
+  'parla.config.ts',
+  `export default ${JSON.stringify({
     locales: ['en', 'it'],
-    outDir: 'src/parla',
     functions: { capitalize: 'string' },
     markup: ['strong'],
     namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
-  },
-});
+  })};\n`,
+);
 const messages = {
   hi: 'Hi {name, capitalize}',
   bold: 'A <strong>bold</strong> move',
@@ -92,6 +94,7 @@ import type { ReactNode } from 'react';
 import type { Plugin } from 'vite';
 
 import { catalog } from './parla/catalog.js';
+import { app } from './parla/namespaces/app.js';
 
 export const plugin: Plugin = parlaPlugin();
 export const tools = [build, compileMessage, createRuntime, icu, mf2];
@@ -99,9 +102,9 @@ const functions: Record<FunctionName, MessageFunction> = { capitalize: (value) =
 const markup: Record<MarkupName, (children: ReactNode) => ReactNode> = { strong: (children) => children };
 export const parla = createParla({ catalog, functions, markup });
 export const locale: Locale = 'it';
-export const namespace: Namespace = 'app';
+export const namespace: Namespace = app;
 export function App(): ReactNode {
-  const { t } = useParla(['app']);
+  const { t } = useParla([app]);
   const { setLocale } = useLocale();
   void setLocale('en');
   return [
@@ -113,7 +116,7 @@ export function App(): ReactNode {
     t.app.pick({ g: 'a' }),
   ];
 }
-export function Child({ t }: { t: Translations<'app'> }): ReactNode {
+export function Child({ t }: { t: Translations<typeof app> }): ReactNode {
   return t.app.bold();
 }
 export const Provider = ParlaProvider;

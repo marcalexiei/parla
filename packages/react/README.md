@@ -7,11 +7,12 @@ React bindings for [Parla](https://github.com/marcalexiei/parla). Re-exports
 import { createParla, ParlaProvider, useLocale, useParla } from '@parlajs/react';
 
 import { catalog } from './parla/catalog.js'; // written by `parla build`
+import { checkout } from './parla/namespaces/checkout.js';
 
 const parla = createParla({ catalog });
 
 function Cart({ count }: { count: number }) {
-  const { t } = useParla(['checkout']); // suspends until loaded
+  const { t } = useParla([checkout]); // suspends until loaded
   const { locale, locales, setLocale } = useLocale();
   return (
     <>
@@ -35,12 +36,12 @@ createRoot(root).render(
 );
 ```
 
-- `useParla(['a', 'b'])` returns `{ t }`, keyed by namespace. Loaded namespaces never suspend:
+- `useParla([a, b])` returns `{ t }`, keyed by name. Loaded namespaces never suspend:
   `await parla.load([...])` in a route loader to skip the fallback.
 - A locale switch never suspends: `setLocale` loads first. If a download fails, it rejects and
   keeps the current locale: handle it (`.catch`), or it is an unhandled rejection.
 - A failed download reaches the nearest error boundary.
-- `Parla`, `ParlaOptions`, `Translations` and `Namespaces` type rich text as `ReactNode`;
+- `Parla`, `ParlaOptions` and `Translations` type rich text as `ReactNode`;
   `@parlajs/core`'s stay `string`.
 
 ## License

@@ -7,7 +7,13 @@ import { expect } from 'vitest';
 import type { Bench, BenchFn, BenchRunOptions } from 'vitest';
 
 import type { build, formatDiagnostic } from '../packages/compiler/src/index.ts';
-import type { Catalog, createParla, Loader, MessageModule } from '../packages/core/src/index.ts';
+import type {
+  Catalog,
+  createParla,
+  Loader,
+  MessageModule,
+  Namespace,
+} from '../packages/core/src/index.ts';
 
 import { writeFixture } from './fixture.ts';
 
@@ -26,8 +32,12 @@ export interface Side {
   readonly core: Core;
   readonly compiler: Compiler;
   readonly dir: string;
-  /** Every chunk imported up front, so a load times Parla rather than the module loader. */
   readonly catalog: Catalog;
+  /**
+   * What `load` takes for a namespace: its name on `main`, its object on the branch. Every chunk is
+   * imported up front, so a load times Parla rather than the module loader.
+   */
+  readonly ns: (name: string) => Namespace;
   /** Gzipped bytes of every generated chunk. */
   readonly gzip: number;
 }
@@ -54,15 +64,33 @@ async function prepare(name: Side['name'], root: string): Promise<Side> {
   }
 
   const out = join(dir, 'src/parla');
-  const built = await importFrom<{ catalog: Catalog }>(join(out, 'catalog.js'));
-  const namespaces: Record<string, Record<string, Loader>> = {};
-  for (const [ns, perLocale] of Object.entries(built.catalog.namespaces)) {
-    namespaces[ns] = {};
-    for (const [locale, loader] of Object.entries(perLocale)) {
-      const mod = await loader();
-      namespaces[ns][locale] = async (): Promise<MessageModule> => Promise.resolve(mod);
+  // `main`'s catalog lists the loaders; the branch writes one object per namespace.
+  const built = await importFrom<{
+    catalog: Catalog & { namespaces?: Record<string, Record<string, Loader>> };
+  }>(join(out, 'catalog.js'));
+  const loaders = built.catalog.namespaces ?? {};
+  if (!built.catalog.namespaces) {
+    for (const file of readdirSync(join(out, 'namespaces')).filter((f) => f.endsWith('.js'))) {
+      const mod = await importFrom<Record<string, Namespace>>(join(out, 'namespaces', file));
+      for (const { name: key, load } of Object.values(mod)) {
+        loaders[key] = load;
+      }
     }
   }
+  const namespaces: Record<string, Record<string, Loader>> = {};
+  for (const [ns, perLocale] of Object.entries(loaders)) {
+    const preloaded: Record<string, Loader> = {};
+    for (const [locale, loader] of Object.entries(perLocale)) {
+      const mod = await loader();
+      preloaded[locale] = async (): Promise<MessageModule> => Promise.resolve(mod);
+    }
+    namespaces[ns] = preloaded;
+  }
+  const objects = new Map(
+    Object.entries(namespaces).map(([key, load]) => [key, { name: key, load }]),
+  );
+  const ns = (key: string): Namespace =>
+    built.catalog.namespaces ? (key as never) : (objects.get(key) as Namespace);
 
   let gzip = 0;
   for (const file of readdirSync(join(out, 'messages'), { recursive: true, encoding: 'utf8' })) {
@@ -71,7 +99,15 @@ async function prepare(name: Side['name'], root: string): Promise<Side> {
     }
   }
 
-  return { name, core, compiler, dir, catalog: { ...built.catalog, namespaces }, gzip };
+  return {
+    name,
+    core,
+    compiler,
+    dir,
+    catalog: { ...built.catalog, namespaces } as Catalog,
+    ns,
+    gzip,
+  };
 }
 
 /** The branch, then `main` from the checkout `PARLA_BASE` points at, when it is set and builds. */

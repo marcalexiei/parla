@@ -11,15 +11,11 @@ export {
 } from './runtime.ts';
 
 /*
- * Augmented by generated code, one member per name. Several generated files (a package's
- * `parla types`, the app's `parla build`) add to the same registry instead of replacing it.
- * Do not augment them by hand.
+ * Augmented by generated code, one member per name, so several generated files add up instead of
+ * clashing. Do not augment them by hand.
  */
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface LocaleRegistry {}
-// Ambient, so `noUnusedLocals` allows `Node`, which only augmentations use.
-// oxlint-disable-next-line typescript/no-empty-object-type, no-unused-vars -- the augmentation target
-export declare interface NamespaceRegistry<Node> {}
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
 export interface FunctionRegistry {}
 // oxlint-disable-next-line typescript/no-empty-object-type -- the augmentation target
@@ -29,13 +25,6 @@ export interface MarkupRegistry {}
 export type Locale = [keyof LocaleRegistry] extends [never]
   ? string
   : Extract<keyof LocaleRegistry, string>;
-/* oxlint-disable typescript/no-generated-empty-object-type -- empty until generated types augment it */
-/** `Node`: what a message with markup returns, `ReactNode` with `@parlajs/react`. */
-export type Namespaces<Node = string> = [keyof NamespaceRegistry<Node>] extends [never]
-  ? Record<string, object>
-  : NamespaceRegistry<Node>;
-/* oxlint-enable typescript/no-generated-empty-object-type */
-export type Namespace = keyof Namespaces;
 /** The config's `functions`: each needs an implementation in `createParla({ functions })`. */
 export type FunctionName = Extract<keyof FunctionRegistry, string>;
 /** The config's `markup`: each needs a renderer in `createParla({ markup })`. */
@@ -51,23 +40,47 @@ export interface MessageModule {
 }
 export type Loader = () => Promise<MessageModule>;
 
+/**
+ * A namespace's messages. A generated kind with markup reads `this['node']`, so one namespace types
+ * a React and a string instance differently.
+ */
+export interface NamespaceKind {
+  readonly node: unknown;
+  readonly messages: unknown;
+}
+
+declare const kind: unique symbol;
+
+/**
+ * Emitted by `parla build` as `namespaces/<name>.js`: importing it is what makes it loadable. `L`
+ * defaults to the app's locales, so `Namespace` is one built for at least those.
+ */
+export interface Namespace<
+  Name extends string = string,
+  Kind extends NamespaceKind = NamespaceKind,
+  L extends string = Locale,
+> {
+  readonly name: Name;
+  /** One chunk loader per locale it was built for. */
+  readonly load: Readonly<Record<L, Loader>>;
+  /** Types only, never set. */
+  readonly [kind]?: Kind;
+}
+
+type MessagesOf<NS, Node> = NS extends { readonly [kind]?: infer K extends NamespaceKind }
+  ? (K & { readonly node: Node })['messages']
+  : never;
+
+/** What the runtime reads of a namespace, whatever locales the app declares. */
+interface Loadable {
+  readonly name: string;
+  readonly load: Readonly<Record<string, Loader>>;
+}
+
 /** Emitted by `parla build` as `catalog.js`. */
 export interface Catalog {
   readonly locales: ReadonlyArray<Locale>;
   readonly sourceLocale: Locale;
-  readonly namespaces: Readonly<Record<string, Readonly<Record<string, Loader>>>>;
-}
-
-/** A catalog, or the locales of the catalogs `register` adds later. */
-type CatalogOptions =
-  | { catalog: Catalog }
-  | { catalog?: undefined; locales: ReadonlyArray<Locale>; sourceLocale: Locale };
-
-interface BaseOptions<Node> {
-  /** Initial locale. Defaults to the source locale. */
-  locale?: Locale;
-  /** Turns message parts with markup into one node. Set by framework adapters. */
-  wrapRich?: WrapRich<Node>;
 }
 
 /** Required, with every declared name, once the config declares any. */
@@ -76,14 +89,21 @@ type Declared<K extends string, Name extends string, V> = [Name] extends [never]
   : Record<K, Readonly<Record<Name, V>>>;
 
 // `Node` is inferred from `wrapRich` alone, so a renderer returning another type is an error.
-export type ParlaOptions<Node = string> = CatalogOptions &
-  BaseOptions<Node> &
-  Declared<'functions', FunctionName, MessageFunction> &
+export type ParlaOptions<Node = string> = {
+  catalog: Catalog;
+  /** Initial locale. Defaults to the source locale. */
+  locale?: Locale;
+  /** Turns message parts with markup into one node. Set by framework adapters. */
+  wrapRich?: WrapRich<Node>;
+} & Declared<'functions', FunctionName, MessageFunction> &
   Declared<'markup', MarkupName, (children: NoInfer<Node>) => NoInfer<Node>>;
 
-/** Messages keyed by namespace: `t.checkout.title()`. Holding one proves its namespaces loaded. */
-export type Translations<NS extends Namespace, Node = string> = {
-  readonly [K in NS]: Namespaces<Node>[K];
+/**
+ * Messages keyed by namespace name, `t.checkout.title()`: holding one proves its namespaces loaded.
+ * `Node` is invariant because the kind hides it from TypeScript's variance check.
+ */
+export type Translations<NS extends Namespace, in out Node = string> = {
+  readonly [N in NS as N['name']]: MessagesOf<N, Node>;
 };
 
 export interface Parla<Node = string> {
@@ -94,15 +114,13 @@ export interface Parla<Node = string> {
   /**
    * Loads the namespaces for the current locale. The same list returns the same promise, carrying
    * `status` and `value` once settled, which React's `use()` reads without suspending. A failure
-   * is returned for a second, then retried.
+   * is returned for a second, then retried. Throws at once for a namespace missing a locale.
    */
   readonly load: <NS extends Namespace>(
     namespaces: ReadonlyArray<NS>,
   ) => Promise<Translations<NS, Node>>;
   /** Called after each locale switch. */
   readonly subscribe: (listener: () => void) => () => void;
-  /** Adds a catalog's namespaces; one already registered keeps its loaders. Same locales only. */
-  readonly register: (catalog: Catalog) => void;
 }
 
 // Marks the promise as React's `use()` reads it; awaited first, so set before `use()` wakes.
@@ -131,20 +149,21 @@ g[INSTANCE] = marker;
 /** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
   const { wrapRich } = options;
-  const { locales, sourceLocale } = options.catalog ?? options;
+  const { locales, sourceLocale } = options.catalog;
   const extensions = {
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
     markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
   };
-  const registered = new Map<string, Readonly<Record<string, Loader>>>();
+  const registered = new Map<string, Loadable>();
   let current: Locale = options.locale ?? sourceLocale;
   const listeners = new Set<() => void>();
   const runtimes = new Map<string, MessageRuntime>();
   const accessors = new Map<string, Promise<unknown>>();
   const settled = new Map<string, unknown>();
   const translations = new Map<string, Promise<object>>();
-  const loaded = new Set<Namespace>();
+  const loaded = new Set<string>();
   let switchToken = 0;
+  const warned = new Set<string>();
 
   const assertLocale = (locale: Locale): void => {
     if (!locales.includes(locale)) {
@@ -167,17 +186,15 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     locale: string,
     key: string,
   ): Promise<unknown> => {
-    const loader = registered.get(namespace)?.[locale];
-    if (!loader) {
-      throw new Error(`[parla] unknown namespace "${namespace}" for locale "${locale}"`);
-    }
+    // `adopt` checked every locale, and only adopted names reach here.
+    const loader = registered.get(namespace)?.load[locale] as Loader;
     const mod = await loader();
     const value = mod.default(runtime(locale));
     settled.set(key, value);
     return value;
   };
 
-  // After `set`: a failed download, or a namespace not registered yet, is retried on the next call.
+  // After `set`: a failed download is retried on the next call.
   const forgetOnFailure = async (promise: Promise<unknown>, key: string): Promise<void> => {
     try {
       await promise;
@@ -215,9 +232,40 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     }
   };
 
+  // A second object of one name is a second copy of its package: the first one's loaders win.
+  const adopt = (ns: Loadable): string => {
+    const known = registered.get(ns.name);
+    if (known === ns) {
+      return ns.name;
+    }
+    if (known) {
+      if (!warned.has(ns.name)) {
+        warned.add(ns.name);
+        // oxlint-disable-next-line no-console -- two copies may hold different messages
+        console.warn(
+          `[parla] two namespace objects are named "${ns.name}"; the first is used. Is its package bundled twice?`,
+        );
+      }
+      return ns.name;
+    }
+    if (typeof ns !== 'object') {
+      throw new TypeError(
+        `[parla] load takes namespace objects, not ${JSON.stringify(ns)}: import it from the generated namespaces/`,
+      );
+    }
+    const missing = locales.filter((l) => !Object.hasOwn(ns.load, l));
+    if (missing.length > 0) {
+      throw new Error(
+        `[parla] namespace "${ns.name}" was built for ${Object.keys(ns.load).join(', ')}, not ${missing.join(', ')}`,
+      );
+    }
+    registered.set(ns.name, ns);
+    return ns.name;
+  };
+
   // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
-  const load = (namespaces: ReadonlyArray<Namespace>, locale: Locale): Promise<object> => {
-    const list = [...new Set(namespaces)].toSorted();
+  const load = (namespaces: ReadonlyArray<Loadable>, locale: Locale): Promise<object> => {
+    const list = [...new Set(namespaces.map((ns) => adopt(ns)))].toSorted();
     const key = `${locale}\u0000${list.join('\u0000')}`;
     let promise = translations.get(key);
     if (!promise) {
@@ -248,26 +296,6 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     await loadAll(locale);
   };
 
-  const register = (catalog: Catalog): void => {
-    const same =
-      catalog.sourceLocale === sourceLocale &&
-      catalog.locales.length === locales.length &&
-      catalog.locales.every((l) => locales.includes(l));
-    if (!same) {
-      throw new Error(
-        `[parla] the catalog's locales ${catalog.locales.join(', ')} (source ${catalog.sourceLocale}) differ from ${locales.join(', ')} (source ${sourceLocale})`,
-      );
-    }
-    for (const [ns, loaders] of Object.entries(catalog.namespaces)) {
-      if (!registered.has(ns)) {
-        registered.set(ns, loaders);
-      }
-    }
-  };
-  if (options.catalog) {
-    register(options.catalog);
-  }
-
   return {
     get locale() {
       return current;
@@ -287,7 +315,6 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
         listener();
       }
     },
-    register,
     subscribe(listener) {
       listeners.add(listener);
       return () => {

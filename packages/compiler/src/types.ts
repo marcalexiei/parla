@@ -14,10 +14,25 @@ function interfaceName(namespace: string): string {
   return `${/^(?:\d|$)/.test(pascal) ? '_' : ''}${pascal}Messages`;
 }
 
+// Not valid as a `const` name in a module.
+const RESERVED = new Set(
+  'arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield'.split(
+    ' ',
+  ),
+);
+
+/** The namespace object's export: `checkout`, `fooBar`, `_1x`. */
+export function exportName(iface: string): string {
+  const base = iface.replace(/Messages$/, '');
+  const camel = base.charAt(0).toLowerCase() + base.slice(1);
+  return RESERVED.has(camel) ? `_${camel}` : camel;
+}
+
 /** {@link interfaceName} per namespace, numbered where two collide (`foo-bar`, `foo_bar`). */
 export function interfaceNames(namespaces: ReadonlyArray<string>): Map<string, string> {
   const names = new Map<string, string>();
-  const used = new Set<string>();
+  // its kind would shadow the imported `NamespaceKind`
+  const used = new Set<string>(['NamespaceMessages']);
   for (const namespace of namespaces) {
     const base = interfaceName(namespace);
     let name = base;
@@ -125,11 +140,12 @@ function render(tree: Tree, indent: string): string {
 }
 
 export interface NamespaceTypes {
+  /** The interfaces, without imports. */
   readonly code: string;
-  /** The interfaces `code` exports. */
-  readonly names: ReadonlyArray<string>;
   /** Whether the namespace's interface takes `Node`: only markup needs it. */
   readonly generic: boolean;
+  /** Whether `code` names `Text`. */
+  readonly usesText: boolean;
 }
 
 function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]>): Tree {
@@ -151,8 +167,6 @@ function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]
 }
 
 /**
- * `runtime`: the module `Text` comes from.
- *
  * Plain messages in a non-generic `XText`, and those with markup in `XMessages<Node> extends XText`,
  * so a wider `t` checks against a narrower one without instantiating every plain message.
  */
@@ -160,7 +174,6 @@ export function namespaceTypes(
   messages: Map<string, { info: MessageInfo; source: string }>,
   name: string,
   defaults: ReadonlySet<string>,
-  runtime: string,
 ): NamespaceTypes {
   const keys = [...messages.keys()];
   // A group goes whole into one interface: an extending interface cannot add to a base's group.
@@ -184,10 +197,9 @@ export function namespaceTypes(
   } else {
     code = `export interface ${text} {\n${body(plain)}\n}\n\n${code}`;
   }
-  const usesText = plain.some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text');
   return {
-    code: usesText ? `import type { Text } from '${runtime}';\n\n${code}` : code,
-    names: rich.length > 0 && plain.length > 0 ? [text, name] : [name],
+    code,
     generic: rich.length > 0,
+    usesText: plain.some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text'),
   };
 }

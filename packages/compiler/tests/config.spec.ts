@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { ConfigError, loadConfig } from '../src/config.ts';
+import { ConfigError, defineConfig, loadConfig } from '../src/config.ts';
 
 const dir = fileURLToPath(new URL('../../../.tmp/config-test', import.meta.url));
 
@@ -45,6 +45,24 @@ describe(loadConfig, () => {
     );
     const config = await loadConfig(dir);
     expect(config.locales).toStrictEqual(['en', 'it']);
+  });
+
+  it.each([
+    [{ locales: ['it'] }, 'sourceLocale "en" is not in locales'],
+    [{ namespaces: { app: { format: 'icu', path: 'app.json' } } }, 'path must contain {locale}'],
+  ])('rejects %j', async (config, message) => {
+    await expect(configWith(config)).rejects.toThrow(message);
+  });
+
+  it('types a config without changing it', () => {
+    const config = { locales: ['en'] };
+    expect(defineConfig(config)).toBe(config);
+  });
+
+  it('explains a folder without a config', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    await expect(loadConfig(dir)).rejects.toThrow(`No parla.config.ts in ${dir}`);
   });
 
   it('explains a config without a default export', async () => {

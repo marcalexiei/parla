@@ -14,9 +14,9 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 
 | Path                  |                                                            |
 | --------------------- | ---------------------------------------------------------- |
-| `packages/core`       | Runtime: locale state, lazy loading, `Intl`, registries    |
+| `packages/core`       | Runtime: locale state, lazy loading, `Intl`                |
 | `packages/react`      | `ParlaProvider`, `useParla`, `useLocale`                   |
-| `packages/compiler`   | `parla` CLI and Vite plugin: catalogs → chunks + `.d.ts`   |
+| `packages/compiler`   | `parla` CLI and Vite plugin: catalogs → typed namespaces   |
 | `packages/format-icu` | ICU → MF2 data model                                       |
 | `packages/format-mf2` | MF2 → MF2 data model                                       |
 | `scripts/`            | Repo tooling (`check-all.ts`), via `tsconfig.scripts.json` |
@@ -27,29 +27,34 @@ Comparisons with other libraries live in `parla-benchmark`, keeping their depend
 ## Design
 
 - **One function per job, one way to call it**: `parla.load(ns[])` and `useParla(ns[])` take a
-  list, even of one, and return `t` keyed by namespace. Tooling such as x18n reads only these.
+  list, even of one, and return `t` keyed by name. Tooling such as x18n follows the imports.
+- **A namespace is an imported object**, `namespaces/{ns}.js` exporting `{ name, load }`: the
+  bundler decides what an app ships, and its `.d.ts` types `t`. A name does not type-check.
+- **Import each namespace from its own module**: a barrel cost +28 MB of types and made esbuild
+  ship unused chunks.
 - **`t` is the proof of loading**: it has only the loaded namespaces; a child takes
-  `Translations<'ns'>` and a wider `t` satisfies it. No `ready` flags, no unchecked getters.
+  `Translations<typeof ns>` and a wider `t` satisfies it. No `ready` flags, no unchecked getters.
 - **The MF2 data model is the one IR**: a format adapter only parses into it.
 - **A chunk exports `($) => accessor`**, one object literal; `$`'s members are short because every
   chunk repeats them.
 - **V8 builds literals past 127 keys ~100× slower**, so bigger groups are split. Hoisting messages
   out of the factory measured no faster and 40% more gzip.
 - **`core`, `react` and `format-*` run in browsers**: no Node globals (`no-restricted-globals`).
-- **Types reach consumers through registries**: `catalog.d.ts` augments the runtime the package
-  depends on (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale,
-  namespace, function or tag, so a package's types and the app's add up instead of clashing. Each
-  namespace's interface is its own `types/{ns}.d.ts`, so editing a message changes one file.
-- **Rich text's type follows the instance**: generated types fill `NamespaceRegistry<Node>`, and
-  `Parla<Node>` picks `Node` (`string` in core, `ReactNode` in `@parlajs/react`). Augmentations merge
-  only with the same parameter name. Only markup takes `Node` (`XMessages<Node> extends XText`):
-  passing a wider `t` then instantiates ~10× fewer types.
+- **Registries carry what is global**: `catalog.d.ts` augments the runtime the package depends on
+  (`@parlajs/react` before `@parlajs/core`, or `runtime`), one member per locale, function or tag,
+  so two catalogs in one program add up instead of clashing.
+- **Rich text's type follows the instance**: a namespace's kind reads `this['node']`, and
+  `Parla<Node>` picks `Node` (`string` in core, `ReactNode` in `@parlajs/react`). Only markup takes
+  `Node` (`XMessages<Node> extends XText`), and a namespace without it has a non-generic kind, so
+  either instance's `t` fits it. `Translations` is `in out Node`: TypeScript cannot see `Node`
+  through the kind.
 - **A select's params are typed per branch** when one `:string` selector decides them: one union
   member per key, `string` for the rest. Cost: ~2 types per such message.
-- **A namespace has one owner package**; a second is a build error.
+- **A namespace has one owner package**, which fixes its locales and fallbacks: an app may have
+  fewer locales, not more, and one missing fails in types and at the first `load`. A second object
+  of one name is caught only at runtime: the first wins, with a warning.
 - **The config is `parla.config.ts`, imported by Node itself** (type stripping, no loader); an
-  integer `?t=` mtime busts the module cache for watchers. Packages declare namespaces in
-  `package.json`: Node strips no types under `node_modules`.
+  integer `?t=` mtime busts the module cache for watchers.
 
 ## Commands
 
