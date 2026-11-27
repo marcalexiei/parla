@@ -4,6 +4,8 @@ const repo = 'https://github.com/marcalexiei/parla';
 
 export default defineConfig({
   title: 'Parla',
+  logoUrl: '/logo.svg',
+  iconUrl: '/icon.svg',
   description: 'Type-safe i18n: one API, per-locale lazy loading, ICU and MessageFormat 2.',
   basePath: '/parla',
   baseUrl: 'https://marcalexiei.github.io',
