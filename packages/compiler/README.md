@@ -12,6 +12,7 @@ export default defineConfig({ plugins: [parla(), react()] }); // fails a product
 
 The plugin rebuilds on every catalog change in `vite` and `vite build --watch`, namespaces added to the
 config later included, so a Vite app needs no `parla build --watch`.
+`parla({ root })` builds the config in another folder, such as a shared i18n package.
 
 ```
 parla build [--watch]   catalog.js, namespaces/, messages/

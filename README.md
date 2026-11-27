@@ -112,23 +112,35 @@ function Total({ t }: { t: Translations<typeof checkout> }) {
 
 ## Monorepos and polyrepos
 
-One package owns each namespace and builds it; every other package imports its built objects:
+One package owns each namespace and builds it; every other package imports its built objects.
+Usually one package owns them all, with `parla.config.ts` and `locales/` beside its `package.json`:
 
-```ts
-// @acme/i18n's parla.config.ts
-export default defineConfig({
-  locales: ['en', 'it', 'de'],
-  namespaces: { common: { format: 'icu', path: 'locales/{locale}/common.json' } },
-});
+```json
+{
+  "name": "@acme/i18n",
+  "exports": {
+    "./catalog.js": "./src/parla/catalog.js",
+    "./namespaces/*": "./src/parla/namespaces/*"
+  }
+}
 ```
 
+An app then builds nothing; `parla({ root: '../../packages/i18n' })` in its `vite.config.ts`
+rebuilds the owner on every catalog change:
+
 ```ts
-import { common } from '@acme/i18n/src/parla/namespaces/common.js';
+import { catalog } from '@acme/i18n/catalog.js';
+import { checkout } from '@acme/i18n/namespaces/checkout.js';
+
+const parla = createParla({ catalog });
 ```
 
 - Import each namespace from its own module: the bundler then ships exactly those chunks, and
   type-checks only those `.d.ts`.
-- Build the owner first (`dependsOn: ['^build']`); an app builds only its own namespaces.
+- The owner's catalog carries its locales, functions and markup, so `createParla` asks for each.
+  An app that owns namespaces too builds its own catalog: declare the owner's functions and markup
+  in its config as well.
+- Outside Vite, build the owner first (`dependsOn: ['^build']`).
 - The owner fixes locales and fallbacks: an app may have fewer locales, not more. A namespace
   built without one of the app's locales fails in types and at its first `load`.
 - A second object with the same name, such as from a second copy of the owner, is skipped with a
