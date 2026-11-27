@@ -35,6 +35,7 @@ t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 | `@parlajs/compiler`   | `parla` CLI and Vite plugin: catalogs → typed namespaces |
 | `@parlajs/format-icu` | ICU parser                                               |
 | `@parlajs/format-mf2` | MF2 parser                                               |
+| `@parlajs/x18n`       | [x18n](https://x18n.dev) plugin                          |
 
 ## Quick start (React + Vite)
 
