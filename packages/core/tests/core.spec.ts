@@ -235,4 +235,16 @@ describe(matchLocale, () => {
     // a later, worse candidate keeps the better one; an invalid supported tag is skipped
     expect(matchLocale(['zh-HK'], ['zh-TW', 'zh-CN', 'not a tag'], 'en')).toBe('zh-TW');
   });
+
+  it('matches by subtags where Intl.Locale is missing, as on Hermes', () => {
+    vi.stubGlobal('Intl', Object.create(Intl, { Locale: { value: undefined } }));
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    expect(matchLocale(['de-AT'], ['en', 'de'], 'en')).toBe('de');
+    expect(matchLocale(['zh_Hant_HK'], ['zh-CN', 'zh-Hant'], 'en')).toBe('zh-Hant');
+    expect(matchLocale(['pt-BR-x-foo'], ['pt-PT', 'pt-BR'], 'en')).toBe('pt-BR');
+    expect(matchLocale(['pt-PT'], ['en', 'pt-BR'], 'en')).toBe('pt-BR');
+    expect(matchLocale(['1234', 'fr'], ['en', 'it'], 'en')).toBe('en');
+  });
 });

@@ -195,6 +195,35 @@ reads, and any other value, or a plain `string`, needs every branch's.
 
 Formatting uses `Intl`: no locale data to ship.
 
+## Runtimes
+
+Browsers from Vite's default target (Safari 16.4, Chrome 111, Firefox 114) and Node 24+ have every
+`Intl` API Parla uses. Hermes, React Native's engine, lacks `Intl.PluralRules` and `Intl.Locale`:
+import polyfills before the app. A missing API throws its name and polyfill when first needed.
+
+```ts
+// index.js
+import '@formatjs/intl-locale/polyfill.js';
+import '@formatjs/intl-pluralrules/polyfill.js';
+import '@formatjs/intl-pluralrules/locale-data/en.js'; // one per locale
+```
+
+React Native has no `navigator.languages`; `expo-localization` (or `react-native-localize`) does:
+
+```ts
+import { getLocales } from 'expo-localization';
+
+const tags = getLocales().map((l) => l.languageTag);
+createParla({ catalog, locale: matchLocale(tags, catalog.locales, catalog.sourceLocale) });
+```
+
+| React Native       |                                                                                                     |
+| ------------------ | --------------------------------------------------------------------------------------------------- |
+| No `Intl.Locale`   | `matchLocale` compares subtags: `de-AT` → `de`, no `zh-TW` → `zh-Hant`                              |
+| iOS `NumberFormat` | Ignores `notation`, `signDisplay` and `compactDisplay`                                              |
+| Bigints            | Printed as plain digits                                                                             |
+| Metro              | Bundles every `import()` chunk into the one bundle; `load` still evaluates only the locale it needs |
+
 ## Development
 
 ```sh

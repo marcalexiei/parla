@@ -171,6 +171,18 @@ function toDate(value: unknown): Date {
 
 const NO_OPTIONS: Readonly<Record<string, unknown>> = Object.freeze({});
 
+type IntlName = 'NumberFormat' | 'DateTimeFormat' | 'PluralRules';
+
+/** Hermes (React Native) lacks `PluralRules`: name the polyfill, not "not a constructor". */
+function intl<K extends IntlName>(name: K): (typeof Intl)[K] {
+  const ctor = typeof Intl === 'undefined' ? undefined : Intl[name];
+  if (typeof ctor !== 'function') {
+    const pkg = `@formatjs/intl-${name.toLowerCase()}`;
+    throw new Error(`[parla] Intl.${name} is missing: import a polyfill such as ${pkg} first`);
+  }
+  return ctor;
+}
+
 /** Formatters kept per locale. A catalog's constant options need far fewer. */
 const CACHE_SIZE = 256;
 
@@ -222,10 +234,19 @@ export function createRuntime(
     locale,
     str(value) {
       if (typeof value === 'number' || typeof value === 'bigint') {
-        return cached('n', () => new Intl.NumberFormat(locale)).format(value);
+        const nf = cached('n', () => new (intl('NumberFormat'))(locale));
+        if (typeof value === 'number') {
+          return nf.format(value);
+        }
+        try {
+          return nf.format(value);
+        } catch {
+          // Hermes formats numbers only: plain digits beat a rounded number.
+          return value.toString();
+        }
       }
       if (value instanceof Date) {
-        return cached('d', () => new Intl.DateTimeFormat(locale)).format(value);
+        return cached('d', () => new (intl('DateTimeFormat'))(locale)).format(value);
       }
       return text(value);
     },
@@ -235,14 +256,14 @@ export function createRuntime(
         return formatter(
           name,
           options,
-          () => new Intl.NumberFormat(locale, numberOptions(name, options)),
+          () => new (intl('NumberFormat'))(locale, numberOptions(name, options)),
         ).format(n);
       }
       if (DATE_FNS.has(name)) {
         return formatter(
           name,
           options,
-          () => new Intl.DateTimeFormat(locale, dateOptions(name, options)),
+          () => new (intl('DateTimeFormat'))(locale, dateOptions(name, options)),
         ).format(toDate(value));
       }
       if (name === 'string') {
@@ -260,7 +281,7 @@ export function createRuntime(
         return { n, cat: '' };
       }
       const type = options['select'] === 'ordinal' ? 'ordinal' : 'cardinal';
-      const rules = cached(type, () => new Intl.PluralRules(locale, { type }));
+      const rules = cached(type, () => new (intl('PluralRules'))(locale, { type }));
       return { n, cat: rules.select(n - Number(options['offset'] ?? 0)) };
     },
     ss(value) {

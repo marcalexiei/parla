@@ -126,3 +126,53 @@ describe(createRuntime, () => {
     expect(ext.tag({}, 'i', ['plain'])).toBe('plain');
   });
 });
+
+/** Stands in for an engine such as Hermes, where `Intl` lacks members. */
+function stubIntl(members: Record<string, unknown>): void {
+  const props = Object.fromEntries(Object.entries(members).map(([k, value]) => [k, { value }]));
+  vi.stubGlobal('Intl', Object.create(Intl, props));
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+  });
+}
+
+/** Hermes' `NumberFormat`, which formats numbers only. Called with `new`. */
+function HermesNumberFormat(): { format: (value: unknown) => string } {
+  return {
+    format: (value) => {
+      if (typeof value === 'bigint') {
+        throw new TypeError('Cannot convert BigInt to number');
+      }
+      return `#${String(value)}`;
+    },
+  };
+}
+
+describe('an engine without full Intl', () => {
+  it('names the polyfill for a missing PluralRules, and formats without it', () => {
+    stubIntl({ PluralRules: undefined });
+    const hermes = createRuntime('en');
+    expect(() => hermes.sn(1)).toThrow(
+      '[parla] Intl.PluralRules is missing: import a polyfill such as @formatjs/intl-pluralrules first',
+    );
+    expect(hermes.sn(1, { select: 'exact' })).toStrictEqual({ n: 1, cat: '' });
+    expect(hermes.str(1234.5)).toBe('1,234.5');
+  });
+
+  it('names the polyfill for missing formatters, or a missing Intl', () => {
+    stubIntl({ NumberFormat: undefined, DateTimeFormat: undefined });
+    const bare = createRuntime('en');
+    expect(() => bare.f('number', 1)).toThrow('@formatjs/intl-numberformat');
+    expect(() => bare.str(12n)).toThrow('@formatjs/intl-numberformat');
+    expect(() => bare.f('date', when)).toThrow('@formatjs/intl-datetimeformat');
+    vi.stubGlobal('Intl', undefined);
+    expect(() => createRuntime('en').str(when)).toThrow('[parla] Intl.DateTimeFormat is missing');
+  });
+
+  it('prints a bigint as digits where NumberFormat takes numbers only', () => {
+    stubIntl({ NumberFormat: HermesNumberFormat });
+    const hermes = createRuntime('en');
+    expect(hermes.str(12_345_678_901_234_567_890n)).toBe('12345678901234567890');
+    expect(hermes.str(5)).toBe('#5');
+  });
+});
