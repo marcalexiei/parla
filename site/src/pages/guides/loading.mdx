@@ -1,0 +1,67 @@
+---
+description: load and useParla take a list and return t, which proves the namespaces loaded.
+showAskAi: false
+---
+
+# Loading
+
+One function per job, one way to call it: both take a list, even of one, and return `t` keyed by
+name.
+
+```tsx
+const t = await parla.load([checkout, common]); // anywhere: a route loader, the server, a test
+const { t } = useParla([checkout, common]); // in a component: suspends until loaded
+```
+
+| `parla.load(list)`                                                    |
+| --------------------------------------------------------------------- |
+| Loads each namespace's chunk for the current locale, in parallel      |
+| The same list, in any order, returns the same promise                 |
+| Loaded namespaces resolve at once; `useParla` never suspends on them  |
+| Throws at once for a namespace built without one of the app's locales |
+| Throws for two namespaces of one name: `t` holds one per name         |
+| A failed download rejects, and is retried after a second              |
+
+## `t` is the proof of loading
+
+`t` has only the namespaces you loaded. There are no `ready` flags and no getters that throw: if you
+hold `t.checkout`, its messages are there.
+
+```tsx
+const { t } = useParla([checkout]);
+t.checkout.title(); // ok
+t.common.save(); // type error: common was not loaded
+```
+
+## `Translations<typeof ns>`
+
+The type of `t` for some namespaces. A child names what it reads; a parent's wider `t` satisfies it.
+
+```tsx
+import type { Translations } from '@parlajs/react';
+
+function Total({ t, amount }: { t: Translations<typeof checkout>; amount: number }) {
+  return <p>{t.checkout.total({ amount })}</p>;
+}
+
+function Page() {
+  const { t } = useParla([checkout, common]);
+  return <Total t={t} amount={39.8} />; // a wider t fits
+}
+```
+
+Import `Translations` from `@parlajs/react` for React nodes, from `@parlajs/core` for strings: rich
+text types differ, see [Rich text](/guides/rich-text).
+
+## Every message is a function
+
+| Message                  | Type                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------- |
+| No params, no markup     | `Text`, that is `() => string`                                                         |
+| `{$name}`, no annotation | `(params: { name: string \| number }) => string`                                       |
+| `{$count :number}`       | `(params: { count: number }) => string`                                                |
+| `{$when :date}`          | `(params: { when: Date \| number }) => string`                                         |
+| With markup              | Returns the instance's node: `ReactNode` or `string`                                   |
+| A `:string` select       | Params per branch, see [Selects](/guides/plurals-and-selects#selects-typed-per-branch) |
+
+Groups nest: `"cart": { "items": "…" }` is `t.checkout.cart.items(…)`.

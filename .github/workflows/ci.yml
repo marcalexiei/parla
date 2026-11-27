@@ -100,6 +100,10 @@ jobs:
       - name: Lint (published types with lib check)
         run: pnpm run lint:lib-check
 
+      # `site.yml` builds it too, but only CI OK gates a merge.
+      - name: Build site
+        run: pnpm --filter @parlajs/site run build
+
   # Against the base on the same runner, so the runner's speed cancels out. Not needed by CI OK:
   # a regression flags the PR, and a deliberate trade-off can still merge.
   bench:

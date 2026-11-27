@@ -1,0 +1,40 @@
+---
+description: A partial locale borrows missing messages at build time, along a fallback chain.
+showAskAi: false
+---
+
+# Fallbacks
+
+A locale need not translate everything. A missing message is copied in at build time from the first
+locale in its chain that has it, so the runtime never looks anything up.
+
+```ts
+export default defineConfig({
+  locales: ['en', 'de', 'de-AT', 'it'],
+  sourceLocale: 'en',
+  fallbacks: { 'de-AT': ['de'] },
+  // …
+});
+```
+
+| Locale  | Chain       | Why                                    |
+| ------- | ----------- | -------------------------------------- |
+| `de-AT` | `de` → `en` | `fallbacks`, then the source           |
+| `it`    | `en`        | The source locale is always last       |
+| `pt-BR` | `pt` → `en` | The base language, when it is a locale |
+
+`fallbacks` lists extra steps; the base language and the source locale are added.
+
+## What the build reports
+
+| Case                             | Diagnostic                               | Level   |
+| -------------------------------- | ---------------------------------------- | ------- |
+| A message missing in a locale    | `missing-translation`: `using "de"`      | warning |
+| A catalog file missing           | `missing-file`; every message falls back | warning |
+| The source locale's file missing | `missing-file`                           | error   |
+| A key only in a translation      | `unknown-key`: dropped                   | warning |
+| A translation with other params  | `param-mismatch`                         | error   |
+
+`parla check --strict` fails on warnings too: run it in CI once every locale should be complete.
+
+A borrowed message keeps its text and is compiled for the locale it fills, plural rules included.

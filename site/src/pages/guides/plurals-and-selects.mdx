@@ -1,0 +1,102 @@
+---
+description: Plurals, ordinals and selects in ICU and MF2, with select params typed per branch.
+showAskAi: false
+---
+
+import { SelectsDemo } from '../../examples/SelectsDemo.tsx';
+
+# Plurals and selects
+
+Each namespace picks its syntax with `format: 'icu'` or `'mf2'`. Both compile to the same data model
+and the same functions. Live, one ICU and one MF2 namespace with the same messages:
+
+<SelectsDemo />
+
+## Plurals
+
+:::code-group
+
+```json [ICU]
+{ "items": "{count, plural, =0 {Your cart is empty} one {# item} other {# items}}" }
+```
+
+```json [MF2]
+{
+  "items": ".input {$count :number}\n.match $count\n0 {{Your cart is empty}}\none {{{$count} item}}\n* {{{$count} items}}"
+}
+```
+
+:::
+
+Exact values (`=0`, `0`) beat categories (`one`), which beat the catch-all. Categories come from
+`Intl.PluralRules` for the locale.
+
+## Ordinals
+
+:::code-group
+
+```json [ICU]
+{ "rank": "You finished {place, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}" }
+```
+
+```json [MF2]
+{
+  "rank": ".input {$place :number select=ordinal}\n.match $place\none {{You finished {$place}st}}\ntwo {{You finished {$place}nd}}\nfew {{You finished {$place}rd}}\n* {{You finished {$place}th}}"
+}
+```
+
+:::
+
+A locale with one ordinal form needs no select: German writes `Du bist {$place :integer}. geworden`.
+
+## Selects, typed per branch
+
+:::code-group
+
+```json [ICU]
+{
+  "delivery": "{method, select, pickup {Collect it from {store}} courier {{courier} delivers it on {day, date, long}} other {Ships soon}}"
+}
+```
+
+```json [MF2]
+{
+  "delivery": ".input {$method :string}\n.match $method\npickup {{Collect it from {$store}}}\ncourier {{{$courier} delivers it on {$day :date style=long}}}\n* {{Ships soon}}"
+}
+```
+
+:::
+
+When one `:string` selector decides which params a message reads, each branch types only its own:
+
+```ts
+t.shop.delivery({ method: 'pickup', store: 'Milano Centrale' }); // store only
+t.shop.delivery({ method: 'courier', courier: 'Rita', day: new Date() }); // no store
+t.shop.delivery({ method: 'pickup' }); // error: store is missing
+
+declare const method: string; // may hold any key
+t.shop.delivery({ method, store: '…', courier: '…', day: new Date() }); // needs every branch's
+```
+
+The generated type, one union member per key:
+
+```ts
+delivery(
+  params:
+    | { method: 'pickup'; store: string | number }
+    | { method: 'courier'; courier: string | number; day: Date | number }
+    | { method: string; store: string | number; courier: string | number; day: Date | number },
+): string;
+```
+
+## Syntax side by side
+
+|              | ICU                                       | MF2                                                     |
+| ------------ | ----------------------------------------- | ------------------------------------------------------- |
+| Placeholders | `{name}`                                  | `{$name}`                                               |
+| Plural       | `{n, plural, =0 {…} one {# …} other {…}}` | `.input {$n :number}` `.match $n`                       |
+| Ordinal      | `selectordinal`                           | `:number select=ordinal`                                |
+| Select       | `{g, select, …}`                          | `:string`, multiple selectors                           |
+| Numbers      | `number`, `::currency/EUR`, `percent`     | `:number`, `:integer`, `:currency`, `:percent`, `:unit` |
+| Dates        | `date`, `time`                            | `:date`, `:time`, `:datetime`                           |
+| Rich text    | `<link>…</link>`                          | `{#link}…{/link}`, `{#br/}`                             |

@@ -1,0 +1,5 @@
+{
+  "items": ".input {$count :number}\n.match $count\n0 {{Dein Warenkorb ist leer}}\none {{{$count} Artikel}}\n* {{{$count} Artikel}}",
+  "rank": "Du bist {$place :integer}. geworden",
+  "delivery": ".input {$method :string}\n.match $method\npickup {{Abholung bei {$store}}}\ncourier {{{$courier} liefert am {$day :date style=long}}}\n* {{Versand in Kürze}}"
+}

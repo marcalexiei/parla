@@ -1,0 +1,5 @@
+node_modules
+dist
+# generated: by the parla plugin, and by Waku from the pages
+src/parla/
+src/pages.gen.ts

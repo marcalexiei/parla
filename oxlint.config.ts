@@ -105,7 +105,7 @@ export default defineConfig({
       },
     },
     {
-      files: ['packages/react/**/*.tsx', 'packages/react/src/**'],
+      files: ['packages/react/**/*.tsx', 'packages/react/src/**', 'site/src/**/*.tsx'],
       ...reactConfig,
     },
     {

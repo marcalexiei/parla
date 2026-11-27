@@ -1,0 +1,51 @@
+---
+title: Parla
+description: Type-safe i18n with one API, per-locale lazy loading, ICU and MessageFormat 2.
+showAskAi: false
+---
+
+import { HomeDemo } from '../examples/HomeDemo.tsx';
+
+# Parla
+
+Type-safe i18n: one API, per-locale lazy loading, ICU and MessageFormat 2.
+
+:::warning
+Experimental (`0.0.0`), not on npm yet.
+:::
+
+```tsx
+import { checkout } from './parla/namespaces/checkout.js';
+
+const { t } = useParla([checkout]);
+
+t.checkout.title(); // "Checkout"
+t.checkout.cart.items({ count: 3 }); // "3 items"; count: number, required
+t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
+```
+
+Live, built by this site's own Parla plugin:
+
+<HomeDemo />
+
+## Why
+
+- **One way to do each thing**: `load` a list of namespaces, get `t`; every message is a typed function.
+- **Typed loading**: `t` exists only once its namespaces load, and has only those.
+- **Namespaces are imports**: the bundler ships what the app imports, and the types match.
+- **Lazy per locale**: one chunk per _locale × namespace_, loaded with `import()`.
+- **No flash on switch**: `setLocale` loads first, then switches.
+- **ICU and MF2**, per namespace, through one data model.
+- **Monorepos**: each namespace has one owner package, which other packages import from.
+
+## Packages
+
+| Package               |                                                          |
+| --------------------- | -------------------------------------------------------- |
+| `@parlajs/core`       | Runtime: locale state, lazy loading, `Intl`              |
+| `@parlajs/react`      | `ParlaProvider`, `useParla`, `useLocale`                 |
+| `@parlajs/compiler`   | `parla` CLI and Vite plugin: catalogs → typed namespaces |
+| `@parlajs/format-icu` | ICU parser                                               |
+| `@parlajs/format-mf2` | MF2 parser                                               |
+
+Next: [Why Parla](/why), or [Getting started](/getting-started).

@@ -1,0 +1,41 @@
+---
+description: Why Parla exists, and what other i18n libraries have and lack.
+showAskAi: false
+---
+
+# Why Parla
+
+i18n libraries make you choose. Typed keys or typed params. Lazy loading or types that know what
+loaded. ICU or something newer. Parla wants all of them, with one way to do each thing:
+
+- every message is a typed function, params read from the message itself;
+- `t` holds only the namespaces that loaded, so "not loaded yet" is a type error, not a blank string;
+- one chunk per locale × namespace, and the bundler ships only what the app imports;
+- ICU and MessageFormat 2, per namespace;
+- `setLocale` loads first, then switches.
+
+## What each library has and lacks
+
+From each library's docs and [parla-benchmark](https://github.com/marcalexiei/parla-benchmark).
+"Not documented" means the docs don't say.
+
+|                  | Parla                                                     | i18next                                                       | react-intl                                     | Lingui                                | Paraglide                                                | typesafe-i18n                |
+| ---------------- | --------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------- | -------------------------------------------------------- | ---------------------------- |
+| Typed keys       | Yes                                                       | Opt-in, `CustomTypeOptions`                                   | Opt-in, augmented `ids`                        | Opt-in, augmented `Register`          | Yes, generated functions                                 | Yes, generated               |
+| Typed params     | Yes, from the message; selects per branch                 | Inferred from `as const` resources, ~100k type instantiations | Opt-in, per call; not read from the ICU string | No: `Record<string, unknown>`         | Names                                                    | Yes                          |
+| Typed loading    | `t` has only loaded namespaces                            | No: suspends, or a `ready` flag                               | No                                             | No                                    | No loading: messages are imports                         | No: empty string before load |
+| Lazy chunks      | Per locale × namespace, built in                          | Backends, wired by the app                                    | Not documented                                 | Per locale, app code                  | Every locale per message; per-locale builds experimental | Per locale, generated        |
+| Syntax           | ICU and MF2, per namespace                                | Own; ICU and MF2 via plugins                                  | ICU                                            | ICU                                   | inlang's, MF2-inspired; ICU via plugin                   | Own                          |
+| Rich text        | Each tag a typed callback; node type follows the instance | `<Trans>`; tag typing not documented                          | Value functions; typed by opt-in generics      | Components; tag typing not documented | Markup names type-checked (React adapter)                | Not built in                 |
+| Monorepos        | One owner package per namespace, imported                 | Per-package namespace types                                   | Libraries take the app's `intl`                | Catalog per app, or merged            | Shared project, each package compiles                    | Not documented               |
+| Runtime, gzip    | 2.7 kB with React                                         | 18.2 kB with react-i18next                                    | 14.6 kB                                        | 4.4 kB                                | 4.2 kB, no React binding                                 | 1.6 kB                       |
+| Switching locale | Loads first, then switches; never suspends                | Suspends while loading                                        | Recreate the `intl` object                     | App code: load, then activate         | Reloads the page by default                              | Not documented               |
+
+Sizes from the benchmark's latest run, React excluded; see [Benchmarks](/benchmarks).
+
+## Why it was built
+
+Each library above gets part of this right; none does all of it. Parla types params from the message,
+knows what loaded, splits per locale and namespace, and reads both ICU and MF2, at 2.7 kB.
+
+Parla is built with the help of AI coding tools.

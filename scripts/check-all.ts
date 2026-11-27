@@ -19,6 +19,7 @@ const CHECKS: Record<string, Array<string>> = {
   'lib-check': ['run', 'lint:lib-check'],
   knip: ['run', 'lint:knip'],
   tests: ['run', 'test:coverage'],
+  site: ['run', 'site:build'],
 };
 
 /** Runs the rest after a failure, for when the whole list is more useful than the first one. */

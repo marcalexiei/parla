@@ -8,6 +8,10 @@
       "entry": ["scripts/*.ts", "bench/*.bench.ts"]
     },
     "packages/*": {},
+    "site": {
+      // the MDX pages import the demos
+      "entry": ["src/examples/*Demo.tsx", "parla.config.ts", "vocs.config.ts"]
+    },
     "packages/format-icu": {
       // the types of `@messageformat/parser` import `moo`; `skipLibCheck: false` needs them
       "ignoreDependencies": ["@types/moo"]

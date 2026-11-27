@@ -1,0 +1,50 @@
+---
+description: Browsers, Node, and React Native on Hermes with Intl polyfills.
+showAskAi: false
+---
+
+# Runtimes and React Native
+
+| Runtime                                                             | `Intl` Parla uses             |
+| ------------------------------------------------------------------- | ----------------------------- |
+| Vite's default browser target: Safari 16.4, Chrome 111, Firefox 114 | All                           |
+| Node 24+                                                            | All                           |
+| Hermes (React Native)                                               | No `PluralRules`, no `Locale` |
+
+A missing API throws, naming its polyfill, the first time a message needs it.
+
+## Polyfills for Hermes
+
+Import them before the app:
+
+```ts
+// index.js
+import '@formatjs/intl-locale/polyfill.js';
+import '@formatjs/intl-pluralrules/polyfill.js';
+import '@formatjs/intl-pluralrules/locale-data/en.js'; // one per locale
+```
+
+## The device's locales
+
+React Native has no `navigator.languages`; `expo-localization` (or `react-native-localize`) does:
+
+```ts
+import { getLocales } from 'expo-localization';
+
+const tags = getLocales().map((l) => l.languageTag);
+createParla({ catalog, locale: matchLocale(tags, catalog.locales, catalog.sourceLocale) });
+```
+
+Without `Intl.Locale`, `matchLocale` compares the tags' own subtags: `de-AT` still finds `de`, but
+`zh-TW` no longer infers `zh-Hant`. Android's `it_IT` is read as `it-IT`.
+
+## Known differences
+
+| React Native       |                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| iOS `NumberFormat` | Converts `:unit` to the locale's system (`en`: 5 km → 3.107mi), ignores `notation` and `signDisplay` |
+| Bigints            | Printed as plain digits                                                                              |
+| Metro              | Bundles every `import()` chunk into the one bundle; `load` still evaluates only the locale it needs  |
+
+On iOS, a catalog with `:unit`, `notation` or `signDisplay` also needs
+`@formatjs/intl-numberformat/polyfill-force.js` and its `locale-data`.

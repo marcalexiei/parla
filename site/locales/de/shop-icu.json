@@ -1,0 +1,5 @@
+{
+  "items": "{count, plural, =0 {Dein Warenkorb ist leer} one {# Artikel} other {# Artikel}}",
+  "rank": "Du bist {place, selectordinal, other {#.}} geworden",
+  "delivery": "{method, select, pickup {Abholung bei {store}} courier {{courier} liefert am {day, date, long}} other {Versand in Kürze}}"
+}

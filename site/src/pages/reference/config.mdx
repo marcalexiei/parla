@@ -1,0 +1,56 @@
+---
+description: Every option of parla.config.ts.
+showAskAi: false
+---
+
+# `parla.config.ts`
+
+Imported by Node itself, through its type stripping: no loader, no build step.
+
+```ts
+import { defineConfig } from '@parlajs/compiler';
+
+export default defineConfig({
+  locales: ['en', 'it', 'de'],
+  sourceLocale: 'en',
+  fallbacks: { de: ['en'] },
+  outDir: 'src/parla',
+  namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
+  functions: { capitalize: 'string' },
+  markup: ['strong', 'br'],
+});
+```
+
+| Option         | Type                                           | Default                                                |
+| -------------- | ---------------------------------------------- | ------------------------------------------------------ |
+| `locales`      | `string[]`: tags such as `en`, `pt-BR`         | `[sourceLocale]`                                       |
+| `sourceLocale` | `string`, one of `locales`                     | `'en'`                                                 |
+| `fallbacks`    | `Record<locale, locale[]>`                     | `{}`, see [Fallbacks](/guides/fallbacks)               |
+| `outDir`       | Relative to the config                         | `'src/parla'`                                          |
+| `namespaces`   | `Record<name, { format, path }>`               | `{}`                                                   |
+| `functions`    | `Record<name, 'string' \| 'number' \| 'date'>` | `{}`                                                   |
+| `markup`       | `string[]`: tags a call may leave out          | `[]`                                                   |
+| `runtime`      | Module the types import and augment            | `@parlajs/react` if a dependency, else `@parlajs/core` |
+
+## `namespaces`
+
+| Field    |                                                              |
+| -------- | ------------------------------------------------------------ |
+| `format` | `'icu'` or `'mf2'`                                           |
+| `path`   | Catalog path relative to the config, with a `{locale}` token |
+
+A name is letters, digits, `_`, `-` or inner dots: it names files. Make it an identifier, see
+[Names](/guides/namespaces#names).
+
+A catalog is JSON: a message per key, or a group of them.
+
+## `functions`
+
+Message functions beyond the built-in ones, by what their value is: it types the param.
+`createParla({ functions })` must implement each. Built-in names (`number`, `date`, …) cannot be
+redefined. See [Your own functions](/guides/formatting#your-own-functions).
+
+## `markup`
+
+Tags that `createParla({ markup })` renders, so a call may leave them out. See
+[Rich text](/guides/rich-text).

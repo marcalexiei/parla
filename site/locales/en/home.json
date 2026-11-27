@@ -1,0 +1,7 @@
+{
+  "greeting": "Hello, {$name}!",
+  "cart": {
+    "items": ".input {$count :number}\n.match $count\n0 {{Your cart is empty}}\none {{{$count} item}}\n* {{{$count} items}}"
+  },
+  "terms": "Accept the {#link}terms{/link}, {#strong}today{/strong}."
+}

@@ -1,0 +1,119 @@
+---
+description: React and Vite, or the CLI with any bundler.
+showAskAi: false
+---
+
+# Getting started
+
+## React + Vite
+
+:::code-group
+
+```sh [pnpm]
+pnpm add @parlajs/react
+pnpm add -D @parlajs/compiler
+```
+
+```sh [npm]
+npm install @parlajs/react
+npm install -D @parlajs/compiler
+```
+
+:::
+
+A catalog per locale and namespace, `locales/en/checkout.json`:
+
+```json
+{
+  "title": "Checkout",
+  "cart": {
+    "items": ".input {$count :number}\n.match $count\none {{{$count} item}}\n* {{{$count} items}}"
+  },
+  "terms": "Accept the {#link}terms{/link}"
+}
+```
+
+`parla.config.ts`, next to `package.json`:
+
+```ts
+import { defineConfig } from '@parlajs/compiler';
+
+export default defineConfig({
+  locales: ['en', 'it', 'de'],
+  sourceLocale: 'en',
+  fallbacks: { de: ['en'] },
+  outDir: 'src/parla',
+  namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
+});
+```
+
+`vite.config.ts`: the plugin builds on start and on every catalog change, and fails a production
+build on catalog errors.
+
+```ts
+import { parla } from '@parlajs/compiler/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+
+export default defineConfig({ plugins: [parla(), react()] });
+```
+
+The app:
+
+```tsx
+import { createParla, matchLocale, ParlaProvider, useParla } from '@parlajs/react';
+import { Suspense } from 'react';
+import { createRoot } from 'react-dom/client';
+
+import { catalog } from './parla/catalog.js';
+import { checkout } from './parla/namespaces/checkout.js';
+
+const parla = createParla({
+  catalog,
+  locale: matchLocale(navigator.languages, catalog.locales, catalog.sourceLocale),
+});
+
+function Cart() {
+  const { t } = useParla([checkout]); // suspends until loaded
+  return <h1>{t.checkout.cart.items({ count: 3 })}</h1>;
+}
+
+createRoot(root).render(
+  <ParlaProvider parla={parla}>
+    <Suspense fallback={null}>
+      <Cart />
+    </Suspense>
+  </ParlaProvider>,
+);
+```
+
+Add `src/parla/` to `.gitignore`: it is generated.
+
+## The CLI, without Vite
+
+Any bundler that understands `import()` works: run the compiler beside it.
+
+```sh
+parla build            # once, before the bundler
+parla build --watch    # beside the bundler's dev server
+parla check --strict   # in CI: warnings fail too
+```
+
+```json
+{
+  "scripts": {
+    "build": "parla build && tsc && your-bundler build",
+    "dev": "parla build --watch & your-bundler dev"
+  }
+}
+```
+
+Without React, use `@parlajs/core`: `await parla.load([checkout])` gives `t`. See [Loading](/guides/loading).
+
+## What it writes
+
+| `outDir/`                     |                                                        |
+| ----------------------------- | ------------------------------------------------------ |
+| `catalog.js`, `.d.ts`         | Locales and source locale; types the app's locales     |
+| `namespaces/{ns}.js`, `.d.ts` | The namespace object to import, and its message types  |
+| `messages/{locale}/{ns}.js`   | One chunk per locale × namespace, loaded by `import()` |

@@ -1,0 +1,5 @@
+{
+  "items": ".input {$count :number}\n.match $count\n0 {{Your cart is empty}}\none {{{$count} item}}\n* {{{$count} items}}",
+  "rank": ".input {$place :number select=ordinal}\n.match $place\none {{You finished {$place}st}}\ntwo {{You finished {$place}nd}}\nfew {{You finished {$place}rd}}\n* {{You finished {$place}th}}",
+  "delivery": ".input {$method :string}\n.match $method\npickup {{Collect it from {$store}}}\ncourier {{{$courier} delivers it on {$day :date style=long}}}\n* {{Ships soon}}"
+}

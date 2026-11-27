@@ -1,0 +1,31 @@
+---
+description: How Parla compares with i18next, react-intl, Lingui, Paraglide and typesafe-i18n.
+showAskAi: false
+---
+
+# Benchmarks
+
+[parla-benchmark](https://github.com/marcalexiei/parla-benchmark) formats the same 200 messages with
+Parla, i18next (with and without i18next-icu), react-intl, Lingui, Paraglide and typesafe-i18n, and
+measures size, type-check time, heap and throughput. Its README holds the latest results; earlier
+runs are in its `results/` folder.
+
+In short, from its latest run:
+
+| Measure      | Where Parla stands                                                                    |
+| ------------ | ------------------------------------------------------------------------------------- |
+| Runtime size | Among the smallest; only typesafe-i18n is smaller                                     |
+| One chunk    | About the size of the others' JSON or compiled catalogs; Paraglide's is larger        |
+| Type-check   | Close to a plain string baseline; i18next and react-intl cost far more                |
+| Formatting   | Fastest on plain and interpolated messages; tied with typesafe-i18n on plurals        |
+| Heap         | After formatting, second only to i18next                                              |
+| Cold start   | Paraglide, which has no init step, and react-intl, which defers parsing, start faster |
+
+Typing, as the benchmark reads it:
+
+- Parla types keys, params and which namespaces are loaded.
+- i18next infers params from `as const` resources, at about 100k type instantiations.
+- react-intl types keys, not params.
+- Lingui types keys once `Register` is augmented; values are `Record<string, unknown>`.
+
+Run it yourself: `pnpm parla:update && pnpm bench` in a checkout beside this repo.

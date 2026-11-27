@@ -1,0 +1,69 @@
+---
+description: One hook per component or t passed down, and preloading in route loaders.
+showAskAi: false
+---
+
+# Components and routes
+
+## One hook per component
+
+Each component asks for what it reads:
+
+```tsx
+function Header() {
+  const { t } = useParla([common]);
+  return <h1>{t.common.title()}</h1>;
+}
+
+function Cart() {
+  const { t } = useParla([checkout]);
+  return <p>{t.checkout.cart.items({ count: 3 })}</p>;
+}
+```
+
+## Passing `t` down
+
+One component loads; children take `t` as a prop:
+
+```tsx
+function Page() {
+  const { t } = useParla([common, checkout]);
+  return (
+    <>
+      <Header t={t} />
+      <Cart t={t} />
+    </>
+  );
+}
+
+function Cart({ t }: { t: Translations<typeof checkout> }) {
+  return <p>{t.checkout.cart.items({ count: 3 })}</p>;
+}
+```
+
+|              | One hook per component             | Passing `t` down                     |
+| ------------ | ---------------------------------- | ------------------------------------ |
+| A component  | Self-contained, movable            | Its props name its namespaces        |
+| Suspends     | Wherever a namespace is not loaded | Once, where `t` is loaded            |
+| Nested loads | A waterfall, unless preloaded      | One parallel load                    |
+| Fits         | Leaf components, shared UI         | Pages, lists, components in a family |
+
+Both mix: a wider `t` satisfies any child's `Translations<typeof ns>`.
+
+## Preload in route loaders
+
+A child that suspends only after its parent rendered starts its download late. Load a route's
+namespaces before it renders, and nothing below suspends:
+
+```tsx
+// React Router, TanStack Router or any loader
+export async function loader() {
+  await parla.load([common, checkout]);
+  return null;
+}
+```
+
+`load` caches by list and by namespace, so the components' own `useParla` calls resolve at once,
+whatever lists they pass.
+
+On the server, or anywhere without React, `parla.load` is the whole API: `await` it and use `t`.

@@ -1,0 +1,52 @@
+---
+description: setLocale loads what is loaded so far, then switches. Nothing suspends.
+showAskAi: false
+---
+
+import { HomeDemo } from '../../examples/HomeDemo.tsx';
+
+# Switching locale
+
+```tsx
+const { locale, locales, setLocale } = useLocale();
+
+<select value={locale} onChange={(e) => setLocale(e.target.value).catch(reportError)}>
+  {locales.map((l) => (
+    <option key={l}>{l}</option>
+  ))}
+</select>;
+```
+
+`setLocale(next)` downloads every namespace loaded so far for `next`, then switches and re-renders.
+The old text stays until the new one is ready: no fallback, no flash. Try it; the dots show the wait:
+
+<HomeDemo />
+
+| `setLocale`                                                                  |
+| ---------------------------------------------------------------------------- |
+| Rejects for a locale not in the catalog                                      |
+| A failed download rejects and keeps the current locale: handle it (`.catch`) |
+| Two calls in a row: the last one wins                                        |
+| Namespaces first loaded during the switch are loaded for `next` too          |
+
+Outside React: `await parla.setLocale('it')`, and `parla.subscribe(listener)` for each switch.
+
+## The first locale
+
+`matchLocale` picks the best supported locale from a preference list:
+
+```ts
+const parla = createParla({
+  catalog,
+  locale: matchLocale(navigator.languages, catalog.locales, catalog.sourceLocale),
+});
+```
+
+| Requested | Supported            | Picks                                     |
+| --------- | -------------------- | ----------------------------------------- |
+| `de-AT`   | `en`, `de`           | `de`: same language                       |
+| `zh-TW`   | `zh-Hans`, `zh-Hant` | `zh-Hant`: the script outranks the region |
+| `it_IT`   | `en`, `it`           | `it`: Android's `_` is read as `-`        |
+| `fr`      | `en`, `de`           | the fallback                              |
+
+A server-rendered page should start in the locale it rendered, then switch.
