@@ -87,8 +87,8 @@ createRoot(root).render(
 
 ## Loading
 
-Each namespace compiles to `<outDir>/namespaces/<name>.js`, exporting it under that name (`foo-bar`
-becomes `fooBar`). Import it, and pass a list; `t` is keyed by name:
+Each namespace compiles to `<outDir>/namespaces/<name>.js`, exporting it under its name. Import it,
+and pass a list; `t` is keyed by name:
 
 ```tsx
 import { checkout } from './parla/namespaces/checkout.js';
@@ -118,6 +118,20 @@ const all = Object.values(
   import.meta.glob<Record<string, Namespace>>('./parla/namespaces/*.js', { eager: true }),
 ).flatMap((mod) => Object.values(mod));
 ```
+
+### Names
+
+A namespace's name is its module, its export, its key in `t` and its name at runtime. Make it an
+identifier in your project's case, mapping a file name that differs:
+
+```ts
+namespaces: { scopeAudit: { format: 'icu', path: 'locales/{locale}/scope_audit.json' } },
+```
+
+- A name that is no identifier (`foo-bar`) exports as `fooBar` while `t` keeps `foo-bar`; the build
+  warns.
+- Alias a clash with a local name as `<name>Namespace`: `import { user as userNamespace }`.
+- Rename a namespace that clashes often, rather than prefixing every one.
 
 ## Monorepos and polyrepos
 

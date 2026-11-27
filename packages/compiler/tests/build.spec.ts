@@ -532,7 +532,11 @@ describe('names', () => {
     put(dir, 'locales/en/scope_audit.json', { scope: 'Scope' });
     // `Text` only inside a group with markup still needs its import.
     put(dir, 'locales/en/nav.json', { nav: { home: 'Home', help: '<b>Help</b>' } });
-    await build({ cwd: dir });
+    const built = await build({ cwd: dir });
+    // two names for one namespace: the export and `t`'s key
+    expect(
+      built.diagnostics.filter((d) => d.code === 'namespace-name').map((d) => d.namespace),
+    ).toStrictEqual(['foo-bar', '-', 'default', 'undefined']);
     const types = (ns: string): string =>
       readFileSync(join(dir, `src/parla/namespaces/${ns}.d.ts`), 'utf8');
     expect(types('foo-bar')).toContain(

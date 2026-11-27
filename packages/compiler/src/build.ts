@@ -36,7 +36,8 @@ export interface Diagnostic {
     | 'unknown-key'
     | 'param-mismatch'
     | 'key-conflict'
-    | 'unknown-format';
+    | 'unknown-format'
+    | 'namespace-name';
   message: string;
   namespace?: string;
   locale?: string;
@@ -315,6 +316,16 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   const locales = [config.sourceLocale, ...config.locales.filter((l) => l !== config.sourceLocale)];
 
   for (const ns of config.namespaces) {
+    const exported = exportName(ns.name, nameOf(ns.name));
+    if (exported !== ns.name) {
+      // two names for one namespace is what tools like codemods and x18n trip over
+      diagnostics.push({
+        level: 'warning',
+        code: 'namespace-name',
+        namespace: ns.name,
+        message: `exports as ${exported} while t keeps "${ns.name}": name it as an identifier and map the file in path`,
+      });
+    }
     const adapter = formats[ns.format];
     if (!adapter) {
       diagnostics.push({
