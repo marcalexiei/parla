@@ -55,14 +55,17 @@ declare const kind: unique symbol;
  * Emitted by `parla build` as `namespaces/<name>.js`: importing it is what makes it loadable. `L`
  * defaults to the app's locales, so `Namespace` is one built for at least those.
  */
+// Declared variance and no Readonly<Record> spare each program ~140 instantiations. `L` is not `in`:
+// with no catalog, `Locale` is `string`, which any namespace's locales must still satisfy.
 export interface Namespace<
-  Name extends string = string,
-  Kind extends NamespaceKind = NamespaceKind,
+  out Name extends string = string,
+  out Kind extends NamespaceKind = NamespaceKind,
   L extends string = Locale,
 > {
   readonly name: Name;
   /** One chunk loader per locale it was built for. */
-  readonly load: Readonly<Record<L, Loader>>;
+  // oxlint-disable-next-line typescript/consistent-indexed-object-style -- Readonly<Record> costs ~50 more instantiations
+  readonly load: { readonly [P in L]: Loader };
   /** Types only, never set. */
   readonly [kind]?: Kind;
 }

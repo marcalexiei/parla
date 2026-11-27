@@ -1,7 +1,7 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createParla, matchLocale } from '../src/index.ts';
-import type { Catalog, Loader, MessageModule, Namespace } from '../src/index.ts';
+import type { Catalog, Loader, MessageModule, Namespace, NamespaceKind } from '../src/index.ts';
 
 interface Common {
   nav: { home: () => string };
@@ -21,9 +21,11 @@ const chunk = (messages: Messages): MessageModule => ({ default: () => accessorO
 
 const catalog: Catalog = { locales: ['en', 'it'], sourceLocale: 'en' };
 
+type Built = Namespace<string, NamespaceKind, 'en' | 'it'>;
+
 function makeNamespaces(): {
-  common: Namespace;
-  checkout: Namespace;
+  common: Built;
+  checkout: Built;
   calls: Array<string>;
 } {
   const calls: Array<string> = [];
@@ -94,7 +96,7 @@ describe(createParla, () => {
         ...common.load,
         it: async (): Promise<MessageModule> => {
           await held;
-          return (common.load['it'] as Loader)();
+          return common.load.it();
         },
       },
     };
@@ -158,7 +160,7 @@ describe(createParla, () => {
 describe('namespace objects', () => {
   it('throw at once when built without one of the locales', () => {
     const { common } = makeNamespaces();
-    const german = { name: 'german', load: { en: common.load['en'] as Loader } };
+    const german = { name: 'german', load: { en: common.load.en } };
     expect(() => {
       void createParla({ catalog }).load([german]);
     }).toThrow('[parla] namespace "german" was built for en, not it');
@@ -197,7 +199,7 @@ describe('namespace objects', () => {
     const uiCommon = {
       ...ui.common,
       load: {
-        en: ui.common.load['en'] as Loader,
+        en: ui.common.load.en,
         it: async (): Promise<MessageModule> => Promise.resolve(chunk({ nav: { home: 'UI' } })),
       },
     };
