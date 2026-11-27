@@ -508,6 +508,7 @@ describe('names', () => {
       default: {},
       undefined: {},
       scope_audit: {},
+      fooBar: {},
       nav: {},
     };
     put(
@@ -530,6 +531,7 @@ describe('names', () => {
     put(dir, 'locales/en/default.json', { def: 'Default' });
     put(dir, 'locales/en/undefined.json', { undef: 'Undefined' });
     put(dir, 'locales/en/scope_audit.json', { scope: 'Scope' });
+    put(dir, 'locales/en/fooBar.json', { camel: 'Camel' });
     // `Text` only inside a group with markup still needs its import.
     put(dir, 'locales/en/nav.json', { nav: { home: 'Home', help: '<b>Help</b>' } });
     const built = await build({ cwd: dir });
@@ -542,7 +544,9 @@ describe('names', () => {
     expect(types('foo-bar')).toContain(
       'export interface FooBarMessages {\n  /** Dash */\n  dash: Text;',
     );
-    expect(types('foo-bar')).toContain('export declare const fooBar: Namespace<"foo-bar"');
+    // `fooBar` is taken by the namespace of that name, which every module can export at once
+    expect(types('foo-bar')).toContain('export declare const fooBar2: Namespace<"foo-bar"');
+    expect(types('fooBar')).toContain('export declare const fooBar: Namespace<"fooBar"');
     expect(types('foo_bar')).toContain(
       'export interface FooBar2Messages {\n  /** Under */\n  under: Text;',
     );

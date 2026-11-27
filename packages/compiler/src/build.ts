@@ -17,7 +17,7 @@ import { CompileError, compileMessage, ModuleScope } from './compile.ts';
 import type { MessageInfo } from './compile.ts';
 import { fallbackChain, loadConfig } from './config.ts';
 import type { ResolvedConfig, ResolvedNamespace } from './config.ts';
-import { exportName, interfaceNames, namespaceTypes, paramType } from './types.ts';
+import { exportNames, interfaceNames, namespaceTypes, paramType } from './types.ts';
 
 export interface FormatAdapter {
   readonly name: string;
@@ -273,6 +273,7 @@ const localeType = (config: ResolvedConfig): string =>
 function namespaceDeclaration(
   namespace: string,
   iface: string,
+  exported: string,
   config: ResolvedConfig,
   messages: Map<string, { info: MessageInfo; source: string }>,
 ): string {
@@ -287,19 +288,23 @@ export interface ${kind} extends NamespaceKind {
   readonly messages: ${iface}${types.generic ? "<this['node']>" : ''};
 }
 
-export declare const ${exportName(namespace, iface)}: Namespace<${JSON.stringify(namespace)}, ${kind}, ${localeType(config)}>;
+export declare const ${exported}: Namespace<${JSON.stringify(namespace)}, ${kind}, ${localeType(config)}>;
 `;
 }
 
 /** What an app imports to load a namespace: its name and one chunk loader per locale. */
-function namespaceModule(namespace: string, iface: string, locales: ReadonlyArray<string>): string {
+function namespaceModule(
+  namespace: string,
+  exported: string,
+  locales: ReadonlyArray<string>,
+): string {
   const loaders = locales
     .map(
       (l) =>
         `    ${JSON.stringify(l)}: () => import(${JSON.stringify(`../messages/${l}/${namespace}.js`)}),`,
     )
     .join('\n');
-  return `${HEADER}export const ${exportName(namespace, iface)} = {\n  name: ${JSON.stringify(namespace)},\n  load: {\n${loaders}\n  },\n};\n`;
+  return `${HEADER}export const ${exported} = {\n  name: ${JSON.stringify(namespace)},\n  load: {\n${loaders}\n  },\n};\n`;
 }
 
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
@@ -312,11 +317,13 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   const files = new Map<string, string>();
   const names = interfaceNames(config.namespaces.map((ns) => ns.name));
   const nameOf = (namespace: string): string => names.get(namespace) ?? '';
+  const exports = exportNames(names);
+  const exportOf = (namespace: string): string => exports.get(namespace) ?? '';
   // The source locale first, so every translation has its source message to compare against.
   const locales = [config.sourceLocale, ...config.locales.filter((l) => l !== config.sourceLocale)];
 
   for (const ns of config.namespaces) {
-    const exported = exportName(ns.name, nameOf(ns.name));
+    const exported = exportOf(ns.name);
     if (exported !== ns.name) {
       // two names for one namespace is what tools like codemods and x18n trip over
       diagnostics.push({
@@ -426,11 +433,11 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
     }
     files.set(
       join('namespaces', `${ns.name}.js`),
-      namespaceModule(ns.name, nameOf(ns.name), config.locales),
+      namespaceModule(ns.name, exportOf(ns.name), config.locales),
     );
     files.set(
       join('namespaces', `${ns.name}.d.ts`),
-      namespaceDeclaration(ns.name, nameOf(ns.name), config, sourceInfo),
+      namespaceDeclaration(ns.name, nameOf(ns.name), exportOf(ns.name), config, sourceInfo),
     );
   }
 

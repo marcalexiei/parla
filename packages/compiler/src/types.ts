@@ -21,14 +21,30 @@ const RESERVED = new Set(
   ),
 );
 
-/** The name itself where it is an identifier, to match `t`'s key; else `foo-bar` → `fooBar`. */
-export function exportName(namespace: string, iface: string): string {
-  if (IDENT.test(namespace) && !RESERVED.has(namespace)) {
-    return namespace;
+const isOwnName = (ns: string): boolean => IDENT.test(ns) && !RESERVED.has(ns);
+
+/**
+ * Each namespace's export: the name itself where it is an identifier, to match `t`'s key; else one
+ * derived from its interface (`foo-bar` → `fooBar`), numbered around the names already taken.
+ */
+export function exportNames(ifaces: ReadonlyMap<string, string>): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const ns of [...ifaces.keys()].filter((n) => isOwnName(n))) {
+    names.set(ns, ns);
   }
-  const base = iface.replace(/Messages$/, '');
-  const camel = base.charAt(0).toLowerCase() + base.slice(1);
-  return RESERVED.has(camel) ? `_${camel}` : camel;
+  const used = new Set(names.values());
+  for (const [ns, iface] of [...ifaces].filter(([n]) => !isOwnName(n))) {
+    const base = iface.replace(/Messages$/, '');
+    const camel = base.charAt(0).toLowerCase() + base.slice(1);
+    const derived = RESERVED.has(camel) ? `_${camel}` : camel;
+    let name = derived;
+    for (let n = 2; used.has(name); n += 1) {
+      name = `${derived}${n}`;
+    }
+    used.add(name);
+    names.set(ns, name);
+  }
+  return names;
 }
 
 /** {@link interfaceName} per namespace, numbered where two collide (`foo-bar`, `foo_bar`). */
