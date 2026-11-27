@@ -134,6 +134,12 @@ export default defineConfig({
       files: ['packages/core/src/**', 'packages/react/src/**', 'packages/format-*/src/**'],
       rules: {
         'no-restricted-globals': ['error', 'process', 'window', 'document', 'navigator'],
+        // Hermes (React Native) lacks `toSorted`: sort a copy instead.
+        'unicorn/no-array-sort': 'off',
+        'no-restricted-properties': [
+          'error',
+          { property: 'toSorted', message: 'Hermes lacks it: sort a copy.' },
+        ],
       },
     },
     {

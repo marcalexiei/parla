@@ -284,7 +284,8 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
       }
       byName.set(ns.name, id);
     }
-    const list = [...byName].toSorted(([a], [b]) => a.localeCompare(b));
+    // Not `toSorted`: Hermes (React Native) lacks it, and the spread is a copy already.
+    const list = [...byName].sort(([a], [b]) => a.localeCompare(b));
     const key = `${locale}\u0000${list.map(([, id]) => id).join('\u0000')}`;
     let promise = translations.get(key);
     if (!promise) {
@@ -351,7 +352,7 @@ interface Subtags {
 
 /** Without `Intl.Locale` (Hermes), the tag's own subtags: `en-US` still matches `en`. */
 function subtags(tag: string): Subtags | undefined {
-  const [language = '', ...rest] = tag.toLowerCase().split(/[-_]/);
+  const [language = '', ...rest] = tag.toLowerCase().split('-');
   if (!/^[a-z]{2,8}$/.test(language)) {
     return undefined;
   }
@@ -364,8 +365,10 @@ function subtags(tag: string): Subtags | undefined {
 
 /** `zh-TW` → `zh-Hant-TW`: the likely script and region, to compare tags that omit them. */
 function maximize(tag: string): Subtags | undefined {
+  // Android reports `it_IT`, which `Intl.Locale` rejects.
+  const bcp47 = tag.replaceAll('_', '-');
   try {
-    return typeof Intl.Locale === 'function' ? new Intl.Locale(tag).maximize() : subtags(tag);
+    return typeof Intl.Locale === 'function' ? new Intl.Locale(bcp47).maximize() : subtags(bcp47);
   } catch {
     return undefined;
   }

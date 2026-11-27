@@ -217,12 +217,15 @@ const tags = getLocales().map((l) => l.languageTag);
 createParla({ catalog, locale: matchLocale(tags, catalog.locales, catalog.sourceLocale) });
 ```
 
-| React Native       |                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------- |
-| No `Intl.Locale`   | `matchLocale` compares subtags: `de-AT` → `de`, no `zh-TW` → `zh-Hant`                              |
-| iOS `NumberFormat` | Ignores `notation`, `signDisplay` and `compactDisplay`                                              |
-| Bigints            | Printed as plain digits                                                                             |
-| Metro              | Bundles every `import()` chunk into the one bundle; `load` still evaluates only the locale it needs |
+| React Native       |                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| No `Intl.Locale`   | `matchLocale` compares subtags: `de-AT` → `de`, no `zh-TW` → `zh-Hant`                               |
+| iOS `NumberFormat` | Converts `:unit` to the locale's system (`en`: 5 km → 3.107mi), ignores `notation` and `signDisplay` |
+| Bigints            | Printed as plain digits                                                                              |
+| Metro              | Bundles every `import()` chunk into the one bundle; `load` still evaluates only the locale it needs  |
+
+On iOS, a catalog with `:unit`, `notation` or `signDisplay` also needs
+`@formatjs/intl-numberformat/polyfill-force.js` and its `locale-data`.
 
 ## Development
 

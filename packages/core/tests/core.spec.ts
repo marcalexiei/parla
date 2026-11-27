@@ -68,6 +68,19 @@ describe(createParla, () => {
     expect(calls).toStrictEqual(['en/checkout', 'en/common']);
   });
 
+  it('loads where Array#toSorted is missing, as on Hermes', async () => {
+    const { toSorted } = Array.prototype;
+    // oxlint-disable-next-line no-extend-native -- stands in for an engine without it
+    Object.defineProperty(Array.prototype, 'toSorted', { value: undefined, configurable: true });
+    onTestFinished(() => {
+      // oxlint-disable-next-line no-extend-native -- puts it back
+      Object.defineProperty(Array.prototype, 'toSorted', { value: toSorted, configurable: true });
+    });
+    const { common, checkout } = makeNamespaces();
+    const t = await createParla({ catalog }).load([common, checkout]);
+    expect((t['common'] as Common).nav.home()).toBe('Home');
+  });
+
   it('loads the namespaces loaded so far before switching locale, then never suspends', async () => {
     const { common, calls } = makeNamespaces();
     const parla = createParla({ catalog });
@@ -232,6 +245,7 @@ describe(matchLocale, () => {
     expect(matchLocale(['en'], ['en-GB', 'en-US'], 'en-GB')).toBe('en-US');
     expect(matchLocale(['pt-PT'], ['en', 'pt-BR'], 'en')).toBe('pt-BR');
     expect(matchLocale(['not a tag', 'it'], ['en', 'it'], 'en')).toBe('it');
+    expect(matchLocale(['it_IT'], ['en', 'it'], 'en')).toBe('it');
     // a later, worse candidate keeps the better one; an invalid supported tag is skipped
     expect(matchLocale(['zh-HK'], ['zh-TW', 'zh-CN', 'not a tag'], 'en')).toBe('zh-TW');
   });
