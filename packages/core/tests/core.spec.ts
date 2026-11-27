@@ -170,6 +170,27 @@ describe('namespace objects', () => {
     }).toThrow(/load takes namespace objects, not "common"/);
   });
 
+  it('reject what is not one before reading it, such as a missed lookup', () => {
+    const parla = createParla({ catalog });
+    for (const [value, shown] of [
+      [undefined, 'undefined'],
+      [null, 'null'],
+      [{ name: 'common' }, 'an object without name and load'],
+      [{ name: 'common', load: null }, 'an object without name and load'],
+    ] as const) {
+      expect(() => {
+        void parla.load([value as never]);
+      }).toThrow(
+        new TypeError(
+          `[parla] load takes namespace objects, not ${shown}: import it from the generated namespaces/`,
+        ),
+      );
+    }
+    expect(() => {
+      void parla.load([{ name: 'empty', load: {} }]);
+    }).toThrow('[parla] namespace "empty" was built for no locale, not en, it');
+  });
+
   it('dedupe a second object of one name, keeping the first and warning once', async () => {
     const first = makeNamespaces();
     const second = makeNamespaces();

@@ -77,6 +77,25 @@ interface Loadable {
   readonly load: Readonly<Record<string, Loader>>;
 }
 
+// A missed lookup such as `{ checkout }[name]` passes `undefined`, which must fail before it is read.
+const isLoadable = (value: unknown): value is Loadable => {
+  const ns = value as { name?: unknown; load?: unknown } | null;
+  return (
+    typeof ns === 'object' &&
+    ns !== null &&
+    typeof ns.name === 'string' &&
+    typeof ns.load === 'object' &&
+    ns.load !== null
+  );
+};
+
+const describe = (value: unknown): string => {
+  if (typeof value === 'object' && value !== null) {
+    return 'an object without name and load';
+  }
+  return typeof value === 'string' ? JSON.stringify(value) : String(value);
+};
+
 /** Emitted by `parla build` as `catalog.js`. */
 export interface Catalog {
   readonly locales: ReadonlyArray<Locale>;
@@ -234,6 +253,11 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
 
   // A second object of one name is a second copy of its package: the first one's loaders win.
   const adopt = (ns: Loadable): string => {
+    if (!isLoadable(ns)) {
+      throw new TypeError(
+        `[parla] load takes namespace objects, not ${describe(ns)}: import it from the generated namespaces/`,
+      );
+    }
     const known = registered.get(ns.name);
     if (known === ns) {
       return ns.name;
@@ -248,15 +272,10 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
       }
       return ns.name;
     }
-    if (typeof ns !== 'object') {
-      throw new TypeError(
-        `[parla] load takes namespace objects, not ${JSON.stringify(ns)}: import it from the generated namespaces/`,
-      );
-    }
     const missing = locales.filter((l) => !Object.hasOwn(ns.load, l));
     if (missing.length > 0) {
       throw new Error(
-        `[parla] namespace "${ns.name}" was built for ${Object.keys(ns.load).join(', ')}, not ${missing.join(', ')}`,
+        `[parla] namespace "${ns.name}" was built for ${Object.keys(ns.load).join(', ') || 'no locale'}, not ${missing.join(', ')}`,
       );
     }
     registered.set(ns.name, ns);
