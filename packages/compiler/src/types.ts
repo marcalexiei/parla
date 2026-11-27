@@ -200,6 +200,6 @@ export function namespaceTypes(
   return {
     code,
     generic: rich.length > 0,
-    usesText: plain.some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text'),
+    usesText: [...plain, ...rich].some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text'),
   };
 }
