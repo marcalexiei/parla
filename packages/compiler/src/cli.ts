@@ -4,18 +4,16 @@ import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { build, formatDiagnostic } from './build.ts';
-import type { BuildOptions } from './build.ts';
 
 const HELP = `Usage: parla <command> [options]
 
 Commands
-  build    Compile catalogs into per-locale chunks and typed accessors
-  types    Write only the .d.ts files (for workspace packages)
+  build    Compile catalogs into per-locale chunks and typed namespace objects
   check    Validate catalogs without writing anything
 
 Options
-  -c, --config <file>   Config file (default: parla.config.ts or package.json "parla")
-  -w, --watch           Rebuild on change (build, types)
+  -c, --config <file>   Config file (default: parla.config.ts)
+  -w, --watch           Rebuild on change (build)
       --strict          Treat warnings as errors
       --json            Print diagnostics as JSON (check)
   -h, --help`;
@@ -32,13 +30,12 @@ const { values, positionals } = parseArgs({
 });
 
 const [command] = positionals;
-if (values.help || !command || !['build', 'types', 'check'].includes(command)) {
+if (values.help || !command || !['build', 'check'].includes(command)) {
   console.log(HELP);
   process.exit(values.help ? 0 : 1);
 }
 
-const WRITE: Record<string, BuildOptions['write']> = { build: 'all', types: 'types', check: false };
-const write = WRITE[command] ?? false;
+const write = command === 'build';
 
 async function run(): Promise<{ failed: boolean; files: Array<string> }> {
   const started = performance.now();

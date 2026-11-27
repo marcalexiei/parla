@@ -14,10 +14,44 @@ function interfaceName(namespace: string): string {
   return `${/^(?:\d|$)/.test(pascal) ? '_' : ''}${pascal}Messages`;
 }
 
+// Not valid as a `const` name in a module, or a built-in TypeScript rejects as one.
+const RESERVED = new Set(
+  'arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function globalThis if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof undefined var void while with yield'.split(
+    ' ',
+  ),
+);
+
+const isOwnName = (ns: string): boolean => IDENT.test(ns) && !RESERVED.has(ns);
+
+/**
+ * Each namespace's export: the name itself where it is an identifier, to match `t`'s key; else one
+ * derived from its interface (`foo-bar` → `fooBar`), numbered around the names already taken.
+ */
+export function exportNames(ifaces: ReadonlyMap<string, string>): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const ns of [...ifaces.keys()].filter((n) => isOwnName(n))) {
+    names.set(ns, ns);
+  }
+  const used = new Set(names.values());
+  for (const [ns, iface] of [...ifaces].filter(([n]) => !isOwnName(n))) {
+    const base = iface.replace(/Messages$/, '');
+    const camel = base.charAt(0).toLowerCase() + base.slice(1);
+    const derived = RESERVED.has(camel) ? `_${camel}` : camel;
+    let name = derived;
+    for (let n = 2; used.has(name); n += 1) {
+      name = `${derived}${n}`;
+    }
+    used.add(name);
+    names.set(ns, name);
+  }
+  return names;
+}
+
 /** {@link interfaceName} per namespace, numbered where two collide (`foo-bar`, `foo_bar`). */
 export function interfaceNames(namespaces: ReadonlyArray<string>): Map<string, string> {
   const names = new Map<string, string>();
-  const used = new Set<string>();
+  // its kind would shadow the imported `NamespaceKind`
+  const used = new Set<string>(['NamespaceMessages']);
   for (const namespace of namespaces) {
     const base = interfaceName(namespace);
     let name = base;
@@ -85,13 +119,15 @@ export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new
   const { branches } = info;
   if (branches) {
     // One member per key, so a key's own params are required only with it; `string` last.
+    const every = new Set([...branches.needs.values()].flatMap((names) => [...names]));
     const members = [...branches.needs]
       .toSorted(
         ([a], [b]) => Number(a === null) - Number(b === null) || String(a).localeCompare(String(b)),
       )
       .map(([key, names]) => {
-        const type = key === null ? 'string' : JSON.stringify(key);
-        return `{ ${fields(info, names, defaults, [branches.param, type]).fields.join('; ')} }`;
+        // a plain `string` may hold any key, so it needs every branch's params
+        const [type, needed] = key === null ? ['string', every] : [JSON.stringify(key), names];
+        return `{ ${fields(info, needed, defaults, [branches.param, type]).fields.join('; ')} }`;
       });
     return `(params: ${members.join(' | ')}): ${ret}`;
   }
@@ -125,11 +161,12 @@ function render(tree: Tree, indent: string): string {
 }
 
 export interface NamespaceTypes {
+  /** The interfaces, without imports. */
   readonly code: string;
-  /** The interfaces `code` exports. */
-  readonly names: ReadonlyArray<string>;
   /** Whether the namespace's interface takes `Node`: only markup needs it. */
   readonly generic: boolean;
+  /** Whether `code` names `Text`. */
+  readonly usesText: boolean;
 }
 
 function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]>): Tree {
@@ -151,8 +188,6 @@ function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]
 }
 
 /**
- * `runtime`: the module `Text` comes from.
- *
  * Plain messages in a non-generic `XText`, and those with markup in `XMessages<Node> extends XText`,
  * so a wider `t` checks against a narrower one without instantiating every plain message.
  */
@@ -160,7 +195,6 @@ export function namespaceTypes(
   messages: Map<string, { info: MessageInfo; source: string }>,
   name: string,
   defaults: ReadonlySet<string>,
-  runtime: string,
 ): NamespaceTypes {
   const keys = [...messages.keys()];
   // A group goes whole into one interface: an extending interface cannot add to a base's group.
@@ -184,10 +218,9 @@ export function namespaceTypes(
   } else {
     code = `export interface ${text} {\n${body(plain)}\n}\n\n${code}`;
   }
-  const usesText = plain.some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text');
   return {
-    code: usesText ? `import type { Text } from '${runtime}';\n\n${code}` : code,
-    names: rich.length > 0 && plain.length > 0 ? [text, name] : [name],
+    code,
     generic: rich.length > 0,
+    usesText: [...plain, ...rich].some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text'),
   };
 }

@@ -1,27 +1,43 @@
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createParla } from '@parlajs/core';
-import type { Catalog } from '@parlajs/core';
+import type { Catalog, Namespace } from '@parlajs/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { build } from '../src/build.ts';
+import { build, formatDiagnostic } from '../src/build.ts';
 import type { BuildResult } from '../src/build.ts';
+
+import { typecheck } from './typecheck.ts';
 
 /** A `parla.config.ts` exporting `config`. */
 const configModule = (config: object): string =>
   `export default ${JSON.stringify(config, null, 2)};\n`;
 
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
+const tmp = join(repo, '.tmp');
 
-const app = join(repo, '.tmp', 'build-test', 'app');
-
-function put(file: string, content: unknown): void {
-  const path = join(app, file);
+function put(dir: string, file: string, content: unknown): void {
+  const path = join(dir, file);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
+}
+
+const importFrom = async <T>(file: string): Promise<T> =>
+  (await import(pathToFileURL(file).href)) as T;
+
+/** A built project's catalog and one namespace object. */
+async function imported(
+  dir: string,
+  namespace: string,
+): Promise<{ catalog: Catalog; ns: Namespace }> {
+  const out = join(dir, 'src/parla');
+  const { catalog } = await importFrom<{ catalog: Catalog }>(join(out, 'catalog.js'));
+  const mod = await importFrom<Record<string, Namespace>>(
+    join(out, 'namespaces', `${namespace}.js`),
+  );
+  return { catalog, ns: Object.values(mod)[0] as Namespace };
 }
 
 interface CheckoutMessages {
@@ -34,20 +50,24 @@ interface CommonMessages {
   greeting: (params: { name: string }) => string;
 }
 
+const app = join(tmp, 'build-test', 'app');
 let result: BuildResult;
 
 async function setup(): Promise<void> {
-  rmSync(join(repo, '.tmp', 'build-test'), { recursive: true, force: true });
+  rmSync(join(tmp, 'build-test'), { recursive: true, force: true });
   put(
+    app,
     'parla.config.ts',
     configModule({
       locales: ['en', 'it', 'de'],
       sourceLocale: 'en',
-      namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
-      packages: ['@acme/ui'],
+      namespaces: {
+        checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' },
+        common: { format: 'icu', path: 'locales/{locale}/common.json' },
+      },
     }),
   );
-  put('locales/en/checkout.json', {
+  put(app, 'locales/en/checkout.json', {
     title: 'Checkout',
     cart: {
       items: '.input {$count :number}\n.match $count\none {{{$count} item}}\n* {{{$count} items}}',
@@ -55,7 +75,7 @@ async function setup(): Promise<void> {
     total: 'Total {$amount :currency currency=EUR}',
     terms: 'Accept the {#link}terms{/link}',
   });
-  put('locales/it/checkout.json', {
+  put(app, 'locales/it/checkout.json', {
     title: 'Cassa',
     cart: {
       items:
@@ -64,50 +84,49 @@ async function setup(): Promise<void> {
     total: 'Totale {$amount :currency currency=EUR} per {$who}',
     extra: 'Not in the source',
   });
-  put('node_modules/@acme/ui/package.json', {
-    name: '@acme/ui',
-    parla: { namespaces: { common: { format: 'icu', path: 'locales/{locale}/common.json' } } },
-  });
-  put('node_modules/@acme/ui/locales/en/common.json', { greeting: 'Hello {name}!', save: 'Save' });
-  put('node_modules/@acme/ui/locales/it/common.json', { greeting: 'Ciao {name}!', save: 'Salva' });
+  put(app, 'locales/en/common.json', { greeting: 'Hello {name}!', save: 'Save' });
+  put(app, 'locales/it/common.json', { greeting: 'Ciao {name}!', save: 'Salva' });
+  put(app, 'locales/de/common.json', { greeting: 'Hallo {name}!', save: 'Speichern' });
   result = await build({ cwd: app });
 }
 
 describe(build, () => {
   beforeAll(setup);
 
-  it('writes a catalog, types and one chunk per locale and namespace', () => {
+  it('writes a catalog, one object per namespace and one chunk per locale and namespace', () => {
     const out = join(app, 'src/parla');
     const missing = [
       'catalog.js',
       'catalog.d.ts',
+      'namespaces/checkout.js',
+      'namespaces/checkout.d.ts',
       'messages/en/checkout.js',
       'messages/it/common.js',
-      'messages/de/common.js',
+      'messages/de/checkout.js',
     ].filter((f) => !existsSync(join(out, f)));
     expect(missing).toStrictEqual([]);
     const chunk = readFileSync(join(out, 'messages/it/checkout.js'), 'utf8');
     expect(chunk).not.toContain('"extra"');
     expect(chunk).toContain('articoli');
     expect(chunk).not.toContain('Checkout');
+    expect(readFileSync(join(out, 'namespaces/checkout.js'), 'utf8')).toContain(
+      'export const checkout = {\n  name: "checkout",\n  load: {\n    "en": () => import("../messages/en/checkout.js"),',
+    );
+    // The catalog is the locales only: an app loads what it imports.
+    expect(readFileSync(join(out, 'catalog.js'), 'utf8')).not.toContain('checkout');
+    expect(readFileSync(join(out, 'catalog.d.ts'), 'utf8')).not.toContain('Checkout');
   });
 
-  it('writes one types file per namespace, which catalog.d.ts imports, and removes stale ones', async () => {
-    const out = join(app, 'src/parla');
-    expect(readdirSync(join(out, 'types')).toSorted()).toStrictEqual([
+  it('removes the objects of a namespace since removed', async () => {
+    const out = join(app, 'src/parla/namespaces');
+    writeFileSync(join(out, 'removed.js'), 'a namespace since removed');
+    writeFileSync(join(out, 'removed.d.ts'), 'a namespace since removed');
+    await build({ cwd: app });
+    expect(readdirSync(out).toSorted()).toStrictEqual([
       'checkout.d.ts',
+      'checkout.js',
       'common.d.ts',
-    ]);
-    const catalog = readFileSync(join(out, 'catalog.d.ts'), 'utf8');
-    expect(catalog).toContain(
-      'import type { CheckoutMessages } from "./types/checkout.js";\nexport type { CheckoutText, CheckoutMessages } from "./types/checkout.js";',
-    );
-    expect(catalog).not.toContain('interface CheckoutMessages');
-    writeFileSync(join(out, 'types/removed.d.ts'), 'a namespace since removed');
-    await build({ cwd: app, write: 'types' });
-    expect(readdirSync(join(out, 'types')).toSorted()).toStrictEqual([
-      'checkout.d.ts',
-      'common.d.ts',
+      'common.js',
     ]);
   });
 
@@ -122,152 +141,146 @@ describe(build, () => {
   });
 
   it('runs end to end through the core runtime, with fallbacks', async () => {
-    const { catalog } = (await import(pathToFileURL(join(app, 'src/parla/catalog.js')).href)) as {
-      catalog: Catalog;
-    };
+    const { catalog, ns: checkout } = await imported(app, 'checkout');
+    const { ns: common } = await imported(app, 'common');
     const parla = createParla({ catalog, locale: 'it' });
-    const italian = await parla.load(['checkout']);
+    const italian = await parla.load([checkout]);
     const t = italian['checkout'] as CheckoutMessages;
     expect(t.title()).toBe('Cassa');
     expect(t.cart.items({ count: 1 })).toBe('1 articolo');
     expect(t.cart.items({ count: 4 })).toBe('4 articoli');
     expect(t.terms({ link: (c: string) => `[${c}]` })).toBe('Accept the [terms]');
     await parla.setLocale('de');
-    const de = await parla.load(['common']);
-    const common = de['common'] as CommonMessages;
-    expect(common.greeting({ name: 'Ada' })).toBe('Hello Ada!');
+    const de = await parla.load([common]);
+    expect((de['common'] as CommonMessages).greeting({ name: 'Ada' })).toBe('Hallo Ada!');
+    const back = await parla.load([checkout]);
+    expect(back['checkout']).toHaveProperty('title');
   });
 
-  it('generates types that catch wrong calls', () => {
-    const dts = readFileSync(join(app, 'src/parla/types/checkout.d.ts'), 'utf8');
-    expect(dts).toContain("import type { Text } from '@parlajs/core';");
+  it('generates types that catch wrong calls, strings and namespaces built for other locales', async () => {
+    const dts = readFileSync(join(app, 'src/parla/namespaces/checkout.d.ts'), 'utf8');
+    expect(dts).toContain("import type { Namespace, NamespaceKind, Text } from '@parlajs/core';");
     expect(dts).toContain('  /** Checkout */\n  title: Text;');
     expect(dts).toContain('items(params: { count: number }): string;');
     expect(dts).toContain('terms(params: { link: (children: Node) => Node }): Node;');
-    expect(readFileSync(join(app, 'src/parla/types/common.d.ts'), 'utf8')).toContain(
+    expect(dts).toContain(
+      "export interface CheckoutKind extends NamespaceKind {\n  readonly messages: CheckoutMessages<this['node']>;\n}",
+    );
+    expect(dts).toContain(
+      'export declare const checkout: Namespace<"checkout", CheckoutKind, "en" | "it" | "de">;',
+    );
+    expect(readFileSync(join(app, 'src/parla/namespaces/common.d.ts'), 'utf8')).toContain(
       'greeting(params: { name: string | number }): string;',
     );
+
+    const other = join(tmp, 'build-test', 'other');
     put(
+      other,
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'it'],
+        namespaces: { german: { format: 'icu', path: 'locales/{locale}.json' } },
+      }),
+    );
+    put(other, 'locales/en.json', { hi: 'Hi' });
+    await build({ cwd: other });
+
+    put(
+      app,
       'src/usage.ts',
-      `import type { Namespaces, Text } from '@parlajs/core';
+      `import type { Parla, Text, Translations } from '@parlajs/core';
 import './parla/catalog.js';
-declare const t: Namespaces['checkout'];
-export const title: Text = t.title;
+import { checkout } from './parla/namespaces/checkout.js';
+import { common } from './parla/namespaces/common.js';
+import { german } from '../../other/src/parla/namespaces/german.js';
+declare const parla: Parla;
+const t = await parla.load([checkout, common]);
+export const title: Text = t.checkout.title;
+export const ok: string[] = [t.checkout.title(), t.checkout.cart.items({ count: 2 }), t.checkout.total({ amount: 3 }), t.common.greeting({ name: 'Ada' })];
 // @ts-expect-error a plain message takes no params
-t.title({});
-declare const c: Namespaces['common'];
-export const ok: string[] = [t.title(), t.cart.items({ count: 2 }), t.total({ amount: 3 }), c.greeting({ name: 'Ada' })];
+t.checkout.title({});
 // @ts-expect-error count must be a number
-t.cart.items({ count: 'two' });
+t.checkout.cart.items({ count: 'two' });
 // @ts-expect-error count is required
-t.cart.items();
+t.checkout.cart.items();
 // @ts-expect-error no such message
-t.nope();
-// @ts-expect-error no such namespace
-export type Missing = Namespaces['missing'];
+t.checkout.nope();
+// A child demanding one namespace takes a \`t\` that loaded more.
+export const child: Translations<typeof common> = t;
+const one = await parla.load([checkout]);
+// @ts-expect-error only the loaded namespaces are in \`t\`
+export const unloaded: Translations<typeof common> = one;
+// @ts-expect-error a name is not a namespace
+await parla.load(['checkout']);
+// @ts-expect-error always a list, even of one
+await parla.load(checkout);
+// @ts-expect-error built for en and it, not de
+await parla.load([german]);
 `,
     );
-    put('tsconfig.json', {
-      compilerOptions: {
-        strict: true,
-        noEmit: true,
-        module: 'preserve',
-        moduleResolution: 'bundler',
-        skipLibCheck: false,
-        allowImportingTsExtensions: true,
-        types: [],
-        paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
-      },
-      include: ['src'],
-    });
-    const tsc = join(repo, 'node_modules/.bin/tsc');
-    expect(() =>
-      execFileSync(tsc, ['-p', join(app, 'tsconfig.json')], { encoding: 'utf8' }),
-    ).not.toThrow();
+    expect(typecheck(join(tmp, 'build-test'), { include: ['app/src'] })).toBe('');
   });
 });
 
 describe('types for a package that depends on an adapter only', () => {
-  const pkg = join(repo, '.tmp', 'build-test-react');
-  const write = (file: string, content: unknown): void => {
-    const path = join(pkg, file);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-  };
+  const pkg = join(tmp, 'build-test-react');
 
-  it('augments the adapter, so messages are typed and rich text is a ReactNode', async () => {
+  it('use the adapter, so rich text is a ReactNode', async () => {
     rmSync(pkg, { recursive: true, force: true });
-    write('package.json', {
-      name: '@acme/widget',
-      peerDependencies: { '@parlajs/react': '*' },
-      parla: { namespaces: { widget: { format: 'icu', path: 'locales/{locale}/widget.json' } } },
-    });
-    write('locales/en/widget.json', { title: 'Widget', terms: 'Read the <link>terms</link>' });
-    const built = await build({ cwd: pkg, write: 'types' });
+    put(pkg, 'package.json', { name: '@acme/widget', peerDependencies: { '@parlajs/react': '*' } });
+    put(
+      pkg,
+      'parla.config.ts',
+      configModule({
+        namespaces: { widget: { format: 'icu', path: 'locales/{locale}/widget.json' } },
+      }),
+    );
+    put(pkg, 'locales/en/widget.json', { title: 'Widget', terms: 'Read the <link>terms</link>' });
+    const built = await build({ cwd: pkg });
     expect(built.config.runtime).toBe('@parlajs/react');
     expect(readFileSync(join(pkg, 'src/parla/catalog.d.ts'), 'utf8')).toContain(
       "declare module '@parlajs/react'",
     );
+    expect(readFileSync(join(pkg, 'src/parla/namespaces/widget.d.ts'), 'utf8')).toContain(
+      "from '@parlajs/react';",
+    );
 
-    write(
+    put(
+      pkg,
       'src/usage.ts',
       `import type { ReactNode } from 'react';
 import { useParla } from '@parlajs/react';
 import type { Parla, Translations } from '@parlajs/react';
 import './parla/catalog.js';
-const { t } = useParla(['widget']);
+import { widget } from './parla/namespaces/widget.js';
+const { t } = useParla([widget]);
 export const title: string = t.widget.title();
 export const terms: ReactNode = t.widget.terms({ link: (children) => children });
 // @ts-expect-error a ReactNode is not a number, so the adapter's node type reached the types
 export const wrong: number = t.widget.terms({ link: (children) => children });
 // @ts-expect-error only the listed namespaces are in \`t\`
 t.other.title();
-// @ts-expect-error the namespace is registered, so an unknown one is rejected
-useParla(['widget', 'missing']);
+// @ts-expect-error a name is not a namespace
+useParla(['widget']);
 // @ts-expect-error always a list, even for one namespace
-useParla('widget');
+useParla(widget);
 declare const parla: Parla;
-export const loaded: Translations<'widget'> = await parla.load(['widget']);
+export const loaded: Translations<typeof widget> = await parla.load([widget]);
 // @ts-expect-error a child demanding a namespace needs a \`t\` that loaded it
-export const unloaded: Translations<'widget'> = await parla.load([]);
+export const unloaded: Translations<typeof widget> = await parla.load([]);
 `,
     );
-    const reactTypes = join(repo, 'packages/react/node_modules/@types/react');
-    write('tsconfig.json', {
-      compilerOptions: {
-        strict: true,
-        noEmit: true,
-        module: 'preserve',
-        moduleResolution: 'bundler',
-        skipLibCheck: false,
-        allowImportingTsExtensions: true,
-        types: [],
-        paths: {
-          '@parlajs/core': [join(repo, 'packages/core/src/index.ts')],
-          '@parlajs/react': [join(repo, 'packages/react/src/index.ts')],
-          react: [join(reactTypes, 'index.d.ts')],
-        },
-      },
-      include: ['src'],
-    });
-    const tsc = join(repo, 'node_modules/.bin/tsc');
-    expect(() =>
-      execFileSync(tsc, ['-p', join(pkg, 'tsconfig.json')], { encoding: 'utf8' }),
-    ).not.toThrow();
+    expect(typecheck(pkg)).toBe('');
   });
 });
 
-describe('one catalog, two node types', () => {
-  const dir = join(repo, '.tmp', 'build-test-nodes');
-  const write = (file: string, content: unknown): void => {
-    const path = join(dir, file);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-  };
+describe('one namespace, two node types', () => {
+  const dir = join(tmp, 'build-test-nodes');
 
   it("types each instance's rich text as its own node: ReactNode beside string", async () => {
     rmSync(dir, { recursive: true, force: true });
-    write(
+    put(
+      dir,
       'parla.config.ts',
       configModule({
         locales: ['en'],
@@ -278,42 +291,47 @@ describe('one catalog, two node types', () => {
         },
       }),
     );
-    write('locales/en/app.json', {
+    put(dir, 'locales/en/app.json', {
       title: 'Title',
       nav: { home: 'Home', help: 'Read the <link>help</link>' },
       terms: 'Read the <link>terms</link>',
     });
-    write('locales/en/plain.json', { save: 'Save' });
-    await build({ cwd: dir, write: 'types' });
-    const appTypes = readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8');
+    put(dir, 'locales/en/plain.json', { save: 'Save' });
+    await build({ cwd: dir });
+    const appTypes = readFileSync(join(dir, 'src/parla/namespaces/app.d.ts'), 'utf8');
     expect(appTypes).toContain('export interface AppText {\n  /** Title */\n  title: Text;\n}');
     expect(appTypes).toMatch(/export interface AppMessages<Node> extends AppText \{\n\s+nav: \{/);
-    expect(readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8')).toMatch(
-      /"app": AppMessages<Node>;\s+"plain": PlainMessages;/,
+    // Without markup the kind ignores the node type, so React and string instances share it.
+    expect(readFileSync(join(dir, 'src/parla/namespaces/plain.d.ts'), 'utf8')).toContain(
+      'export interface PlainKind extends NamespaceKind {\n  readonly messages: PlainMessages;\n}',
     );
 
-    write(
+    put(
+      dir,
       'src/usage.ts',
       `import { createElement } from 'react';
 import type { ReactNode } from 'react';
 import { createParla as createCore } from '@parlajs/core';
 import type { Translations } from '@parlajs/core';
 import { createParla as createReact } from '@parlajs/react';
-import type { WrapRich } from '@parlajs/react';
+import type { Translations as ReactTranslations, WrapRich } from '@parlajs/react';
 import { catalog } from './parla/catalog.js';
-import type { AppMessages, AppText, PlainMessages } from './parla/catalog.js';
+import { app } from './parla/namespaces/app.js';
+import type { AppMessages, AppText } from './parla/namespaces/app.js';
+import { plain } from './parla/namespaces/plain.js';
+import type { PlainMessages } from './parla/namespaces/plain.js';
 
 const web = createReact({ catalog, markup: { strong: (c) => createElement('b', null, c) } });
 const email = createCore({ catalog, markup: { strong: (c) => \`**\${c}**\` } });
-const { app: w } = await web.load(['app']);
-const { app: e } = await email.load(['app']);
+const { app: w } = await web.load([app]);
+const { app: e } = await email.load([app]);
 // @ts-expect-error a namespace without markup takes no node type
 export type PlainOfString = PlainMessages<string>;
 // @ts-expect-error the plain part of a namespace with markup takes no node type
 export type TextOfString = AppText<string>;
 export const plainPart: AppText = {} as AppMessages<ReactNode>;
-const { plain: wp } = await web.load(['plain']);
-const { plain: ep } = await email.load(['plain']);
+const { plain: wp } = await web.load([plain]);
+const { plain: ep } = await email.load([plain]);
 export const saves: string[] = [wp.save(), ep.save()];
 export const help: ReactNode = w.nav.help({ link: (c) => c });
 // @ts-expect-error a group with markup follows the instance's node type
@@ -326,7 +344,12 @@ export const notText: string = w.terms({ link: (c) => c });
 // @ts-expect-error a string instance's markup callback returns a string
 e.terms({ link: () => createElement('a') });
 // @ts-expect-error a React \`t\` is not a string instance's
-export const wrongT: Translations<'app'> = await web.load(['app']);
+export const wrongT: Translations<typeof app> = await web.load([app]);
+// @ts-expect-error a string \`t\` is not a React instance's
+export const wrongReactT: ReactTranslations<typeof app> = await email.load([app]);
+// Without markup, either instance's \`t\` will do, also inside a wider one.
+export const plainT: Translations<typeof plain> = await web.load([plain]);
+export const plainReactT: ReactTranslations<typeof plain> = await email.load([app, plain]);
 // @ts-expect-error a string instance's markup renderer returns a string
 createCore({ catalog, markup: { strong: () => createElement('b') } });
 // @ts-expect-error a React markup renderer returns a ReactNode
@@ -337,39 +360,18 @@ createCore<string>({ catalog, markup: { strong: (c) => c }, wrapRich: (parts) =>
 export const wrap: WrapRich = () => new Date();
 `,
     );
-    const reactTypes = join(repo, 'packages/react/node_modules/@types/react');
-    write('tsconfig.json', {
-      compilerOptions: {
-        strict: true,
-        noEmit: true,
-        module: 'preserve',
-        moduleResolution: 'bundler',
-        skipLibCheck: false,
-        allowImportingTsExtensions: true,
-        types: [],
-        paths: {
-          '@parlajs/core': [join(repo, 'packages/core/src/index.ts')],
-          '@parlajs/react': [join(repo, 'packages/react/src/index.ts')],
-          react: [join(reactTypes, 'index.d.ts')],
-        },
-      },
-      include: ['src'],
-    });
-    const tsc = join(repo, 'node_modules/.bin/tsc');
-    expect(() =>
-      execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
-    ).not.toThrow();
+    expect(typecheck(dir)).toBe('');
   });
 });
 
 describe('chunks', () => {
-  const dir = join(repo, '.tmp', 'build-test-chunk');
+  const dir = join(tmp, 'build-test-chunk');
 
   it('build the accessor in one call, keeping a `__proto__` key as a message', async () => {
     rmSync(dir, { recursive: true, force: true });
-    mkdirSync(join(dir, 'locales/en'), { recursive: true });
-    writeFileSync(
-      join(dir, 'parla.config.ts'),
+    put(
+      dir,
+      'parla.config.ts',
       configModule({
         locales: ['en'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
@@ -377,18 +379,17 @@ describe('chunks', () => {
     );
     // Past 127 keys a group is a literal plus assignments, and `__proto__` must stay a message.
     const big = Object.fromEntries(Array.from({ length: 130 }, (_, i) => [`k${i}`, `Big ${i}`]));
-    writeFileSync(
-      join(dir, 'locales/en/app.json'),
+    put(
+      dir,
+      'locales/en/app.json',
       `{ "__proto__": "Proto", "plain": "Plain", "nav": { "home": "Home" }, "terms": "Read the <link>terms</link>", "big": ${JSON.stringify(big).slice(0, -1)}, "__proto__": "Big proto" } }`,
     );
     await build({ cwd: dir });
     const chunk = readFileSync(join(dir, 'src/parla/messages/en/app.js'), 'utf8');
     expect(chunk).toContain('"plain": (p) => "Plain",');
 
-    const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
-      catalog: Catalog;
-    };
-    const loaded = await createParla({ catalog }).load(['app']);
+    const { catalog, ns } = await imported(dir, 'app');
+    const loaded = await createParla({ catalog }).load([ns]);
     const t = loaded['app'] as Record<string, unknown> & {
       plain: () => string;
       nav: { home: () => string };
@@ -413,46 +414,39 @@ describe('chunks', () => {
 });
 
 describe('select keys', () => {
-  const dir = join(repo, '.tmp', 'build-test-select');
+  const dir = join(tmp, 'build-test-select');
 
   it('match whatever order a translation lists its variants in', async () => {
     rmSync(dir, { recursive: true, force: true });
-    mkdirSync(join(dir, 'locales/en'), { recursive: true });
-    mkdirSync(join(dir, 'locales/it'), { recursive: true });
-    writeFileSync(
-      join(dir, 'parla.config.ts'),
+    put(
+      dir,
+      'parla.config.ts',
       configModule({
         locales: ['en', 'it'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
       }),
     );
-    writeFileSync(
-      join(dir, 'locales/en/app.json'),
-      JSON.stringify({ reply: '{g, select, male {He} female {She} other {They}} replied' }),
-    );
-    writeFileSync(
-      join(dir, 'locales/it/app.json'),
-      JSON.stringify({ reply: '{g, select, female {Lei} male {Lui} other {Loro}} ha risposto' }),
-    );
-    const built = await build({ cwd: dir, write: 'types' });
+    put(dir, 'locales/en/app.json', {
+      reply: '{g, select, male {He} female {She} other {They}} replied',
+    });
+    put(dir, 'locales/it/app.json', {
+      reply: '{g, select, female {Lei} male {Lui} other {Loro}} ha risposto',
+    });
+    const built = await build({ cwd: dir });
     expect(built.diagnostics).toStrictEqual([]);
-    expect(readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8')).toContain(
+    expect(readFileSync(join(dir, 'src/parla/namespaces/app.d.ts'), 'utf8')).toContain(
       'reply(params: { g: "female" | "male" | (string & {}) }): string;',
     );
   });
 });
 
 describe('select params', () => {
-  const dir = join(repo, '.tmp', 'build-test-branches');
-  const write = (file: string, content: unknown): void => {
-    const path = join(dir, file);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-  };
+  const dir = join(tmp, 'build-test-branches');
 
   it("are required only in their branch, and a translation's branch needs no more", async () => {
     rmSync(dir, { recursive: true, force: true });
-    write(
+    put(
+      dir,
       'parla.config.ts',
       configModule({
         locales: ['en', 'it'],
@@ -460,29 +454,30 @@ describe('select params', () => {
       }),
     );
     const ref = '{kind, select, part {Part {part}} chapter {Chapter {chapter}} other {{title}}}';
-    write('locales/en/app.json', {
+    put(dir, 'locales/en/app.json', {
       ref,
       heading: '{context, select, part_one {Part one} other {Part {part} / {title}}}',
     });
-    write('locales/it/app.json', {
+    put(dir, 'locales/it/app.json', {
       ref: '{kind, select, part {Parte {part}} chapter {Capitolo {chapter}} other {{title}}}',
       heading: '{context, select, part_one {Parte {part}} other {Parte {part} / {title}}}',
     });
-    const built = await build({ cwd: dir, write: 'types' });
+    const built = await build({ cwd: dir });
     expect(
       built.diagnostics.map((d) => `${d.code}:${d.locale}:${d.key}:${d.message}`),
     ).toStrictEqual([
       'param-mismatch:it:heading:needs $part when $context is "part_one", but the source does not',
     ]);
-    write(
+    put(
+      dir,
       'src/usage.ts',
-      `import type { Namespaces } from '@parlajs/core';
-import './parla/catalog.js';
-declare const t: Namespaces['app'];
+      `import type { AppMessages } from './parla/namespaces/app.js';
+declare const t: AppMessages;
+declare const kind: string;
 export const ok: string[] = [
   t.ref({ kind: 'part', part: 1 }),
   t.ref({ kind: 'chapter', chapter: 2 }),
-  t.ref({ kind: 'book', title: 'Dune' }),
+  t.ref({ kind, part: 1, chapter: 2, title: 'Dune' }),
   t.heading({ context: 'part_one' }),
   t.heading({ context: 'part_two', part: 2, title: 'Dune' }),
 ];
@@ -490,79 +485,113 @@ export const ok: string[] = [
 t.ref({ kind: 'part', chapter: 2 });
 // @ts-expect-error \`chapter\` is needed when kind is "chapter"
 t.ref({ kind: 'chapter' });
-// @ts-expect-error any other kind needs \`title\`
-t.ref({ kind: 'book' });
+// @ts-expect-error a plain string may be any kind, so it needs every branch's params
+t.ref({ kind, title: 'Dune' });
 // @ts-expect-error any other context needs \`part\` and \`title\`
 t.heading({ context: 'part_two' });
 `,
     );
-    write('tsconfig.json', {
-      compilerOptions: {
-        strict: true,
-        noEmit: true,
-        module: 'preserve',
-        moduleResolution: 'bundler',
-        skipLibCheck: false,
-        allowImportingTsExtensions: true,
-        types: [],
-        paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
-      },
-      include: ['src'],
-    });
-    const tsc = join(repo, 'node_modules/.bin/tsc');
-    expect(() =>
-      execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
-    ).not.toThrow();
+    expect(typecheck(dir)).toBe('');
   });
 });
 
-describe('interface names', () => {
-  const dir = join(repo, '.tmp', 'build-test-names');
+describe('names', () => {
+  const dir = join(tmp, 'build-test-names');
 
-  it('are numbered when two namespaces would share one', async () => {
+  it('are numbered when two namespaces would share one, and never shadow an import or a keyword', async () => {
     rmSync(dir, { recursive: true, force: true });
-    mkdirSync(join(dir, 'locales/en'), { recursive: true });
-    writeFileSync(
-      join(dir, 'parla.config.ts'),
+    const files = {
+      'foo-bar': {},
+      foo_bar: {},
+      '-': {},
+      namespace: {},
+      default: {},
+      undefined: {},
+      scope_audit: {},
+      fooBar: {},
+      nav: {},
+    };
+    put(
+      dir,
+      'parla.config.ts',
       configModule({
         locales: ['en'],
-        namespaces: {
-          'foo-bar': { format: 'icu', path: 'locales/{locale}/foo-bar.json' },
-          foo_bar: { format: 'icu', path: 'locales/{locale}/foo_bar.json' },
-          '-': { format: 'icu', path: 'locales/{locale}/dash.json' },
-        },
+        namespaces: Object.fromEntries(
+          Object.keys(files).map((ns) => [
+            ns,
+            { format: 'icu', path: `locales/{locale}/${ns}.json` },
+          ]),
+        ),
       }),
     );
-    writeFileSync(join(dir, 'locales/en/dash.json'), JSON.stringify({ go: 'Go', b: '<b>B</b>' }));
-    writeFileSync(join(dir, 'locales/en/foo-bar.json'), JSON.stringify({ dash: 'Dash' }));
-    writeFileSync(join(dir, 'locales/en/foo_bar.json'), JSON.stringify({ under: 'Under' }));
-    await build({ cwd: dir, write: 'types' });
+    put(dir, 'locales/en/-.json', { go: 'Go', b: '<b>B</b>' });
+    put(dir, 'locales/en/foo-bar.json', { dash: 'Dash' });
+    put(dir, 'locales/en/foo_bar.json', { under: 'Under' });
+    put(dir, 'locales/en/namespace.json', { ns: 'Namespace' });
+    put(dir, 'locales/en/default.json', { def: 'Default' });
+    put(dir, 'locales/en/undefined.json', { undef: 'Undefined' });
+    put(dir, 'locales/en/scope_audit.json', { scope: 'Scope' });
+    put(dir, 'locales/en/fooBar.json', { camel: 'Camel' });
+    // `Text` only inside a group with markup still needs its import.
+    put(dir, 'locales/en/nav.json', { nav: { home: 'Home', help: '<b>Help</b>' } });
+    const built = await build({ cwd: dir });
+    // two names for one namespace: the export and `t`'s key
+    expect(
+      built.diagnostics.filter((d) => d.code === 'namespace-name').map((d) => d.namespace),
+    ).toStrictEqual(['foo-bar', '-', 'default', 'undefined']);
     const types = (ns: string): string =>
-      readFileSync(join(dir, `src/parla/types/${ns}.d.ts`), 'utf8');
+      readFileSync(join(dir, `src/parla/namespaces/${ns}.d.ts`), 'utf8');
     expect(types('foo-bar')).toContain(
       'export interface FooBarMessages {\n  /** Dash */\n  dash: Text;',
     );
+    // `fooBar` is taken by the namespace of that name, which every module can export at once
+    expect(types('foo-bar')).toContain('export declare const fooBar2: Namespace<"foo-bar"');
+    expect(types('fooBar')).toContain('export declare const fooBar: Namespace<"fooBar"');
     expect(types('foo_bar')).toContain(
       'export interface FooBar2Messages {\n  /** Under */\n  under: Text;',
     );
+    // the name itself where it is an identifier, matching `t.foo_bar`
+    expect(types('foo_bar')).toContain('export declare const foo_bar: Namespace<"foo_bar"');
+    expect(types('scope_audit')).toContain(
+      'export declare const scope_audit: Namespace<"scope_audit"',
+    );
     // not `Text`, which would shadow the imported one
     expect(types('-')).toContain('export interface _Messages<Node> extends _Text {');
-    const dts = readFileSync(join(dir, 'src/parla/catalog.d.ts'), 'utf8');
-    expect(dts).toMatch(/"foo-bar": FooBarMessages;\s+"foo_bar": FooBar2Messages;/);
+    // not `NamespaceKind`, which would shadow the imported one
+    expect(types('namespace')).toContain('export interface Namespace2Kind extends NamespaceKind');
+    expect(types('default')).toContain('export declare const _default: Namespace<"default"');
+    expect(types('undefined')).toContain('export declare const _undefined: Namespace<"undefined"');
+    // without it, `Text` would be the DOM's text node
+    expect(types('nav')).toContain(
+      "import type { Namespace, NamespaceKind, Text } from '@parlajs/core';",
+    );
+
+    const modules = await Promise.all(
+      Object.keys(files).map(async (ns) =>
+        importFrom<Record<string, Namespace>>(join(dir, `src/parla/namespaces/${ns}.js`)),
+      ),
+    );
+    expect(modules.map((mod) => Object.values(mod).map((object) => object.name))).toStrictEqual(
+      Object.keys(files).map((ns) => [ns]),
+    );
+    put(
+      dir,
+      'src/usage.ts',
+      Object.keys(files)
+        .map((ns) => `export * from './parla/namespaces/${ns}.js';\n`)
+        .join(''),
+    );
+    expect(typecheck(dir)).toBe('');
   });
 });
 
 describe('custom functions and default markup', () => {
-  const dir = join(repo, '.tmp', 'build-test-extensions');
-  const write = (file: string, content: unknown): void => {
-    const path = join(dir, file);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-  };
+  const dir = join(tmp, 'build-test-extensions');
 
   it('registers them, renders them, and requires their implementations', async () => {
     rmSync(dir, { recursive: true, force: true });
-    write(
+    put(
+      dir,
       'parla.config.ts',
       configModule({
         locales: ['en'],
@@ -571,14 +600,15 @@ describe('custom functions and default markup', () => {
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
       }),
     );
-    write('locales/en/app.json', {
+    put(dir, 'locales/en/app.json', {
       by: 'By {name, capitalize}',
       bold: 'A <strong>bold</strong> move',
       link: 'Read the <link>terms</link>',
     });
     const built = await build({ cwd: dir });
     expect(built.diagnostics).toStrictEqual([]);
-    write(
+    put(
+      dir,
       'shadow/parla.config.ts',
       configModule({ locales: ['en'], functions: { number: 'string' } }),
     );
@@ -589,13 +619,11 @@ describe('custom functions and default markup', () => {
     expect(dts).toContain(
       '  interface FunctionRegistry {\n    "capitalize": true;\n  }\n  interface MarkupRegistry {\n    "strong": true;\n  }\n',
     );
-    expect(readFileSync(join(dir, 'src/parla/types/app.d.ts'), 'utf8')).toContain(
+    expect(readFileSync(join(dir, 'src/parla/namespaces/app.d.ts'), 'utf8')).toContain(
       'bold(params?: { strong?: (children: Node) => Node }): Node;',
     );
 
-    const { catalog } = (await import(pathToFileURL(join(dir, 'src/parla/catalog.js')).href)) as {
-      catalog: Catalog;
-    };
+    const { catalog, ns } = await imported(dir, 'app');
     const parla = createParla({
       catalog,
       functions: {
@@ -605,7 +633,7 @@ describe('custom functions and default markup', () => {
       markup: { strong: (children: unknown) => `**${String(children)}**` },
       // This spec's program has no generated registries, so the options are not typed here.
     } as never);
-    const loaded = await parla.load(['app']);
+    const loaded = await parla.load([ns]);
     const t = loaded['app'] as {
       by: (p: { name: string }) => string;
       bold: (p?: { strong?: (c: unknown) => unknown }) => unknown;
@@ -614,130 +642,136 @@ describe('custom functions and default markup', () => {
     expect(t.bold()).toBe('A **bold** move');
     expect(t.bold({ strong: (c) => `<${String(c)}>` })).toBe('A <bold> move');
 
-    write(
+    put(
+      dir,
       'src/usage.ts',
       `import { createParla } from '@parlajs/core';
-import type { Namespaces } from '@parlajs/core';
 import { catalog } from './parla/catalog.js';
-declare const t: Namespaces['app'];
-export const ok: unknown[] = [t.bold(), t.by({ name: 'ada' }), t.link({ link: (c) => c })];
-// @ts-expect-error markup without a default stays required
-t.link();
+import { app } from './parla/namespaces/app.js';
 export const parla = createParla({
   catalog,
   functions: { capitalize: (v) => String(v) },
   markup: { strong: (c) => c },
 });
+const { app: t } = await parla.load([app]);
+export const ok: unknown[] = [t.bold(), t.by({ name: 'ada' }), t.link({ link: (c) => c })];
+// @ts-expect-error markup without a default stays required
+t.link();
 // @ts-expect-error a declared function needs its implementation
 createParla({ catalog, markup: { strong: (c) => c } });
 // @ts-expect-error declared markup needs its renderer
 createParla({ catalog, functions: { capitalize: (v) => String(v) }, markup: {} });
 `,
     );
-    write('tsconfig.json', {
-      compilerOptions: {
-        strict: true,
-        noEmit: true,
-        module: 'preserve',
-        moduleResolution: 'bundler',
-        skipLibCheck: false,
-        allowImportingTsExtensions: true,
-        allowJs: false,
-        types: [],
-        paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
-      },
-      include: ['src'],
-    });
-    const tsc = join(repo, 'node_modules/.bin/tsc');
-    expect(() =>
-      execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
-    ).not.toThrow();
+    expect(typecheck(dir)).toBe('');
   });
 });
 
-describe("a package's types beside the app's", () => {
-  const dir = join(repo, '.tmp', 'build-test-registries');
-  const write = (file: string, content: unknown): void => {
-    const path = join(dir, file);
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, typeof content === 'string' ? content : JSON.stringify(content, null, 2));
-  };
+describe("a package's registries beside the app's", () => {
+  const dir = join(tmp, 'build-test-registries');
 
   it('add up, whichever loads first and with or without skipLibCheck', async () => {
     rmSync(dir, { recursive: true, force: true });
     const ui = 'node_modules/@acme/ui';
-    write(`${ui}/package.json`, {
-      name: '@acme/ui',
-      parla: { namespaces: { ui: { format: 'icu', path: 'locales/{locale}/ui.json' } } },
-    });
-    write(`${ui}/locales/en/ui.json`, { save: 'Save' });
-    write(
+    put(
+      dir,
+      `${ui}/parla.config.ts`,
+      configModule({
+        locales: ['en', 'it', 'de'],
+        markup: ['em'],
+        namespaces: { ui: { format: 'icu', path: 'locales/{locale}/ui.json' } },
+      }),
+    );
+    put(dir, `${ui}/locales/en/ui.json`, { save: 'Save' });
+    put(
+      dir,
       'parla.config.ts',
       configModule({
         locales: ['en', 'it'],
+        markup: ['strong'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
-        packages: ['@acme/ui'],
       }),
     );
-    write('locales/en/app.json', { hi: 'Hi' });
-    write('locales/it/app.json', { hi: 'Ciao' });
-    await build({ cwd: join(dir, ui), write: 'types' });
+    put(dir, 'locales/en/app.json', { hi: 'Hi' });
+    put(dir, 'locales/it/app.json', { hi: 'Ciao' });
+    await build({ cwd: join(dir, ui) });
     await build({ cwd: dir });
 
-    const usage = `import type { Locale, Namespaces } from '@parlajs/core';
-declare const n: Namespaces;
-export const both: string[] = [n.app.hi(), n.ui.save()];
+    const usage = `import type { Locale, MarkupName } from '@parlajs/core';
 export const it: Locale = 'it';
+export const tags: MarkupName[] = ['em', 'strong'];
 // @ts-expect-error not a locale of the app or the package
 export const fr: Locale = 'fr';
 `;
-    const tsc = join(repo, 'node_modules/.bin/tsc');
     for (const packageFirst of [true, false]) {
       const imports = [`import '../${ui}/src/parla/catalog.js';`, "import './parla/catalog.js';"];
-      write(
+      put(
+        dir,
         'src/usage.ts',
         `${(packageFirst ? imports : imports.toReversed()).join('\n')}\n${usage}`,
       );
       for (const skipLibCheck of [false, true]) {
-        write('tsconfig.json', {
-          compilerOptions: {
-            strict: true,
-            noEmit: true,
-            module: 'preserve',
-            moduleResolution: 'bundler',
-            skipLibCheck,
-            allowImportingTsExtensions: true,
-            types: [],
-            paths: { '@parlajs/core': [join(repo, 'packages/core/src/index.ts')] },
-          },
-          include: ['src', `${ui}/src`],
-        });
-        expect(() =>
-          execFileSync(tsc, ['-p', join(dir, 'tsconfig.json')], { encoding: 'utf8' }),
-        ).not.toThrow();
+        expect(typecheck(dir, { include: ['src', `${ui}/src`], skipLibCheck })).toBe('');
       }
     }
   });
 });
 
+describe('diagnostics', () => {
+  const dir = join(tmp, 'build-test-diagnostics');
+
+  it('report broken catalogs, and a check writes nothing', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      configModule({
+        locales: ['en'],
+        namespaces: {
+          json: { format: 'icu', path: 'locales/{locale}/json.json' },
+          shape: { format: 'icu', path: 'locales/{locale}/shape.json' },
+          weird: { format: 'yaml', path: 'locales/{locale}/weird.json' },
+        },
+      }),
+    );
+    put(dir, 'locales/en/json.json', '{ not json');
+    put(dir, 'locales/en/shape.json', { list: ['a'], a: 'A', 'a.b': 'B', bad: '{oops' });
+    const { diagnostics, config, written } = await build({ cwd: dir, write: false });
+    expect(written).toStrictEqual([]);
+    expect(existsSync(join(dir, 'src'))).toBe(false);
+    expect(diagnostics.map((d) => `${d.code}:${d.namespace}:${d.key ?? ''}`)).toStrictEqual([
+      'invalid-resource:json:',
+      'invalid-resource:shape:list',
+      'key-conflict:shape:a',
+      'invalid-syntax:shape:bad',
+      'unknown-format:weird:',
+    ]);
+    expect(diagnostics.map((d) => formatDiagnostic(d, config.root))).toContainEqual(
+      'error   [invalid-resource] shape › en › list: expected a string or an object, got array (locales/en/shape.json)',
+    );
+    expect(formatDiagnostic({ level: 'warning', code: 'unknown-key', message: 'm' })).toBe(
+      'warning [unknown-key] : m',
+    );
+  });
+});
+
 describe('builds running at once', () => {
-  const dir = join(repo, '.tmp', 'build-test-parallel');
+  const dir = join(tmp, 'build-test-parallel');
 
   it('write through a rename, and leave another build’s temp file alone', async () => {
     rmSync(dir, { recursive: true, force: true });
-    mkdirSync(join(dir, 'locales/en'), { recursive: true });
-    writeFileSync(
-      join(dir, 'parla.config.ts'),
+    put(
+      dir,
+      'parla.config.ts',
       configModule({
         locales: ['en'],
         namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
       }),
     );
-    writeFileSync(join(dir, 'locales/en/app.json'), JSON.stringify({ title: 'Title' }));
+    put(dir, 'locales/en/app.json', { title: 'Title' });
     const messages = join(dir, 'src/parla/messages/en');
-    mkdirSync(messages, { recursive: true });
-    writeFileSync(join(messages, '.app.js.1.tmp'), 'another build, mid-write');
-    writeFileSync(join(messages, 'stale.js'), 'a namespace since removed');
+    put(messages, '.app.js.1.tmp', 'another build, mid-write');
+    put(messages, 'stale.js', 'a namespace since removed');
 
     await build({ cwd: dir });
     expect(readdirSync(messages).toSorted()).toStrictEqual(['.app.js.1.tmp', 'app.js']);

@@ -5,22 +5,28 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createParla, ParlaProvider, useLocale, useParla } from '../src/index.ts';
-import type { Catalog, Parla, Translations } from '../src/index.ts';
+import type {
+  Catalog,
+  Loader,
+  Namespace,
+  NamespaceKind,
+  Parla,
+  Translations,
+} from '../src/index.ts';
 
-// What `parla build` would generate for this catalog.
-declare module '@parlajs/core' {
-  interface NamespaceRegistry<Node> {
-    shop: {
-      title: () => string;
-      terms: (params: { link: (children: Node) => Node }) => Node;
-    };
-    extra: {
-      hello: () => string;
-    };
-    broken: {
-      never: () => string;
-    };
-  }
+// What `parla build` would generate for these namespaces.
+interface ShopMessages<Node> {
+  title: () => string;
+  terms: (params: { link: (children: Node) => Node }) => Node;
+}
+interface ShopKind extends NamespaceKind {
+  readonly messages: ShopMessages<this['node']>;
+}
+interface ExtraKind extends NamespaceKind {
+  readonly messages: { hello: () => string };
+}
+interface BrokenKind extends NamespaceKind {
+  readonly messages: { never: () => string };
 }
 
 // Resolves after React yields, as `import()` does; a quicker one hides React's replay of a suspended render.
@@ -30,59 +36,62 @@ async function nextTask(): Promise<void> {
   });
 }
 
-const catalog: Catalog = {
-  locales: ['en', 'it'],
-  sourceLocale: 'en',
-  namespaces: {
-    shop: {
-      en: async () => {
-        await nextTask();
-        return {
-          default: ($) => ({
-            title: () => 'Shop',
-            terms: (p: Record<string, unknown>) =>
-              $.rich(['Read the ', $.tag(p, 'link', ['terms'])]),
-          }),
-        };
-      },
-      it: async () => {
-        await nextTask();
-        return {
-          default: ($) => ({
-            title: () => 'Negozio',
-            terms: (p: Record<string, unknown>) =>
-              $.rich(['Leggi i ', $.tag(p, 'link', ['termini'])]),
-          }),
-        };
-      },
+const catalog: Catalog = { locales: ['en', 'it'], sourceLocale: 'en' };
+
+const shop: Namespace<'shop', ShopKind, 'en' | 'it'> = {
+  name: 'shop',
+  load: {
+    en: async () => {
+      await nextTask();
+      return {
+        default: ($) => ({
+          title: () => 'Shop',
+          terms: (p: Record<string, unknown>) => $.rich(['Read the ', $.tag(p, 'link', ['terms'])]),
+        }),
+      };
     },
-    extra: {
-      en: async () => {
-        await nextTask();
-        return { default: () => ({ hello: () => 'Hello' }) };
-      },
-      it: async () => {
-        await nextTask();
-        return { default: () => ({ hello: () => 'Ciao' }) };
-      },
-    },
-    broken: {
-      en: async () => {
-        await nextTask();
-        throw new Error('offline');
-      },
-      it: async () => {
-        await nextTask();
-        throw new Error('offline');
-      },
+    it: async () => {
+      await nextTask();
+      return {
+        default: ($) => ({
+          title: () => 'Negozio',
+          terms: (p: Record<string, unknown>) =>
+            $.rich(['Leggi i ', $.tag(p, 'link', ['termini'])]),
+        }),
+      };
     },
   },
 };
 
+const extra: Namespace<'extra', ExtraKind, 'en' | 'it'> = {
+  name: 'extra',
+  load: {
+    en: async () => {
+      await nextTask();
+      return { default: () => ({ hello: () => 'Hello' }) };
+    },
+    it: async () => {
+      await nextTask();
+      return { default: () => ({ hello: () => 'Ciao' }) };
+    },
+  },
+};
+
+const offline: Loader = async () => {
+  await nextTask();
+  throw new Error('offline');
+};
+const broken: Namespace<'broken', BrokenKind, 'en' | 'it'> = {
+  name: 'broken',
+  load: { en: offline, it: offline },
+};
+// Built for English only, in an app that also speaks Italian.
+const english = { name: 'english', load: { en: offline } } as Namespace<'english', BrokenKind>;
+
 const link = (children: ReactNode): ReactNode => <a href="/terms">{children}</a>;
 
 function Shop(): ReactNode {
-  const { t } = useParla(['shop']);
+  const { t } = useParla([shop]);
   const { locale, locales, setLocale } = useLocale();
   return (
     <div>
@@ -100,12 +109,12 @@ function Shop(): ReactNode {
 }
 
 // A child demands the namespaces it reads; a parent's wider `t` satisfies it.
-function Hello({ t }: { t: Translations<'extra'> }): ReactNode {
+function Hello({ t }: { t: Translations<typeof extra> }): ReactNode {
   return <span>{t.extra.hello()}</span>;
 }
 
 function Greeting(): ReactNode {
-  const { t } = useParla(['shop', 'extra']);
+  const { t } = useParla([shop, extra]);
   return (
     <h1>
       <Hello t={t} /> {t.shop.title()}
@@ -114,7 +123,12 @@ function Greeting(): ReactNode {
 }
 
 function Offline(): ReactNode {
-  useParla(['broken']);
+  useParla([broken]);
+  return <span>ready</span>;
+}
+
+function English(): ReactNode {
+  useParla([english]);
   return <span>ready</span>;
 }
 
@@ -154,7 +168,7 @@ describe('@parlajs/react', () => {
           </Suspense>
         </ParlaProvider>,
       );
-      await parla.load(['shop']);
+      await parla.load([shop]);
     });
     expect(screen.getByRole('heading').textContent).toBe('Shop');
     expect(screen.getByRole('link').textContent).toBe('terms');
@@ -206,10 +220,10 @@ describe('@parlajs/react', () => {
   it('loads several namespaces at once, keyed by namespace, with a `t` that keeps its identity', async () => {
     const parla = createParla({ catalog });
     const hook = await act(async () => {
-      const rendered = renderHook(() => useParla(['shop', 'extra']), {
+      const rendered = renderHook(() => useParla([shop, extra]), {
         wrapper: wrapperFor(parla),
       });
-      await parla.load(['shop', 'extra']);
+      await parla.load([shop, extra]);
       return rendered;
     });
     const { result, rerender } = hook;
@@ -221,7 +235,7 @@ describe('@parlajs/react', () => {
 
   it('never suspends for namespaces loaded ahead, and passes `t` down typed', async () => {
     const parla = createParla({ catalog });
-    await parla.load(['shop', 'extra']);
+    await parla.load([shop, extra]);
     act(() => {
       render(
         <ParlaProvider parla={parla}>
@@ -248,9 +262,23 @@ describe('@parlajs/react', () => {
           </Boundary>
         </ParlaProvider>,
       );
-      await expect(parla.load(['broken'])).rejects.toThrow('offline');
+      await expect(parla.load([broken])).rejects.toThrow('offline');
     });
     await expect(screen.findByText('offline')).resolves.toBeDefined();
+  });
+
+  it('hands a namespace built for other locales to the error boundary', () => {
+    vi.spyOn(console, 'error').mockReturnValue();
+    act(() => {
+      render(
+        <ParlaProvider parla={createParla({ catalog })}>
+          <Boundary>
+            <English />
+          </Boundary>
+        </ParlaProvider>,
+      );
+    });
+    expect(screen.getByText(/namespace "english" was built for en, not it/)).toBeDefined();
   });
 
   it('explains a missing provider', () => {

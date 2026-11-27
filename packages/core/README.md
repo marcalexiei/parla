@@ -7,13 +7,14 @@ through an adapter such as [`@parlajs/react`](../react), which re-exports it.
 import { createParla, matchLocale } from '@parlajs/core';
 
 import { catalog } from './parla/catalog.js'; // written by `parla build`
+import { checkout } from './parla/namespaces/checkout.js';
 
 const parla = createParla({
   catalog,
   locale: matchLocale(navigator.languages, catalog.locales, catalog.sourceLocale),
 });
 
-const t = await parla.load(['checkout']);
+const t = await parla.load([checkout]);
 t.checkout.cart.items({ count: 3 }); // "3 items"
 
 await parla.setLocale('it'); // loads what's loaded so far, then switches
@@ -21,11 +22,10 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 
 | API                         |                                                                      |
 | --------------------------- | -------------------------------------------------------------------- |
-| `parla.load(ns[])`          | `t` keyed by namespace; the same list, the same promise              |
+| `parla.load(ns[])`          | `t` keyed by name; the same list, the same promise                   |
 | `parla.setLocale(locale)`   | Loads first, then notifies; rejects, unswitched, if a download fails |
-| `parla.register(catalog)`   | Adds a catalog's namespaces; the same locales only                   |
 | `parla.subscribe(listener)` | Called after each switch                                             |
-| `Translations<'a' \| 'b'>`  | The type of `t` for those namespaces                                 |
+| `Translations<typeof a>`    | The type of `t` for those namespaces                                 |
 | `Text`                      | A message without params or markup: `() => string`                   |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
 
@@ -40,7 +40,7 @@ createParla({
 });
 ```
 
-Rich text is a `string` here and a `ReactNode` through `@parlajs/react`, so one catalog serves
+Rich text is a `string` here and a `ReactNode` through `@parlajs/react`, so one namespace serves
 both, e.g. emails beside the app. Another adapter passes `wrapRich` and types `Parla<Node>`.
 
 ## License

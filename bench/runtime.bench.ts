@@ -31,7 +31,7 @@ const CALLS: Record<keyof Messages, (m: Messages) => unknown> = {
 
 async function loaded(side: Side): Promise<Messages> {
   const parla = side.core.createParla({ catalog: side.catalog });
-  const t = await parla.load(['bench']);
+  const t = await parla.load([side.ns('bench')]);
   return t['bench'] as Messages;
 }
 
@@ -42,7 +42,7 @@ describe('runtime', () => {
   it('cold start: createParla, load two namespaces, first message', async ({ bench }) => {
     await ab(bench, (side) => async (): Promise<void> => {
       const parla = side.core.createParla({ catalog: side.catalog });
-      const t = await parla.load(['bench', 'filler0']);
+      const t = await parla.load([side.ns('bench'), side.ns('filler0')]);
       (t['bench'] as Messages).plural({ count: 3 });
     });
   });
@@ -61,9 +61,9 @@ describe('runtime', () => {
   it(`locale switch with namespaces loaded ×${BATCH}`, async ({ bench }) => {
     await ab(bench, async (side) => {
       const parla = side.core.createParla({ catalog: side.catalog });
-      await parla.load(['bench', 'filler0']);
+      await parla.load([side.ns('bench'), side.ns('filler0')]);
       await parla.setLocale('it');
-      await parla.load(['bench', 'filler0']);
+      await parla.load([side.ns('bench'), side.ns('filler0')]);
       return async (): Promise<void> => {
         for (let i = 0; i < BATCH; i += 1) {
           await parla.setLocale(parla.locale === 'en' ? 'it' : 'en');
