@@ -1,0 +1,34 @@
+---
+description: Run knip on a clean checkout, with no parla build first.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# knip
+
+<Badge>Tooling</Badge> [knip](https://knip.dev) needs no `parla build` first, so it can run alone on
+a clean checkout, when:
+
+- **`src/parla/` is in `.gitignore`**: knip skips ignored paths, so imports into them are neither
+  followed nor unresolved.
+- **The app imports it relatively**, `./parla/namespaces/checkout.js`. An alias needs one line more,
+  below.
+- **`parla.config.ts` is an entry**: knip has no Parla plugin, so the config, and what it imports,
+  would be unused. `entry` replaces knip's defaults: keep your own.
+
+```json
+{
+  "entry": ["src/main.tsx!", "parla.config.ts", "x18n.config.ts"]
+}
+```
+
+`x18n.config.ts` is there only with the [x18n plugin](/tooling/x18n), which it imports.
+
+| `src/parla/` imported through   | Add                                  |
+| ------------------------------- | ------------------------------------ |
+| a tsconfig `paths` alias        | `"ignoreDependencies": ["@i18n/.+"]` |
+| a `package.json` subpath import | `"ignoreUnresolved": ["#i18n/.+"]`   |
+
+The [playground](https://github.com/marcalexiei/parla-playground) runs knip in its own workflow,
+before anything builds.
