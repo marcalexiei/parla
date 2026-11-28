@@ -12,6 +12,27 @@ const when = new Date(Date.UTC(2026, 0, 15, 9, 30, 45));
 const intl = (options: Intl.DateTimeFormatOptions): string =>
   new Intl.DateTimeFormat('en', options).format(when);
 
+/** Stands in for an engine such as Hermes, where `Intl` lacks members. */
+function stubIntl(members: Record<string, unknown>): void {
+  const props = Object.fromEntries(Object.entries(members).map(([k, value]) => [k, { value }]));
+  vi.stubGlobal('Intl', Object.create(Intl, props));
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+  });
+}
+
+/** Hermes' `NumberFormat`, which formats numbers only. Called with `new`. */
+function HermesNumberFormat(): { format: (value: unknown) => string } {
+  return {
+    format: (value) => {
+      if (typeof value === 'bigint') {
+        throw new TypeError('Cannot convert BigInt to number');
+      }
+      return `#${String(value)}`;
+    },
+  };
+}
+
 describe(createRuntime, () => {
   it('formats unannotated values by type', () => {
     expect(rt.str('text')).toBe('text');
@@ -82,6 +103,13 @@ describe(createRuntime, () => {
     expect(rt.pick([], [['a']])).toBe(0);
   });
 
+  it('matches a number exactly only against a number literal', () => {
+    expect(rt.pick([rt.sn(-2)], [['-2'], [null]])).toBe(0);
+    expect(rt.pick([rt.sn(0.5)], [['0.5'], [null]])).toBe(0);
+    expect(rt.pick([rt.sn(Infinity)], [['Infinity'], [null]])).toBe(1);
+    expect(rt.pick([rt.sn(0, { select: 'exact' })], [[''], ['0']])).toBe(1);
+  });
+
   it('lets the first differing key decide between variants, then the earlier variant', () => {
     const variants = [
       ['one', null],
@@ -108,6 +136,64 @@ describe(createRuntime, () => {
     made.mockClear();
     fresh.f('number', 1, numberOptions(0));
     expect(made).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares formatters between runtimes of one locale, fallbacks and zone', () => {
+    const numbers = vi.spyOn(Intl, 'NumberFormat');
+    const dates = vi.spyOn(Intl, 'DateTimeFormat');
+    onTestFinished(() => {
+      numbers.mockRestore();
+      dates.mockRestore();
+    });
+    createRuntime('en').str(1.5);
+    createRuntime('en').f('number', 2.5);
+    expect(numbers).toHaveBeenCalledTimes(1);
+    expect(createRuntime('qaa', { fallbacks: ['it'] }).str(1.5)).toBe('1,5');
+    expect(createRuntime('qaa').str(1.5)).not.toBe('1,5');
+    expect(numbers).toHaveBeenCalledTimes(3);
+
+    // Nov 28 in Rome, still Nov 27 in Los Angeles
+    const late = new Date(Date.UTC(2026, 10, 28, 3));
+    expect(createRuntime('en', { timeZone: 'Europe/Rome' }).f('date', late)).toContain('28');
+    expect(createRuntime('en', { timeZone: 'America/Los_Angeles' }).f('date', late)).toContain(
+      '27',
+    );
+    createRuntime('en', { timeZone: 'Europe/Rome' }).f('date', late);
+    expect(dates).toHaveBeenCalledTimes(2);
+  });
+
+  it('formats a repeated value once per formatter, keeping a bounded number of them', () => {
+    let calls = 0;
+    function CountingNumberFormat(): { format: (value: unknown) => string } {
+      return {
+        format: (value) => {
+          calls += 1;
+          return `#${String(value)}`;
+        },
+      };
+    }
+    stubIntl({ NumberFormat: CountingNumberFormat });
+    const counted = createRuntime('en');
+    expect([counted.str(1), counted.str(1), counted.f('number', 1)]).toStrictEqual([
+      '#1',
+      '#1',
+      '#1',
+    ]);
+    expect(calls).toBe(1);
+    for (let n = 2; n <= 200; n += 1) {
+      counted.str(n);
+    }
+    calls = 0;
+    counted.str(1);
+    counted.str(200);
+    counted.str(200);
+    expect(calls).toBe(2);
+  });
+
+  it('formats -0 apart from 0, which a Map keys alike', () => {
+    expect(rt.f('number', 0)).toBe('0');
+    expect(rt.f('number', -0)).toBe('-0');
+    expect(rt.f('number', 0)).toBe('0');
   });
 
   it('joins text parts, and wraps every part once one is not text', () => {
@@ -160,27 +246,6 @@ describe(createRuntime, () => {
     expect(ext.tag({}, 'i', ['plain'])).toBe('plain');
   });
 });
-
-/** Stands in for an engine such as Hermes, where `Intl` lacks members. */
-function stubIntl(members: Record<string, unknown>): void {
-  const props = Object.fromEntries(Object.entries(members).map(([k, value]) => [k, { value }]));
-  vi.stubGlobal('Intl', Object.create(Intl, props));
-  onTestFinished(() => {
-    vi.unstubAllGlobals();
-  });
-}
-
-/** Hermes' `NumberFormat`, which formats numbers only. Called with `new`. */
-function HermesNumberFormat(): { format: (value: unknown) => string } {
-  return {
-    format: (value) => {
-      if (typeof value === 'bigint') {
-        throw new TypeError('Cannot convert BigInt to number');
-      }
-      return `#${String(value)}`;
-    },
-  };
-}
 
 describe('an engine without full Intl', () => {
   it('names the polyfill for a missing PluralRules, and formats without it', () => {

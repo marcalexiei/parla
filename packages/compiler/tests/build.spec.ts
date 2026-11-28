@@ -163,7 +163,7 @@ describe(build, () => {
     expect(dts).toContain("import type { Namespace, NamespaceKind, Text } from '@parlajs/core';");
     expect(dts).toContain('  /** Checkout */\n  title: Text;');
     expect(dts).toContain('items(params: { count: number }): string;');
-    expect(dts).toContain('terms(params: { link: (children: Node) => Node }): Node;');
+    expect(dts).toContain('terms(params: { link: Markup<Node> }): Node;');
     expect(dts).toContain(
       "export interface CheckoutKind extends NamespaceKind {\n  readonly messages: CheckoutMessages<this['node']>;\n}",
     );
@@ -302,14 +302,28 @@ describe('one namespace, two node types', () => {
     );
     put(dir, 'locales/en/app.json', {
       title: 'Title',
-      nav: { home: 'Home', help: 'Read the <link>help</link>' },
+      nav: {
+        home: 'Home',
+        help: 'Read the <link>help</link>',
+        more: { faq: 'FAQ', tour: 'Take the <link>tour</link>' },
+      },
+      '-': { go: 'Go', back: '<link>Back</link>' },
       terms: 'Read the <link>terms</link>',
     });
     put(dir, 'locales/en/plain.json', { save: 'Save' });
     await build({ cwd: dir });
     const appTypes = readFileSync(join(dir, 'src/parla/namespaces/app.d.ts'), 'utf8');
     expect(appTypes).toContain('export interface AppText {\n  /** Title */\n  title: Text;\n}');
-    expect(appTypes).toMatch(/export interface AppMessages<Node> extends AppText \{\n\s+nav: \{/);
+    // A group with markup splits like the namespace, so a node type instantiates only `help`.
+    expect(appTypes).toContain('export interface AppNavText {\n  /** Home */\n  home: Text;\n}');
+    expect(appTypes).toContain('export interface AppNavMessages<Node> extends AppNavText {\n');
+    expect(appTypes).toMatch(
+      /export interface AppMessages<Node> extends AppText \{\n\s+nav: AppNavMessages<Node>;/,
+    );
+    expect(appTypes).toContain('export interface AppNavMoreText {\n  /** FAQ */\n  faq: Text;\n}');
+    expect(appTypes).toContain('  more: AppNavMoreMessages<Node>;\n');
+    // `-` gives no name of its own, so it is numbered rather than shadowing `AppMessages`
+    expect(appTypes).toContain('  "-": App2Messages<Node>;\n');
     // Without markup the kind ignores the node type, so React and string instances share it.
     expect(readFileSync(join(dir, 'src/parla/namespaces/plain.d.ts'), 'utf8')).toContain(
       'export interface PlainKind extends NamespaceKind {\n  readonly messages: PlainMessages;\n}',
@@ -346,6 +360,11 @@ const { plain: wp } = await web.load([plain]);
 const { plain: ep } = await email.load([plain]);
 export const saves: string[] = [wp.save(), ep.save()];
 export const help: ReactNode = w.nav.help({ link: (c) => c });
+export const tour: ReactNode = w.nav.more.tour({ link: (c) => c });
+export const groupText: string[] = [w.nav.home(), w.nav.more.faq(), e['-'].go()];
+export const back: string = e['-'].back({ link: (c) => \`<\${c}\` });
+// @ts-expect-error a nested group with markup follows the instance's node type too
+export const tourText: string = w.nav.more.tour({ link: (c) => c });
 // @ts-expect-error a group with markup follows the instance's node type
 export const helpText: string = w.nav.help({ link: (c) => c });
 export const titles: string[] = [w.title(), e.title()];
@@ -632,7 +651,7 @@ describe('custom functions and default markup', () => {
       '  interface FunctionRegistry {\n    "capitalize": true;\n  }\n  interface MarkupRegistry {\n    "strong": true;\n  }\n',
     );
     expect(readFileSync(join(dir, 'src/parla/namespaces/app.d.ts'), 'utf8')).toContain(
-      'bold(params?: { strong?: (children: Node) => Node }): Node;',
+      'bold(params?: { strong?: Markup<Node> }): Node;',
     );
 
     const { catalog, ns } = await imported(dir, 'app');

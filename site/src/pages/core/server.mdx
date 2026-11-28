@@ -46,8 +46,8 @@ Never `setLocale` on a shared instance: it switches every request at once, so co
 in `it` and `de` both answer in German.
 :::
 
-An instance per request also works, at ~80 µs a request instead of ~2 µs: each builds its own `Intl`
-formatters. Node's module cache imports each chunk once either way.
+An instance per request also works, at ~20 µs a request instead of ~1 µs: each runs the chunks'
+factories again, while `Intl` formatters are shared. Node's module cache imports each chunk once.
 
 ## Time zones
 

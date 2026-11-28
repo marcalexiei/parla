@@ -112,9 +112,7 @@ describe('ICU', () => {
     );
     expect(compile('icu', 'Hi {name}').sig).toBe('(params: { name: string | number }): string');
     expect(compile('icu', 'Plain').sig).toBe(': Text');
-    expect(compile('icu', 'See <b>this</b>').sig).toBe(
-      '(params: { b: (children: Node) => Node }): Node',
-    );
+    expect(compile('icu', 'See <b>this</b>').sig).toBe('(params: { b: Markup<Node> }): Node');
   });
 
   it('reports syntax errors', () => {
@@ -160,12 +158,10 @@ describe(signature, () => {
 
   it('makes default markup optional, and the params too when nothing else is needed', () => {
     const { info } = compile('icu', 'See <b>this</b>');
-    expect(signature(info, new Set(['b']))).toBe(
-      '(params?: { b?: (children: Node) => Node }): Node',
-    );
+    expect(signature(info, new Set(['b']))).toBe('(params?: { b?: Markup<Node> }): Node');
     const { info: named } = compile('icu', 'See <b>{name}</b>');
     expect(signature(named, new Set(['b']))).toBe(
-      '(params: { name: string | number; b?: (children: Node) => Node }): Node',
+      '(params: { name: string | number; b?: Markup<Node> }): Node',
     );
   });
 
