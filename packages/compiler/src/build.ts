@@ -9,22 +9,13 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 
-import { icu } from '@parlajs/format-icu';
-import { mf2 } from '@parlajs/format-mf2';
 import type { Model } from 'messageformat';
 
 import { CompileError, compileMessage, ModuleScope } from './compile.ts';
 import type { MessageInfo } from './compile.ts';
 import { fallbackChain, loadConfig } from './config.ts';
-import type { ResolvedConfig, ResolvedNamespace } from './config.ts';
+import type { FormatAdapter, ResolvedConfig, ResolvedNamespace } from './config.ts';
 import { exportNames, interfaceNames, namespaceTypes, paramType } from './types.ts';
-
-export interface FormatAdapter {
-  readonly name: string;
-  readonly parse: (source: string) => Model.Message;
-}
-
-export const defaultFormats: Record<string, FormatAdapter> = { icu, mf2 };
 
 export interface Diagnostic {
   level: 'error' | 'warning';
@@ -49,7 +40,6 @@ export interface BuildOptions {
   cwd?: string;
   /** Path to the config file, relative to `cwd`. */
   config?: string | undefined;
-  formats?: Record<string, FormatAdapter> | undefined;
   /** `false` writes nothing: a check. */
   write?: boolean | undefined;
 }
@@ -153,15 +143,16 @@ function readCatalog(
   if (!existsSync(file)) {
     return { file, entries, exists: false };
   }
-  let json: unknown;
+  let tree: unknown;
   try {
-    json = JSON.parse(readFileSync(file, 'utf8'));
+    const text = readFileSync(file, 'utf8');
+    tree = adapter.parseFile ? adapter.parseFile(text) : JSON.parse(text);
   } catch (error) {
     diag({ level: 'error', code: 'invalid-resource', message: (error as Error).message, file });
     return { file, entries, exists: true };
   }
   const flat = new Map<string, string>();
-  flatten(json, '', flat, (key, message) => {
+  flatten(tree, '', flat, (key, message) => {
     diag({ level: 'error', code: 'invalid-resource', key, message, file });
   });
   const keys = [...flat.keys()].toSorted();
@@ -309,9 +300,9 @@ function namespaceModule(
 
 export async function build(options: BuildOptions = {}): Promise<BuildResult> {
   const cwd = options.cwd ?? process.cwd();
-  const formats = { ...defaultFormats, ...options.formats };
   const write = options.write ?? true;
   const config = await loadConfig(cwd, options.config);
+  const { formats } = config;
   const diagnostics: Array<Diagnostic> = [];
   const written: Array<string> = [];
   const files = new Map<string, string>();

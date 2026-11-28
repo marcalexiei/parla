@@ -1,11 +1,9 @@
 export {
   build,
-  defaultFormats,
   formatDiagnostic,
   type BuildOptions,
   type BuildResult,
   type Diagnostic,
-  type FormatAdapter,
 } from './build.ts';
 export {
   CompileError,
@@ -19,8 +17,10 @@ export {
 } from './compile.ts';
 export {
   ConfigError,
+  defaultFormats,
   defineConfig,
   loadConfig,
+  type FormatAdapter,
   type NamespaceConfig,
   type ParlaConfig,
   type ResolvedConfig,

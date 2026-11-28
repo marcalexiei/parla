@@ -269,6 +269,13 @@ describe('catalogs', () => {
       JSON.stringify({ order: { ref }, plain: '{name}', broken: '{name' }),
     );
     writeFileSync(join(root, 'app/locales/en/scope_audit.json'), '{ not json');
+    for (const [locale, hi] of [
+      ['en', 'Hi %name%'],
+      ['it', 'Ciao %nome%'],
+    ] as const) {
+      mkdirSync(join(root, `pct/locales/${locale}`), { recursive: true });
+      writeFileSync(join(root, `pct/locales/${locale}/pct.properties`), `hi = ${hi}\n`);
+    }
   });
 
   it('names each catalog file by the namespace its config gives it', async () => {
@@ -314,5 +321,32 @@ function A() {
       { raw: 'order.ref', namespace: 'common', params: undefined },
       { raw: 'plain', namespace: 'common', params: ['name'] },
     ]);
+  });
+
+  it("reads and parses the catalogs of a config's own format with it", async () => {
+    // `%name%` is a param; ICU reads the same text as plain.
+    writeFileSync(
+      join(root, 'pct/parla.config.ts'),
+      `const parse = (source: string) => ({
+  type: 'message',
+  declarations: [],
+  pattern: source
+    .split(/%(\\w+)%/)
+    .map((part, i) => (i % 2 ? { type: 'expression', arg: { type: 'variable', name: part } } : part)),
+});
+const parseFile = (text: string) => Object.fromEntries([text.trim().split(' = ')]);
+export default {
+  locales: ['en', 'it'],
+  formats: { pct: { name: 'pct', parse, parseFile } },
+  namespaces: { pct: { format: 'pct', path: 'locales/{locale}/pct.properties' } },
+};
+`,
+    );
+    const plugin = parla({ configs: ['pct/parla.config.ts'] });
+    const { find } = only(plugin.placeholders);
+    expect(find('Hi %name%')).toStrictEqual([]);
+    await only(plugin.localeFinders).find(finderContext([]));
+    expect(find('Hi %name%').map((p) => p.name)).toStrictEqual(['name']);
+    expect(find('Ciao %nome%').map((p) => p.name)).toStrictEqual(['nome']);
   });
 });

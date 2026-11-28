@@ -28,4 +28,5 @@ In `.vue`, `.svelte` and `.astro` files it reads the scripts (Astro's frontmatte
 template's expressions, so `{t.ns.key()}` in markup counts; add them to `usage.include`.
 
 A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A select
-whose branches need different params is left to TypeScript, which checks it per branch.
+whose branches need different params is left to TypeScript, which checks it per branch. A catalog
+that is not JSON needs an x18n format for its extension too: x18n reads and writes it.
