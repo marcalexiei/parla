@@ -48,6 +48,12 @@ a server's zone is rarely the reader's.
 Rich text is a `string` here and a `ReactNode` through `@parlajs/react`, so one namespace serves
 both, e.g. emails beside the app. Another adapter passes `wrapRich` and types `Parla<Node>`.
 
+## On a server
+
+Create one instance per locale at startup and preload it: `setLocale` on a shared instance switches
+every request at once. Pick one with `matchLocale(parseAcceptLanguage(header), …)`. String markup
+inserts params as they are, so escape them in HTML emails.
+
 ## License
 
 [MIT](./LICENSE)
