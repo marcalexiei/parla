@@ -75,7 +75,10 @@ export default defineConfig({
     },
     {
       text: 'Tooling',
-      items: [{ text: '@parlajs/x18n-plugin', link: '/tooling/x18n' }],
+      items: [
+        { text: '@parlajs/x18n-plugin', link: '/tooling/x18n' },
+        { text: 'knip', link: '/tooling/knip' },
+      ],
     },
     {
       text: 'Links',
