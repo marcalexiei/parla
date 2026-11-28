@@ -1,4 +1,4 @@
-# @parlajs/x18n
+# @parlajs/x18n-plugin
 
 [Parla](https://github.com/marcalexiei/parla)'s plugin for [x18n](https://x18n.dev): it reads each
 catalog under the namespace its `parla.config.ts` gives it, finds every `t.ns.key()` on a `t` from
@@ -6,7 +6,7 @@ catalog under the namespace its `parla.config.ts` gives it, finds every `t.ns.ke
 with Parla's own ICU and MF2 parsers and the config's `functions` and `markup`.
 
 ```ts
-import { parla } from '@parlajs/x18n';
+import parla from '@parlajs/x18n-plugin';
 import { defineConfig } from '@x18n/cli';
 
 export default defineConfig({

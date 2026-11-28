@@ -12,7 +12,7 @@ import type {
 } from '@x18n/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { parla } from '../src/index.ts';
+import parla from '../src/index.ts';
 import type { ParlaOptions } from '../src/index.ts';
 
 const root = fileURLToPath(new URL('../../../.tmp/x18n-test', import.meta.url));

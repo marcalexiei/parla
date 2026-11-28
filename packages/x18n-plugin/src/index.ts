@@ -474,7 +474,7 @@ function configFinder(
 }
 
 /** The x18n plugin: Parla's catalogs, `t.ns.key()` usages, and ICU and MF2 params. */
-export function parla(options: ParlaOptions = {}): Plugin {
+export default function parla(options: ParlaOptions = {}): Plugin {
   const declared: Declared = { functions: {}, markup: [], branchy: new Set() };
   return {
     name: 'parla',

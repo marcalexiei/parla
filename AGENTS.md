@@ -12,16 +12,16 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 
 ## Layout
 
-| Path                  |                                                            |
-| --------------------- | ---------------------------------------------------------- |
-| `packages/core`       | Runtime: locale state, lazy loading, `Intl`                |
-| `packages/react`      | `ParlaProvider`, `useParla`, `useLocale`                   |
-| `packages/compiler`   | `parla` CLI and Vite plugin: catalogs → typed namespaces   |
-| `packages/format-icu` | ICU → MF2 data model                                       |
-| `packages/format-mf2` | MF2 → MF2 data model                                       |
-| `packages/x18n`       | x18n plugin: catalogs, `t.ns.key()` usages, params         |
-| `scripts/`            | Repo tooling (`check-all.ts`), via `tsconfig.scripts.json` |
-| `bench/`              | Benchmarks against `main`, via `vitest.config.bench.ts`    |
+| Path                   |                                                            |
+| ---------------------- | ---------------------------------------------------------- |
+| `packages/core`        | Runtime: locale state, lazy loading, `Intl`                |
+| `packages/react`       | `ParlaProvider`, `useParla`, `useLocale`                   |
+| `packages/compiler`    | `parla` CLI and Vite plugin: catalogs → typed namespaces   |
+| `packages/format-icu`  | ICU → MF2 data model                                       |
+| `packages/format-mf2`  | MF2 → MF2 data model                                       |
+| `packages/x18n-plugin` | x18n plugin: catalogs, `t.ns.key()` usages, params         |
+| `scripts/`             | Repo tooling (`check-all.ts`), via `tsconfig.scripts.json` |
+| `bench/`               | Benchmarks against `main`, via `vitest.config.bench.ts`    |
 
 Comparisons with other libraries live in `parla-benchmark`, keeping their dependencies out of here.
 
