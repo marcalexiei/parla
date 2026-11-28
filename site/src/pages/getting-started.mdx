@@ -5,6 +5,10 @@ showAskAi: false
 
 # Getting started
 
+This page uses three [layers](/#layers): `@parlajs/compiler` builds your catalogs, `@parlajs/core`
+runs them, and `@parlajs/react`, a framework adapter, re-exports core for React. Tooling such as the
+[x18n plugin](/tooling/x18n) is optional.
+
 ## React + Vite
 
 :::code-group
@@ -88,7 +92,7 @@ createRoot(root).render(
 ```
 
 Without Suspense, `useParlaLoaded([checkout])` never suspends: `t` is `undefined` until loaded. See
-[Loading](/guides/loading#without-suspense).
+[React](/adapters/react#loading).
 
 Add `src/parla/` to `.gitignore`: it is generated.
 
@@ -111,7 +115,7 @@ parla check --strict   # in CI: warnings fail too
 }
 ```
 
-Without React, use `@parlajs/core`: `await parla.load([checkout])` gives `t`. See [Loading](/guides/loading).
+Without React, use `@parlajs/core`: `await parla.load([checkout])` gives `t`. See [Loading](/core/loading).
 
 ## What it writes
 

@@ -1,0 +1,57 @@
+---
+description: Markup in messages becomes a typed callback; its node type follows the instance.
+showAskAi: false
+---
+
+# Rich text
+
+:::code-group
+
+```json [MF2]
+{ "terms": "Accept the {#link}terms{/link}, {#strong}today{/strong}." }
+```
+
+```json [ICU]
+{ "terms": "Accept the <link>terms</link>, <strong>today</strong>." }
+```
+
+:::
+
+Each tag is a param: a function from its children to a node. In core the node is a `string`:
+
+```ts
+import { createParla } from '@parlajs/core';
+
+const parla = createParla({ catalog, markup: { strong: (c) => `**${c}**` } });
+const t = await parla.load([home]);
+t.home.terms({ link: (c) => `[${c}](https://example.com/terms)` }); // a string
+```
+
+The call passes `link` and leaves out `strong`: `strong` is declared in the config's `markup`, so the
+instance renders it.
+
+```ts
+// parla.config.ts
+markup: ['strong'],
+```
+
+| Markup                  | Param                                |
+| ----------------------- | ------------------------------------ |
+| In the message          | Required: `link: (children) => Node` |
+| Also in config `markup` | Optional; a call's own wins          |
+| Self-closing, `{#br/}`  | Its callback gets empty children     |
+
+## The node follows the instance
+
+`createParla` takes a `wrapRich(parts)` that joins a message's parts into one node, and the instance
+is a `Parla<Node>`: its `t` is a `Translations<typeof ns, Node>`. Core's default joins strings;
+[framework adapters](/adapters/writing-an-adapter) pass their own.
+
+| Instance                            | `Node`      | `t.home.terms(…)` returns |
+| ----------------------------------- | ----------- | ------------------------- |
+| `createParla` from `@parlajs/core`  | `string`    | a `string`                |
+| `createParla` from `@parlajs/react` | `ReactNode` | a `ReactNode`             |
+
+Messages without markup return `string` in both, so either instance's `t` fits code that reads only
+those. One namespace serves both a React app and, say, emails. React's rich text, live:
+[React](/adapters/react#rich-text).

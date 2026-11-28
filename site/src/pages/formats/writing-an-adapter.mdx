@@ -1,0 +1,65 @@
+---
+description: A FormatAdapter parses a syntax into the MF2 data model, and may read whole catalog files.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# Writing a format adapter
+
+<Badge>Format adapter</Badge> Registered in [`parla.config.ts`](/core/config#formats) as `formats`.
+
+A `FormatAdapter` parses one message into the
+[MF2 data model](https://messageformat.unicode.org/docs/reference/data-model/), which is all the
+compiler reads. A namespace's `format` names it; the CLI, the Vite plugin and [x18n](/tooling/x18n)
+read it from the config.
+
+| `FormatAdapter` |                                                                                 |
+| --------------- | ------------------------------------------------------------------------------- |
+| `name`          | The adapter's name                                                              |
+| `parse`         | `(source) => Model.Message`: one message into the MF2 data model                |
+| `parseFile`     | Optional. `(text) => { key: message \| group }`, for catalogs that are not JSON |
+
+```ts
+import { defineConfig, type FormatAdapter } from '@parlajs/compiler';
+
+// Every message as plain text: no params, no markup.
+const text: FormatAdapter = {
+  name: 'text',
+  parse: (source) => ({ type: 'message', declarations: [], pattern: [source] }),
+};
+
+export default defineConfig({
+  formats: { text },
+  namespaces: { legal: { format: 'text', path: 'locales/{locale}/legal.json' } },
+});
+```
+
+`icu` and `mf2` are built in, as `defaultFormats`.
+
+## Catalog files
+
+Without `parseFile`, catalogs are read as JSON. With it, a namespace's catalogs can be `.po`, `.ftl`,
+`.properties` or anything else; a `parseFile` that throws is an `invalid-resource` diagnostic for that
+file.
+
+```ts
+// Plain-text messages in `key = message` lines.
+const properties: FormatAdapter = {
+  name: 'properties',
+  parse: (source) => ({ type: 'message', declarations: [], pattern: [source] }),
+  parseFile: (text) =>
+    Object.fromEntries(
+      text
+        .trim()
+        .split('\n')
+        .map((line) => {
+          const at = line.indexOf('=');
+          if (at < 0) throw new Error(`no "=" in "${line}"`);
+          return [line.slice(0, at).trim(), line.slice(at + 1).trim()];
+        }),
+    ),
+};
+```
+
+[x18n](/tooling/x18n) also needs its own format for such a file's extension: it reads and writes it.

@@ -42,15 +42,24 @@ Live, built by this site's own Parla plugin:
 - **ICU and MF2**, per namespace, through one data model.
 - **Monorepos**: each namespace has one owner package, which other packages import from.
 
-## Packages
+## Layers
 
-| Package                |                                                          |
-| ---------------------- | -------------------------------------------------------- |
-| `@parlajs/core`        | Runtime: locale state, lazy loading, `Intl`              |
-| `@parlajs/react`       | `ParlaProvider`, `useParla`, `useLocale`                 |
-| `@parlajs/compiler`    | `parla` CLI and Vite plugin: catalogs → typed namespaces |
-| `@parlajs/format-icu`  | ICU → MF2 data model                                     |
-| `@parlajs/format-mf2`  | MF2 → MF2 data model                                     |
-| `@parlajs/x18n-plugin` | [x18n](/reference/x18n) plugin                           |
+```
+catalogs                   JSON, or what a parseFile reads
+ └▶ format adapter         ICU, MF2 or yours → MF2 data model
+     └▶ compiler           build time → typed namespaces
+         └▶ core           runtime: locale, loading, Intl
+             └▶ framework adapter   React, or yours
+
+tooling, beside them       x18n reads catalogs and usages
+```
+
+| Layer                                | Package                                      | Does                                     |
+| ------------------------------------ | -------------------------------------------- | ---------------------------------------- |
+| [Format adapter](/formats/icu)       | `@parlajs/format-icu`, `@parlajs/format-mf2` | Parses a syntax into the MF2 data model  |
+| [Core](/core/cli)                    | `@parlajs/compiler`                          | Builds catalogs into typed namespaces    |
+| [Core](/core/api)                    | `@parlajs/core`                              | Runtime: locale state, loading, `Intl`   |
+| [Framework adapter](/adapters/react) | `@parlajs/react`                             | `ParlaProvider`, `useParla`, `useLocale` |
+| [Tooling](/tooling/x18n)             | `@parlajs/x18n-plugin`                       | Reads catalogs and usages for x18n       |
 
 Next: [Why Parla](/why), or [Getting started](/getting-started).

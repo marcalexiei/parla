@@ -3,13 +3,13 @@ description: The x18n plugin, which reads Parla's catalogs and every t.ns.key() 
 showAskAi: false
 ---
 
+import { Badge } from 'vocs';
+
 # `@parlajs/x18n-plugin`
 
-Parla's plugin for [x18n](https://x18n.dev).
+<Badge>Tooling</Badge> `pnpm add -D @x18n/cli @parlajs/x18n-plugin`
 
-```sh
-pnpm add -D @x18n/cli @parlajs/x18n-plugin
-```
+Parla's plugin for [x18n](https://x18n.dev).
 
 ```ts
 import parla from '@parlajs/x18n-plugin';
@@ -43,7 +43,7 @@ Template expressions are Vue's `{{ }}` and directives, and Svelte's and Astro's 
 `{@html …}`, so `{t.ns.key()}` in markup counts: add those extensions to `usage.include`.
 
 A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A catalog
-that is not JSON, read through its adapter's [`parseFile`](/reference/config#formats), needs an x18n
+that is not JSON, read through its adapter's [`parseFile`](/formats/writing-an-adapter#catalog-files), needs an x18n
 format for its extension too: x18n reads and writes it.
 
 ## Options

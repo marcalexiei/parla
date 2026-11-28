@@ -1,0 +1,83 @@
+---
+description: load and loaded take a list and return t, which proves the namespaces loaded.
+showAskAi: false
+---
+
+# Loading
+
+One function per job, one way to call it: both take a list, even of one, and return `t` keyed by
+name.
+
+```ts
+const t = await parla.load([checkout, common]); // a route loader, the server, a test
+const maybe = parla.loaded([checkout, common]); // t, or undefined if not loaded yet; never downloads
+```
+
+| `parla.load(list)`                                                    |
+| --------------------------------------------------------------------- |
+| Loads each namespace's chunk for the current locale, in parallel      |
+| The same list, in any order, returns the same promise                 |
+| Loaded namespaces resolve at once                                     |
+| Throws at once for a namespace built without one of the app's locales |
+| Throws for two namespaces of one name: `t` holds one per name         |
+| A failed download rejects, and is retried after a second              |
+
+In React, `useParla` and `useParlaLoaded` wrap these: see [React](/adapters/react#loading).
+
+## Without Suspense
+
+`parla.loaded(list)` returns `t` if the namespaces are loaded for the current locale, else
+`undefined`, and never downloads. A framework without Suspense renders from it and calls `load`
+otherwise. The same list returns the same `t` as `load`.
+
+```ts
+function render(): void {
+  const t = parla.loaded([checkout]);
+  if (!t) {
+    void parla.load([checkout]).then(render);
+    return;
+  }
+  document.title = t.checkout.title();
+}
+```
+
+## `t` is the proof of loading
+
+`t` has only the namespaces you loaded. There are no `ready` flags and no getters that throw: if you
+hold `t.checkout`, its messages are there.
+
+```ts
+const t = await parla.load([checkout]);
+t.checkout.title(); // ok
+t.common.save(); // type error: common was not loaded
+```
+
+## `Translations<typeof ns>`
+
+The type of `t` for some namespaces. A function names what it reads; a wider `t` satisfies it.
+
+```ts
+import type { Translations } from '@parlajs/core';
+
+function total(t: Translations<typeof checkout>, amount: number): string {
+  return t.checkout.total({ amount });
+}
+
+const t = await parla.load([checkout, common]);
+total(t, 39.8); // a wider t fits
+```
+
+Rich text makes it `Translations<typeof ns, Node>`: see [Rich text](/core/rich-text).
+
+## Every message is a function
+
+| Message                  | Type                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| No params, no markup     | `Text`, that is `() => string`                                                       |
+| `{$name}`, no annotation | `(params: { name: string \| number }) => string`                                     |
+| `{$count :number}`       | `(params: { count: number }) => string`                                              |
+| `{$when :date}`          | `(params: { when: Date \| number }) => string`                                       |
+| With markup              | Returns the instance's node: `string` in core                                        |
+| A `:string` select       | Params per branch, see [Selects](/core/plurals-and-selects#selects-typed-per-branch) |
+
+Groups nest: `"cart": { "items": "…" }` is `t.checkout.cart.items(…)`.

@@ -1,0 +1,31 @@
+---
+description: MessageFormat 2, the Unicode standard, parsed and validated.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# MessageFormat 2
+
+<Badge>Format adapter</Badge> `@parlajs/format-mf2`, built into `@parlajs/compiler`: a namespace
+sets `format: 'mf2'`.
+
+```json
+{
+  "items": ".input {$count :number}\n.match $count\n0 {{Your cart is empty}}\none {{{$count} item}}\n* {{{$count} items}}"
+}
+```
+
+| MF2                                                     |                                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `{$name}`                                               | Placeholder                                                                    |
+| `.input {$n :number}` `.match $n`                       | Plural; several selectors too                                                  |
+| `:number select=ordinal`                                | Ordinal                                                                        |
+| `:string`                                               | Select, [typed per branch](/core/plurals-and-selects#selects-typed-per-branch) |
+| `:number`, `:integer`, `:currency`, `:percent`, `:unit` | Numbers                                                                        |
+| `:date`, `:time`, `:datetime`                           | Dates                                                                          |
+| `.input`, `.local`                                      | Declarations                                                                   |
+| `{#link}…{/link}`, `{#br/}`                             | [Rich text](/core/rich-text)                                                   |
+
+The spec: [messageformat.unicode.org](https://messageformat.unicode.org). The same messages in ICU:
+[Plurals and selects](/core/plurals-and-selects).

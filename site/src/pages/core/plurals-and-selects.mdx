@@ -7,9 +7,9 @@ import { SelectsDemo } from '../../examples/SelectsDemo.tsx';
 
 # Plurals and selects
 
-Each namespace picks its syntax with `format: 'icu'` or `'mf2'`. Both compile to the same data model
-and the same functions; another syntax is an adapter in the config's
-[`formats`](/reference/config#formats). Live, one ICU and one MF2 namespace with the same messages:
+Each namespace picks its syntax with `format`: [ICU](/formats/icu), [MF2](/formats/mf2) or
+[your own](/formats/writing-an-adapter). Each compiles to the same data model and the same functions.
+Live, one ICU and one MF2 namespace with the same messages:
 
 <SelectsDemo />
 
@@ -89,15 +89,3 @@ delivery(
     | { method: string; store: string | number; courier: string | number; day: Date | number },
 ): string;
 ```
-
-## Syntax side by side
-
-|              | ICU                                       | MF2                                                     |
-| ------------ | ----------------------------------------- | ------------------------------------------------------- |
-| Placeholders | `{name}`                                  | `{$name}`                                               |
-| Plural       | `{n, plural, =0 {…} one {# …} other {…}}` | `.input {$n :number}` `.match $n`                       |
-| Ordinal      | `selectordinal`                           | `:number select=ordinal`                                |
-| Select       | `{g, select, …}`                          | `:string`, multiple selectors                           |
-| Numbers      | `number`, `::currency/EUR`, `percent`     | `:number`, `:integer`, `:currency`, `:percent`, `:unit` |
-| Dates        | `date`, `time`                            | `:date`, `:time`, `:datetime`                           |
-| Rich text    | `<link>…</link>`                          | `{#link}…{/link}`, `{#br/}`                             |

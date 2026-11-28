@@ -1,5 +1,5 @@
 ---
-description: setLocale loads what is loaded so far, then switches. Nothing suspends.
+description: setLocale loads what is loaded so far, then switches and notifies.
 showAskAi: false
 ---
 
@@ -7,18 +7,14 @@ import { HomeDemo } from '../../examples/HomeDemo.tsx';
 
 # Switching locale
 
-```tsx
-const { locale, locales, setLocale } = useLocale();
-
-<select value={locale} onChange={(e) => setLocale(e.target.value).catch(reportError)}>
-  {locales.map((l) => (
-    <option key={l}>{l}</option>
-  ))}
-</select>;
+```ts
+parla.subscribe(() => render(parla.locale));
+await parla.setLocale('it');
 ```
 
-`setLocale(next)` downloads every namespace loaded so far for `next`, then switches and re-renders.
-The old text stays until the new one is ready: no fallback, no flash. Try it; the dots show the wait:
+`setLocale(next)` downloads every namespace loaded so far for `next`, then switches and notifies each
+`subscribe` listener. The old text stays until the new one is ready: no fallback, no flash. Live,
+through the [React adapter](/adapters/react#switching-locale); the dots show the wait:
 
 <HomeDemo />
 
@@ -29,7 +25,7 @@ The old text stays until the new one is ready: no fallback, no flash. Try it; th
 | Two calls in a row: the last one wins                                        |
 | Namespaces first loaded during the switch are loaded for `next` too          |
 
-Outside React: `await parla.setLocale('it')`, and `parla.subscribe(listener)` for each switch.
+`subscribe` returns a function that unsubscribes.
 
 ## The first locale
 
