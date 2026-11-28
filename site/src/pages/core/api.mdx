@@ -58,7 +58,7 @@ suspending.
 | `Locale`                                               | The app's locales, once a catalog is built                                             |
 | `Text`                                                 | A message without params or markup: `() => string`                                     |
 | `WrapRich<Node>`                                       | Joins rich parts into one node; see [Writing an adapter](/adapters/writing-an-adapter) |
-| `MessageFunction`                                      | `(value, options, locale) => string`, for `functions`                                  |
+| `MessageFunction`                                      | `({ value, options, locale, locales }) => string`, for `functions`                     |
 | `LocaleRegistry`, `FunctionRegistry`, `MarkupRegistry` | Augmented by generated code; never by hand                                             |
 
 Load one copy of `@parlajs/core`: a library makes it a `peerDependency`. A second copy warns.

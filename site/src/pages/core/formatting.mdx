@@ -53,7 +53,7 @@ functions: { capitalize: 'string' },
 // the app
 createParla({
   catalog,
-  functions: { capitalize: (value, options, locale) => String(value).toLocaleUpperCase(locale) },
+  functions: { capitalize: ({ value, locale }) => String(value).toLocaleUpperCase(locale) },
 });
 ```
 
@@ -61,4 +61,5 @@ createParla({
 { "shout": "{$name :capitalize}!" }
 ```
 
-`createParla` requires every declared function. Built-in names cannot be redefined.
+A function gets `{ value, options, locale, locales }`; pass `locales`, the locale then its fallbacks,
+to `Intl`. `createParla` requires every declared function. Built-in names cannot be redefined.
