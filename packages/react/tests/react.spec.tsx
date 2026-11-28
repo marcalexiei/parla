@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createParla, ParlaProvider, useLocale, useParla } from '../src/index.ts';
+import { createParla, ParlaProvider, useLocale, useParla, useParlaLoaded } from '../src/index.ts';
 import type {
   Catalog,
   Loader,
@@ -120,6 +120,25 @@ function Greeting(): ReactNode {
       <Hello t={t} /> {t.shop.title()}
     </h1>
   );
+}
+
+function Lazy(): ReactNode {
+  const { t } = useParlaLoaded([shop]);
+  const { locale, setLocale } = useLocale();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void setLocale(locale === 'en' ? 'it' : 'en');
+      }}>
+      {t ? t.shop.title() : 'loading'}
+    </button>
+  );
+}
+
+function LazyOffline(): ReactNode {
+  const { t } = useParlaLoaded([broken]);
+  return <span>{t ? 'ready' : 'loading'}</span>;
 }
 
 function Offline(): ReactNode {
@@ -279,6 +298,60 @@ describe('@parlajs/react', () => {
       );
     });
     expect(screen.getByText(/namespace "english" was built for en, not it/)).toBeDefined();
+  });
+
+  it('useParlaLoaded renders without t until it loads, never suspending', async () => {
+    const parla = createParla({ catalog });
+    const suspended = vi.fn<() => ReactNode>(() => null);
+    function Fallback(): ReactNode {
+      return suspended();
+    }
+    act(() => {
+      render(
+        <ParlaProvider parla={parla}>
+          <Suspense fallback={<Fallback />}>
+            <Lazy />
+          </Suspense>
+        </ParlaProvider>,
+      );
+    });
+    expect(screen.getByRole('button').textContent).toBe('loading');
+    await act(async () => {
+      await parla.load([shop]);
+    });
+    expect(screen.getByRole('button').textContent).toBe('Shop');
+    await act(async () => {
+      screen.getByRole('button').click();
+      // The click's switch; a second to the same locale settles with it.
+      await parla.setLocale('it');
+    });
+    expect(screen.getByRole('button').textContent).toBe('Negozio');
+    expect(suspended).not.toHaveBeenCalled();
+  });
+
+  it('useParlaLoaded has t on the first render once loaded ahead', async () => {
+    const parla = createParla({ catalog });
+    await parla.load([shop]);
+    act(() => {
+      render(<Lazy />, { wrapper: wrapperFor(parla) });
+    });
+    expect(screen.getByRole('button').textContent).toBe('Shop');
+  });
+
+  it('useParlaLoaded hands a failed download to the error boundary', async () => {
+    vi.spyOn(console, 'error').mockReturnValue();
+    const parla = createParla({ catalog });
+    await act(async () => {
+      render(
+        <ParlaProvider parla={parla}>
+          <Boundary>
+            <LazyOffline />
+          </Boundary>
+        </ParlaProvider>,
+      );
+      await expect(parla.load([broken])).rejects.toThrow('offline');
+    });
+    await expect(screen.findByText('offline')).resolves.toBeDefined();
   });
 
   it('explains a missing provider', () => {

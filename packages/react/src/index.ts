@@ -13,6 +13,9 @@ import {
   Fragment,
   use,
   useContext,
+  useEffect,
+  useReducer,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import type { ReactNode } from 'react';
@@ -86,6 +89,36 @@ export function useParla<NS extends Namespace>(
 ): { readonly t: Translations<NS> } {
   const parla = useParlaInstance();
   return { t: use(parla.load(namespaces)) };
+}
+
+/**
+ * `{ t }` once the namespaces load for the current locale, `{ t: undefined }` until then: it never
+ * suspends. A failed download reaches the error boundary, as with `useParla`.
+ */
+export function useParlaLoaded<NS extends Namespace>(
+  namespaces: ReadonlyArray<NS>,
+): { readonly t: Translations<NS> | undefined } {
+  const parla = useParlaInstance();
+  const t = parla.loaded(namespaces);
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const [failure, setFailure] = useState<{ readonly error: unknown }>();
+  // No deps: `namespaces` is a new array each render, and `load` returns the cached promise.
+  useEffect(() => {
+    if (!t) {
+      void (async (): Promise<void> => {
+        try {
+          await parla.load(namespaces);
+          rerender();
+        } catch (error) {
+          setFailure({ error });
+        }
+      })();
+    }
+  });
+  if (failure) {
+    throw failure.error;
+  }
+  return { t };
 }
 
 /** The current locale, the supported ones, and a setter that loads before switching. */
