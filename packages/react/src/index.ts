@@ -24,6 +24,7 @@ import type { ReactNode } from 'react';
 export {
   createRuntime,
   matchLocale,
+  parseAcceptLanguage,
   type Catalog,
   type FunctionName,
   type FunctionRegistry,

@@ -29,6 +29,7 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | `Translations<typeof a>`    | The type of `t` for those namespaces                                 |
 | `Text`                      | A message without params or markup: `() => string`                   |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
+| `parseAcceptLanguage(h)`    | An `Accept-Language` header's tags by weight, for `matchLocale`      |
 
 `createParla` also takes `functions` and `markup`, required with every name the config's
 `functions` and `markup` declare:

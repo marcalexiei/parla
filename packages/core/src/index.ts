@@ -447,3 +447,23 @@ export function matchLocale<L extends string>(
   }
   return fallback;
 }
+
+/** RFC 9110's qvalue; spaces around `=` are tolerated. */
+const QVALUE = /^q\s*=\s*(?<q>0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/i;
+
+/**
+ * The tags of an `Accept-Language` header, most wanted first, for `matchLocale`. Drops `*`, `q=0`
+ * and invalid weights such as `q=1.5`; equal weights keep the header's order.
+ */
+export function parseAcceptLanguage(header: string | null | undefined): Array<string> {
+  const weighted: Array<{ tag: string; q: number }> = [];
+  for (const part of (header ?? '').split(',')) {
+    const [tag = '', ...params] = part.split(';').map((s) => s.trim());
+    const quality = params.find((param) => /^q(?:\s|=|$)/i.test(param));
+    const weight = quality === undefined ? 1 : Number(QVALUE.exec(quality)?.groups?.['q'] ?? 0);
+    if (tag !== '' && tag !== '*' && weight > 0) {
+      weighted.push({ tag, q: weight });
+    }
+  }
+  return weighted.sort((a, b) => b.q - a.q).map(({ tag }) => tag);
+}
