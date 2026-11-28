@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { watch } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { build, formatDiagnostic } from './build.ts';
+import { build, formatDiagnostics, unreported } from './build.ts';
 
 const HELP = `Usage: parla <command> [options]
 
@@ -36,18 +36,20 @@ if (values.help || !command || !['build', 'check'].includes(command)) {
 }
 
 const write = command === 'build';
+const fresh = unreported();
 
 async function run(): Promise<{ failed: boolean; files: Array<string> }> {
   const started = performance.now();
   const result = await build({ config: values.config, write });
   const { diagnostics, config } = result;
-  const errors = diagnostics.filter((d) => d.level === 'error').length;
-  const warnings = diagnostics.length - errors;
+  const reports = formatDiagnostics(diagnostics);
+  const errors = reports.filter((r) => r.level === 'error').length;
+  const warnings = reports.length - errors;
   if (values.json) {
     console.log(JSON.stringify(diagnostics, null, 2));
   } else {
-    for (const d of diagnostics) {
-      console.log(formatDiagnostic(d, config.root));
+    for (const { line } of formatDiagnostics(fresh(diagnostics), config.root)) {
+      console.log(line);
     }
   }
   const ms = Math.round(performance.now() - started);
@@ -84,8 +86,14 @@ try {
     }, 50);
   };
   const dirs = new Set(first.files.map((f) => dirname(f)));
+  const files = new Set(first.files);
   for (const dir of dirs) {
-    watch(dir, schedule);
+    watch(dir, (_, name) => {
+      // a folder holds more than catalogs; `name` is null where the platform does not tell
+      if (name === null || files.has(join(dir, name))) {
+        schedule();
+      }
+    });
   }
   console.log(`parla: watching ${dirs.size} folders`);
 } catch (error) {

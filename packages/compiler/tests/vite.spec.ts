@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { build as viteBuild, createServer } from 'vite';
-import type { Rolldown, ViteDevServer } from 'vite';
+import { build as viteBuild, createBuilder, createLogger, createServer } from 'vite';
+import type { Logger, Rolldown, ViteDevServer } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { parla } from '../src/vite.ts';
@@ -40,8 +40,8 @@ function catalog(dir: string, withExtra: boolean): void {
 }
 
 /** The generated chunk of `ns`, or '' before it exists. */
-function chunk(dir: string, ns: string): string {
-  const file = join(dir, 'src/parla/messages/en', `${ns}.js`);
+function chunk(dir: string, ns: string, locale = 'en'): string {
+  const file = join(dir, 'src/parla/messages', locale, `${ns}.js`);
   return existsSync(file) ? readFileSync(file, 'utf8') : '';
 }
 
@@ -125,5 +125,91 @@ describe('the Vite plugin, so `parla build --watch` is not needed', { timeout: 2
       expect(chunk(app, 'app')).toContain('One');
     });
     await editAndAdd(app);
+  });
+});
+
+/** A logger that keeps parla's lines. */
+function capture(): { logger: Logger; lines: Array<string> } {
+  const lines: Array<string> = [];
+  const logger = createLogger('silent');
+  logger.warn = (msg): void => {
+    lines.push(msg);
+  };
+  return { logger, lines };
+}
+
+/** `app` in en and it, where it leaves out `missing`. */
+function partly(missing: Array<string>, title = 'Uno'): void {
+  put(
+    join(app, 'parla.config.ts'),
+    configModule({
+      locales: ['en', 'it'],
+      namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+    }),
+  );
+  put(join(app, 'locales/en/app.json'), { title: 'One', a: 'A', b: 'B' });
+  put(
+    join(app, 'locales/it/app.json'),
+    Object.fromEntries(
+      Object.entries({ title, a: 'A', b: 'B' }).filter(([k]) => !missing.includes(k)),
+    ),
+  );
+}
+
+describe('the Vite plugin warns once', { timeout: 20_000 }, () => {
+  let server: ViteDevServer | undefined;
+  afterEach(async () => {
+    await server?.close();
+    server = undefined;
+  });
+
+  it('per problem across dev rebuilds', async () => {
+    rmSync(tmp, { recursive: true, force: true });
+    partly(['a']);
+    put(join(app, 'index.html'), '<script type="module" src="/main.js"></script>');
+    put(join(app, 'main.js'), '');
+    const { logger, lines } = capture();
+    server = await createServer({
+      root: app,
+      logLevel: 'silent',
+      customLogger: logger,
+      server: { port: 0, ws: false },
+      plugins: [parla()],
+    });
+    await server.listen();
+    const warning =
+      '[parla] warning [missing-translation] app › it › a: untranslated, using "en" (locales/it/app.json)';
+    expect(lines).toStrictEqual([warning]);
+    await writeUntil(join(app, 'locales/it/app.json'), { title: 'Due', b: 'B' }, () => {
+      expect(chunk(app, 'app', 'it')).toContain('Due');
+    });
+    expect(lines).toStrictEqual([warning]);
+    await writeUntil(join(app, 'locales/it/app.json'), { title: 'Tre' }, () => {
+      expect(chunk(app, 'app', 'it')).toContain('Tre');
+    });
+    expect(lines).toStrictEqual([warning, warning.replace('› a:', '› b:')]);
+  });
+
+  it('per problem across build environments', async () => {
+    rmSync(tmp, { recursive: true, force: true });
+    partly(['a', 'b']);
+    put(join(app, 'client.js'), 'export const client = 1;');
+    put(join(app, 'server.js'), 'export const server = 1;');
+    const { logger, lines } = capture();
+    const builder = await createBuilder({
+      root: app,
+      logLevel: 'silent',
+      customLogger: logger,
+      plugins: [parla()],
+      builder: {},
+      environments: {
+        client: { build: { outDir: 'dist/client', rolldownOptions: { input: 'client.js' } } },
+        ssr: { build: { outDir: 'dist/ssr', ssr: 'server.js' } },
+      },
+    });
+    await builder.buildApp();
+    expect(lines).toStrictEqual([
+      '[parla] warning [missing-translation] app › it › a, b: untranslated, using "en" (locales/it/app.json)',
+    ]);
   });
 });

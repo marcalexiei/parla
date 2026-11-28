@@ -6,8 +6,8 @@ import { createParla } from '@parlajs/core';
 import type { Catalog, Namespace } from '@parlajs/core';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { build, formatDiagnostic } from '../src/build.ts';
-import type { BuildResult } from '../src/build.ts';
+import { build, formatDiagnostic, formatDiagnostics, unreported } from '../src/build.ts';
+import type { BuildResult, Diagnostic } from '../src/build.ts';
 
 import { typecheck } from './typecheck.ts';
 
@@ -783,8 +783,6 @@ export default {
     const { diagnostics } = await build({ cwd: files });
     expect(diagnostics.map((d) => `${d.code}:${d.locale}:${d.message}`)).toStrictEqual([
       'invalid-resource:it:no "=" in "bye"',
-      'missing-translation:it:using "en"',
-      'missing-translation:it:using "en"',
     ]);
     const { ns, catalog } = await imported(files, 'app');
     const t = await createParla({ catalog }).load([ns]);
@@ -827,6 +825,59 @@ describe('diagnostics', () => {
     expect(formatDiagnostic({ level: 'warning', code: 'unknown-key', message: 'm' })).toBe(
       'warning [unknown-key] : m',
     );
+  });
+});
+
+/** A warning on `key`. */
+const at = (key: string): Diagnostic => ({
+  level: 'warning',
+  code: 'missing-translation',
+  key,
+  message: 'm',
+});
+
+describe('warnings', () => {
+  const dir = join(tmp, 'build-test-warnings');
+
+  it('report each problem once, on one line', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'en-GB', 'pt', 'pt-BR', 'it'],
+        fallbacks: { 'pt-BR': ['pt'] },
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    const keys = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    put(dir, 'locales/en/app.json', Object.fromEntries(keys.map((k) => [k, k.toUpperCase()])));
+    put(dir, 'locales/pt/app.json', { a: 'A', bad: '{oops' });
+    put(dir, 'locales/it/app.json', { a: '{oops', b: 'B' });
+    // en-GB has no file and pt-BR no keys: their parents report the gaps
+    put(dir, 'locales/pt-BR/app.json', {});
+    const { diagnostics, config } = await build({ cwd: dir, write: false });
+    const reports = formatDiagnostics(diagnostics, config.root);
+    // a key that fails to parse is not also untranslated
+    expect(
+      reports.filter((r) => r.level === 'error').map((r) => r.line.split(':')[0]),
+    ).toStrictEqual([
+      'error   [invalid-syntax] app › pt › bad',
+      'error   [invalid-syntax] app › it › a',
+    ]);
+    expect(reports.filter((r) => r.level === 'warning').map((r) => r.line)).toStrictEqual([
+      'warning [missing-translation] app › pt › b, c, d, e, f and 2 more: untranslated, using "en" (locales/pt/app.json)',
+      'warning [missing-translation] app › it › c, d, e, f, g, h: untranslated, using "en" (locales/it/app.json)',
+    ]);
+  });
+
+  it('repeat on a rebuild only when new', () => {
+    const fresh = unreported();
+    expect(fresh([at('a')])).toStrictEqual([at('a')]);
+    expect(fresh([at('a')])).toStrictEqual([]);
+    expect(fresh([at('a'), at('b')])).toStrictEqual([at('b')]);
+    expect(fresh([at('b')])).toStrictEqual([]);
+    expect(fresh([at('a'), at('b')])).toStrictEqual([at('a')]);
   });
 });
 

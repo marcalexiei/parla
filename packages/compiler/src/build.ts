@@ -183,6 +183,14 @@ function readCatalog(
   return { file, entries, exists: true };
 }
 
+/** A locale with a parent (a fallback or its base) leaves gaps by design; the parent reports its own. */
+function inherits(config: ResolvedConfig, locale: string): boolean {
+  const [base = locale] = locale.split('-');
+  return [...(config.fallbacks[locale] ?? []), base].some(
+    (l) => l !== locale && config.locales.includes(l),
+  );
+}
+
 /** One registry augmentation, or nothing when it has no member. */
 function registry(name: string, keys: ReadonlyArray<string>): string {
   const members = keys.map((k) => `    ${JSON.stringify(k)}: true;\n`).join('');
@@ -335,20 +343,22 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
       continue;
     }
     const catalogs = new Map<string, Map<string, Entry>>();
-    const missingFile = new Set<string>();
+    // A locale, or `locale\0key`, already reported: its missing translations are the same problem.
+    const reported = new Set<string>();
     for (const locale of config.locales) {
       const read = readCatalog(ns, locale, adapter, (d) => {
+        reported.add(d.key ? `${locale}\0${d.key}` : locale);
         diagnostics.push({ ...d, namespace: ns.name, locale });
       });
-      if (!read.exists) {
-        missingFile.add(locale);
+      if (!read.exists && (locale === config.sourceLocale || !inherits(config, locale))) {
+        reported.add(locale);
         diagnostics.push({
           level: locale === config.sourceLocale ? 'error' : 'warning',
           code: 'missing-file',
           namespace: ns.name,
           locale,
           file: read.file,
-          message: `${relative(config.root, read.file)} does not exist`,
+          message: 'no such file: create it',
         });
       }
       catalogs.set(locale, read.entries);
@@ -362,6 +372,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
       const messages: Array<[key: string, fn: string]> = [];
       const own = catalogs.get(locale) ?? new Map<string, Entry>();
       const chain = fallbackChain(config, locale);
+      const gapsAllowed = inherits(config, locale);
       const at = (d: Omit<Diagnostic, 'namespace' | 'locale'>): void => {
         diagnostics.push({ ...d, namespace: ns.name, locale, file: ns.file(locale) });
       };
@@ -371,7 +382,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
           level: 'warning',
           code: 'unknown-key',
           key,
-          message: `not in the source locale "${config.sourceLocale}"; dropped`,
+          message: `not in "${config.sourceLocale}", so dropped: add it there or remove it`,
         });
       }
 
@@ -380,12 +391,12 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
         if (!entry) {
           const from = chain.find((l) => catalogs.get(l)?.has(key));
           entry = from ? catalogs.get(from)?.get(key) : undefined;
-          if (!missingFile.has(locale)) {
+          if (!gapsAllowed && !reported.has(locale) && !reported.has(`${locale}\0${key}`)) {
             at({
               level: 'warning',
               code: 'missing-translation',
               key,
-              message: from ? `using "${from}"` : 'no fallback',
+              message: from ? `untranslated, using "${from}"` : 'untranslated, no fallback',
             });
           }
           if (!entry) {
@@ -464,4 +475,45 @@ export function formatDiagnostic(d: Diagnostic, root?: string): string {
   const where = [d.namespace, d.locale, d.key].filter(Boolean).join(' › ');
   const file = d.file && root ? ` (${relative(root, d.file)})` : '';
   return `${d.level === 'error' ? 'error  ' : 'warning'} [${d.code}] ${where}: ${d.message}${file}`;
+}
+
+export interface Report {
+  level: Diagnostic['level'];
+  line: string;
+}
+
+const SHOWN_KEYS = 5;
+
+/** One line per problem: diagnostics that differ only in their key share it. */
+export function formatDiagnostics(
+  diagnostics: ReadonlyArray<Diagnostic>,
+  root?: string,
+): Array<Report> {
+  const groups = new Map<string, { d: Diagnostic; keys: Array<string> }>();
+  for (const d of diagnostics) {
+    const id = JSON.stringify([d.level, d.code, d.namespace, d.locale, d.file, d.message]);
+    const group = groups.get(id) ?? { d, keys: [] };
+    groups.set(id, group);
+    if (d.key) {
+      group.keys.push(d.key);
+    }
+  }
+  return [...groups.values()].map(({ d, keys }) => {
+    const more = keys.length - SHOWN_KEYS;
+    // "and 1 more" is no shorter than the key itself
+    const key =
+      more > 1 ? `${keys.slice(0, SHOWN_KEYS).join(', ')} and ${more} more` : keys.join(', ');
+    return { level: d.level, line: formatDiagnostic({ ...d, key }, root) };
+  });
+}
+
+/** Filters out what the previous call returned, so a rebuild repeats no warning. */
+export function unreported(): (diagnostics: ReadonlyArray<Diagnostic>) => Array<Diagnostic> {
+  let last = new Set<string>();
+  return (diagnostics) => {
+    const ids = diagnostics.map((d) => JSON.stringify(d));
+    const fresh = diagnostics.filter((_, i) => !last.has(ids[i] ?? ''));
+    last = new Set(ids);
+    return fresh;
+  };
 }
