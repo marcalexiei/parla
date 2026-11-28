@@ -16,15 +16,31 @@ t.checkout.cart.items({ count: 3 }); // "3 items"; count: number, required
 t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 ```
 
-```sh
-pnpm add @parlajs/react && pnpm add -D @parlajs/compiler
-```
+- **Typed loading**: `t` has only the namespaces you loaded.
+- **Params from the message**: plurals, selects per branch, rich text.
+- **Lazy per locale**: one chunk per locale and namespace; `setLocale` loads, then switches.
+- **ICU and MF2**, formatted with `Intl`: no locale data to ship.
 
-- [Documentation](https://marcalexiei.github.io/parla/)
-- [Getting started](https://marcalexiei.github.io/parla/getting-started)
-- [Why Parla](https://marcalexiei.github.io/parla/why)
-- [Playground](https://github.com/marcalexiei/parla-playground)
-- [Benchmarks](https://github.com/marcalexiei/parla-benchmark)
+**[Documentation](https://marcalexiei.github.io/parla/)** ·
+[Playground](https://github.com/marcalexiei/parla-playground) ·
+[Benchmarks](https://github.com/marcalexiei/parla-benchmark)
+
+## Packages
+
+|                   | Package                                        |                                         |
+| ----------------- | ---------------------------------------------- | --------------------------------------- |
+| Core              | [`@parlajs/core`](packages/core)               | Runtime: locale state, loading, `Intl`  |
+|                   | [`@parlajs/compiler`](packages/compiler)       | CLI and Vite plugin: catalogs → modules |
+| Format adapter    | [`@parlajs/format-icu`](packages/format-icu)   | ICU                                     |
+|                   | [`@parlajs/format-mf2`](packages/format-mf2)   | MessageFormat 2                         |
+| Framework adapter | [`@parlajs/react`](packages/react)             | `useParla`, `useParlaLoaded`            |
+| Tooling           | [`@parlajs/x18n-plugin`](packages/x18n-plugin) | [x18n](https://x18n.dev) plugin         |
+
+## Development
+
+```sh
+pnpm install && pnpm validate
+```
 
 Parla is built with the help of AI coding tools.
 

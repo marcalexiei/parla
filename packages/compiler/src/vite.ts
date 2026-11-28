@@ -5,7 +5,7 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { build, formatDiagnostic } from './build.ts';
 import type { BuildOptions, BuildResult } from './build.ts';
 
-export interface ParlaViteOptions extends Pick<BuildOptions, 'config' | 'formats'> {
+export interface ParlaViteOptions extends Pick<BuildOptions, 'config'> {
   /** Folder holding the config. Defaults to Vite's root. */
   root?: string;
 }
@@ -17,7 +17,7 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
   let isBuild = false;
 
   const run = async (log: (msg: string) => void): Promise<BuildResult> => {
-    const result = await build({ cwd: root, config: options.config, formats: options.formats });
+    const result = await build({ cwd: root, config: options.config });
     watchFiles = new Set(result.config.watchFiles.map((f) => resolve(f)));
     for (const d of result.diagnostics) {
       log(formatDiagnostic(d, result.config.root));

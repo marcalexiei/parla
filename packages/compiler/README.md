@@ -37,9 +37,14 @@ export default defineConfig({
 ```
 
 - `namespaces`: the ones this package owns. Others' come from importing their built objects.
+- `fallbacks`: where a locale's missing keys come from, before its base language and the source
+  locale. `Intl` follows the same chain where it lacks a locale's data, such as `fur` in browsers.
 - `functions`: message functions beyond the built-in ones, by their value's type (`string`,
   `number`, `date`); `createParla({ functions })` must implement each.
 - `markup`: tags a call may leave out; `createParla({ markup })` must render each.
+- `formats`: message syntaxes beyond `icu` and `mf2`, each a `FormatAdapter` parsing one message
+  into the MF2 data model; a namespace's `format` names one. Its `parseFile` reads catalogs that
+  are not JSON, such as `.po` or `.ftl`, into `{ key: message | group }`.
 - `runtime`: the module the types import and augment; defaults to `@parlajs/react` if a dependency, else
   `@parlajs/core`.
 

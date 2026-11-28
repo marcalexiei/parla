@@ -103,6 +103,8 @@ const describe = (value: unknown): string => {
 export interface Catalog {
   readonly locales: ReadonlyArray<Locale>;
   readonly sourceLocale: Locale;
+  /** Each locale's fallback chain, which `Intl` also follows where it lacks the locale's data. */
+  readonly fallbacks?: Readonly<Partial<Record<string, ReadonlyArray<string>>>>;
 }
 
 /** Required, with every declared name, once the config declares any. */
@@ -115,6 +117,11 @@ export type ParlaOptions<Node = string> = {
   catalog: Catalog;
   /** Initial locale. Defaults to the source locale. */
   locale?: Locale;
+  /**
+   * IANA zone for `:date`, `:time` and `:datetime` unless a message sets `timeZone`. Defaults to the
+   * host's, which on a server is rarely the reader's.
+   */
+  timeZone?: string;
   /** Turns message parts with markup into one node. Set by framework adapters. */
   wrapRich?: WrapRich<Node>;
 } & Declared<'functions', FunctionName, MessageFunction> &
@@ -141,6 +148,13 @@ export interface Parla<Node = string> {
   readonly load: <NS extends Namespace>(
     namespaces: ReadonlyArray<NS>,
   ) => Promise<Translations<NS, Node>>;
+  /**
+   * `t`, if the namespaces are loaded for the current locale; never downloads. Frameworks without
+   * Suspense render from it, and `load` otherwise. The same list returns the same `t` as `load`.
+   */
+  readonly loaded: <NS extends Namespace>(
+    namespaces: ReadonlyArray<NS>,
+  ) => Translations<NS, Node> | undefined;
   /** Called after each locale switch. */
   readonly subscribe: (listener: () => void) => () => void;
 }
@@ -170,8 +184,8 @@ g[INSTANCE] = marker;
 
 /** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
-  const { wrapRich } = options;
-  const { locales, sourceLocale } = options.catalog;
+  const { wrapRich, timeZone } = options;
+  const { locales, sourceLocale, fallbacks = {} } = options.catalog;
   const extensions = {
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
     markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
@@ -198,7 +212,13 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
   const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
     if (!rt) {
-      rt = createRuntime(locale, wrapRich as WrapRich<unknown> | undefined, extensions);
+      rt = createRuntime(
+        locale,
+        wrapRich as WrapRich<unknown> | undefined,
+        extensions,
+        fallbacks[locale],
+        timeZone,
+      );
       runtimes.set(locale, rt);
     }
     return rt;
@@ -272,8 +292,8 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     return id;
   };
 
-  // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
-  const load = (namespaces: ReadonlyArray<Loadable>, locale: Locale): Promise<object> => {
+  /** `[name, id]` per namespace, sorted by name: one cache key for any order. */
+  const resolve = (namespaces: ReadonlyArray<Loadable>): Array<[name: string, id: number]> => {
     const byName = new Map<string, number>();
     for (const ns of namespaces) {
       const id = adopt(ns);
@@ -285,7 +305,14 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
       byName.set(ns.name, id);
     }
     // Not `toSorted`: Hermes (React Native) lacks it, and the spread is a copy already.
-    const list = [...byName].sort(([a], [b]) => a.localeCompare(b));
+    return [...byName].sort(([a], [b]) => a.localeCompare(b));
+  };
+
+  // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
+  const load = (
+    list: ReadonlyArray<[name: string, id: number]>,
+    locale: Locale,
+  ): Promise<object> => {
     const key = `${locale}\u0000${list.map(([, id]) => id).join('\u0000')}`;
     let promise = translations.get(key);
     if (!promise) {
@@ -306,6 +333,15 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     return promise;
   };
 
+  // Before the namespaces settle, `load` would download them; after, it builds `t` from what settled.
+  const loadedOf = (
+    list: ReadonlyArray<[name: string, id: number]>,
+    locale: Locale,
+  ): object | undefined =>
+    list.every(([, id]) => settled.has(`${locale}\u0000${id}`))
+      ? (load(list, locale) as Promise<object> & { value?: object }).value
+      : undefined;
+
   // Every namespace loaded so far, again until none is missing: one first loaded meanwhile is ready too.
   const loadAll = async (locale: Locale): Promise<void> => {
     const missing = [...loaded].filter((id) => !settled.has(`${locale}\u0000${id}`));
@@ -321,7 +357,8 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
       return current;
     },
     locales,
-    load: (namespaces) => load(namespaces, current) as never,
+    load: (namespaces) => load(resolve(namespaces), current) as never,
+    loaded: (namespaces) => loadedOf(resolve(namespaces), current) as never,
     async setLocale(locale) {
       assertLocale(locale);
       switchToken += 1;
@@ -409,4 +446,24 @@ export function matchLocale<L extends string>(
     }
   }
   return fallback;
+}
+
+/** RFC 9110's qvalue; spaces around `=` are tolerated. */
+const QVALUE = /^q\s*=\s*(?<q>0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/i;
+
+/**
+ * The tags of an `Accept-Language` header, most wanted first, for `matchLocale`. Drops `*`, `q=0`
+ * and invalid weights such as `q=1.5`; equal weights keep the header's order.
+ */
+export function parseAcceptLanguage(header: string | null | undefined): Array<string> {
+  const weighted: Array<{ tag: string; q: number }> = [];
+  for (const part of (header ?? '').split(',')) {
+    const [tag = '', ...params] = part.split(';').map((s) => s.trim());
+    const quality = params.find((param) => /^q(?:\s|=|$)/i.test(param));
+    const weight = quality === undefined ? 1 : Number(QVALUE.exec(quality)?.groups?.['q'] ?? 0);
+    if (tag !== '' && tag !== '*' && weight > 0) {
+      weighted.push({ tag, q: weight });
+    }
+  }
+  return weighted.sort((a, b) => b.q - a.q).map(({ tag }) => tag);
 }

@@ -53,6 +53,21 @@ describe(createRuntime, () => {
     );
   });
 
+  it('formats dates in its time zone unless a message sets its own', () => {
+    // Nov 28 in Rome, still Nov 27 in Los Angeles
+    const late = new Date(Date.UTC(2026, 10, 28, 3));
+    const rome = createRuntime('en', undefined, {}, [], 'Europe/Rome');
+    const inZone = (timeZone: string, options: Intl.DateTimeFormatOptions = {}): string =>
+      new Intl.DateTimeFormat('en', { ...options, timeZone }).format(late);
+    expect(rome.f('date', late)).toBe(inZone('Europe/Rome', { dateStyle: 'medium' }));
+    expect(rome.f('date', late)).toContain('28');
+    expect(rome.f('date', late, { timeZone: 'America/Los_Angeles' })).toContain('27');
+    expect(rome.f('time', late, { hour: 'numeric' })).toBe(
+      inZone('Europe/Rome', { hour: 'numeric' }),
+    );
+    expect(rome.str(late)).toBe(inZone('Europe/Rome'));
+  });
+
   it('formats strings and rejects unknown functions', () => {
     expect(rt.f('string', true)).toBe('true');
     expect(rt.f('string', { a: 1 })).toBe('');
@@ -117,6 +132,14 @@ describe(createRuntime, () => {
     expect(ext.f('shout', 'ciao', { mark: '!' })).toBe('CIAO!@it');
     expect(ext.f('number', 2)).toBe('2');
     expect(() => ext.f('toString', 1)).toThrow(/unknown message function/);
+  });
+
+  it('formats with the first fallback Intl has data for', () => {
+    // `qaa` is a private-use code: no engine has data for it.
+    const fur = createRuntime('qaa', undefined, {}, ['it', 'en']);
+    expect(fur.str(12_345.5)).toBe('12.345,5');
+    expect(fur.f('currency', 2, { currency: 'EUR' })).toBe('2,00\u00A0€');
+    expect(fur.sn(1_000_000)).toStrictEqual({ n: 1_000_000, cat: 'many' });
   });
 
   it('renders default markup unless the call passes its own', () => {

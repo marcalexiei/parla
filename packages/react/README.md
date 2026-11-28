@@ -38,11 +38,15 @@ createRoot(root).render(
 
 - `useParla([a, b])` returns `{ t }`, keyed by name. Loaded namespaces never suspend:
   `await parla.load([...])` in a route loader to skip the fallback.
+- `useParlaLoaded([a, b])` never suspends: `{ t }` is `undefined` until they load, for a
+  placeholder of your own.
 - A locale switch never suspends: `setLocale` loads first. If a download fails, it rejects and
   keeps the current locale: handle it (`.catch`), or it is an unhandled rejection.
 - A failed download reaches the nearest error boundary.
 - `Parla`, `ParlaOptions` and `Translations` type rich text as `ReactNode`;
   `@parlajs/core`'s stay `string`.
+- In Server Components (the `react-server` condition) only `createParla` and the types exist, no
+  hooks: `const t = await parla.load([checkout])` in an async component.
 
 ## License
 

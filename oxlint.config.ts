@@ -149,7 +149,7 @@ export default defineConfig({
         'scripts/**',
         'bench/**',
         'packages/compiler/src/**',
-        'packages/x18n/src/**',
+        'packages/x18n-plugin/src/**',
       ],
       ...nodeConfig,
     },

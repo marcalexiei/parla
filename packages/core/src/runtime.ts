@@ -81,8 +81,12 @@ function numberOptions(name: string, options: Record<string, unknown>): Intl.Num
   return { ...rest, ...NUMBER_STYLE[name] };
 }
 
-function dateOptions(name: string, options: Record<string, unknown>): Intl.DateTimeFormatOptions {
-  const opts: Intl.DateTimeFormatOptions = {};
+function dateOptions(
+  name: string,
+  options: Record<string, unknown>,
+  zone: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormatOptions {
+  const opts: Intl.DateTimeFormatOptions = { ...zone };
   for (const k of DATE_FIELDS) {
     if (options[k] !== undefined) {
       (opts as Record<string, unknown>)[k] = options[k];
@@ -190,7 +194,13 @@ export function createRuntime(
   locale: string,
   wrapRich: WrapRich<unknown> = (parts) => parts,
   extensions: RuntimeExtensions = {},
+  /** Locales `Intl` tries when it has no data for `locale`, such as `fur` in browsers. */
+  fallbacks: ReadonlyArray<string> = [],
+  /** Dates' zone unless a message sets its own; the host's when omitted. */
+  timeZone?: string,
 ): MessageRuntime {
+  const tags = [locale, ...fallbacks];
+  const zone: Intl.DateTimeFormatOptions = timeZone === undefined ? {} : { timeZone };
   const functions = new Map(Object.entries(extensions.functions ?? {}));
   const markup = new Map(Object.entries(extensions.markup ?? {}));
   const cache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>();
@@ -234,7 +244,7 @@ export function createRuntime(
     locale,
     str(value) {
       if (typeof value === 'number' || typeof value === 'bigint') {
-        const nf = cached('n', () => new (intl('NumberFormat'))(locale));
+        const nf = cached('n', () => new (intl('NumberFormat'))(tags));
         if (typeof value === 'number') {
           return nf.format(value);
         }
@@ -246,7 +256,7 @@ export function createRuntime(
         }
       }
       if (value instanceof Date) {
-        return cached('d', () => new (intl('DateTimeFormat'))(locale)).format(value);
+        return cached('d', () => new (intl('DateTimeFormat'))(tags, zone)).format(value);
       }
       return text(value);
     },
@@ -256,14 +266,14 @@ export function createRuntime(
         return formatter(
           name,
           options,
-          () => new (intl('NumberFormat'))(locale, numberOptions(name, options)),
+          () => new (intl('NumberFormat'))(tags, numberOptions(name, options)),
         ).format(n);
       }
       if (DATE_FNS.has(name)) {
         return formatter(
           name,
           options,
-          () => new (intl('DateTimeFormat'))(locale, dateOptions(name, options)),
+          () => new (intl('DateTimeFormat'))(tags, dateOptions(name, options, zone)),
         ).format(toDate(value));
       }
       if (name === 'string') {
@@ -281,7 +291,7 @@ export function createRuntime(
         return { n, cat: '' };
       }
       const type = options['select'] === 'ordinal' ? 'ordinal' : 'cardinal';
-      const rules = cached(type, () => new (intl('PluralRules'))(locale, { type }));
+      const rules = cached(type, () => new (intl('PluralRules'))(tags, { type }));
       return { n, cat: rules.select(n - Number(options['offset'] ?? 0)) };
     },
     ss(value) {

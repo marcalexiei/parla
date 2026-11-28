@@ -143,6 +143,7 @@ describe(build, () => {
   it('runs end to end through the core runtime, with fallbacks', async () => {
     const { catalog, ns: checkout } = await imported(app, 'checkout');
     const { ns: common } = await imported(app, 'common');
+    expect(catalog.fallbacks).toStrictEqual({ en: [], it: ['en'], de: ['en'] });
     const parla = createParla({ catalog, locale: 'it' });
     const italian = await parla.load([checkout]);
     const t = italian['checkout'] as CheckoutMessages;
@@ -216,6 +217,10 @@ await parla.load(['checkout']);
 await parla.load(checkout);
 // @ts-expect-error built for en and it, not de
 await parla.load([german]);
+const maybe = parla.loaded([checkout]);
+// @ts-expect-error undefined until its namespaces load
+maybe.checkout.title();
+maybe?.checkout.title();
 `,
     );
     expect(typecheck(join(tmp, 'build-test'), { include: ['app/src'] })).toBe('');
@@ -249,7 +254,7 @@ describe('types for a package that depends on an adapter only', () => {
       pkg,
       'src/usage.ts',
       `import type { ReactNode } from 'react';
-import { useParla } from '@parlajs/react';
+import { useParla, useParlaLoaded } from '@parlajs/react';
 import type { Parla, Translations } from '@parlajs/react';
 import './parla/catalog.js';
 import { widget } from './parla/namespaces/widget.js';
@@ -268,6 +273,10 @@ declare const parla: Parla;
 export const loaded: Translations<typeof widget> = await parla.load([widget]);
 // @ts-expect-error a child demanding a namespace needs a \`t\` that loaded it
 export const unloaded: Translations<typeof widget> = await parla.load([]);
+const lazy = useParlaLoaded([widget]).t;
+// @ts-expect-error undefined until it loads
+lazy.widget.title();
+export const later: ReactNode = lazy?.widget.terms({ link: (children) => children });
 `,
     );
     expect(typecheck(pkg)).toBe('');
@@ -714,6 +723,72 @@ export const fr: Locale = 'fr';
         expect(typecheck(dir, { include: ['src', `${ui}/src`], skipLibCheck })).toBe('');
       }
     }
+  });
+});
+
+describe('formats', () => {
+  const dir = join(tmp, 'build-test-formats');
+
+  it("come from the config, which a namespace's format names", async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      `const shout = (source: string) => ({
+  type: 'message',
+  declarations: [],
+  pattern: [source.toUpperCase()],
+});
+export default {
+  locales: ['en'],
+  formats: { shout: { name: 'shout', parse: shout } },
+  namespaces: { app: { format: 'shout', path: 'locales/{locale}/app.json' } },
+};
+`,
+    );
+    put(dir, 'locales/en/app.json', { hi: 'hi there' });
+    const { diagnostics } = await build({ cwd: dir });
+    expect(diagnostics).toStrictEqual([]);
+    const { catalog, ns } = await imported(dir, 'app');
+    const t = await createParla({ catalog }).load([ns]);
+    expect((t['app'] as { hi: () => string }).hi()).toBe('HI THERE');
+  });
+
+  it('read catalog files that are not JSON', async () => {
+    // Its own folder: Node caches the modules the test above imported.
+    const files = join(tmp, 'build-test-files');
+    rmSync(files, { recursive: true, force: true });
+    put(
+      files,
+      'parla.config.ts',
+      `const plain = { name: 'props', parse: (source: string) => ({ type: 'message', declarations: [], pattern: [source] }) };
+// \`key = message\` per line; a line without \`=\` is an error.
+const parseFile = (text: string) =>
+  Object.fromEntries(
+    text.trim().split('\\n').map((line) => {
+      const at = line.indexOf('=');
+      if (at < 0) throw new Error(\`no "=" in "\${line}"\`);
+      return [line.slice(0, at).trim(), line.slice(at + 1).trim()];
+    }),
+  );
+export default {
+  locales: ['en', 'it'],
+  formats: { props: { ...plain, parseFile } },
+  namespaces: { app: { format: 'props', path: 'locales/{locale}/app.properties' } },
+};
+`,
+    );
+    put(files, 'locales/en/app.properties', 'hi = Hi\nbye = Bye\n');
+    put(files, 'locales/it/app.properties', 'hi = Ciao\nbye\n');
+    const { diagnostics } = await build({ cwd: files });
+    expect(diagnostics.map((d) => `${d.code}:${d.locale}:${d.message}`)).toStrictEqual([
+      'invalid-resource:it:no "=" in "bye"',
+      'missing-translation:it:using "en"',
+      'missing-translation:it:using "en"',
+    ]);
+    const { ns, catalog } = await imported(files, 'app');
+    const t = await createParla({ catalog }).load([ns]);
+    expect((t['app'] as { bye: () => string }).bye()).toBe('Bye');
   });
 });
 

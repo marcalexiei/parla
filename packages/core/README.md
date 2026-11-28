@@ -23,11 +23,13 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | API                         |                                                                      |
 | --------------------------- | -------------------------------------------------------------------- |
 | `parla.load(ns[])`          | `t` keyed by name; the same list, the same promise                   |
+| `parla.loaded(ns[])`        | `t` if loaded for the current locale, else `undefined`; never loads  |
 | `parla.setLocale(locale)`   | Loads first, then notifies; rejects, unswitched, if a download fails |
 | `parla.subscribe(listener)` | Called after each switch                                             |
 | `Translations<typeof a>`    | The type of `t` for those namespaces                                 |
 | `Text`                      | A message without params or markup: `() => string`                   |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
+| `parseAcceptLanguage(h)`    | An `Accept-Language` header's tags by weight, for `matchLocale`      |
 
 `createParla` also takes `functions` and `markup`, required with every name the config's
 `functions` and `markup` declare:
@@ -39,6 +41,9 @@ createParla({
   markup: { strong: (children) => `**${children}**` }, // a call's own `strong` wins
 });
 ```
+
+`timeZone` formats dates in an IANA zone instead of the host's, unless a message sets its own:
+a server's zone is rarely the reader's.
 
 Rich text is a `string` here and a `ReactNode` through `@parlajs/react`, so one namespace serves
 both, e.g. emails beside the app. Another adapter passes `wrapRich` and types `Parla<Node>`.

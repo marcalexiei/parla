@@ -1,7 +1,14 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createParla, matchLocale } from '../src/index.ts';
-import type { Catalog, Loader, MessageModule, Namespace, NamespaceKind } from '../src/index.ts';
+import { createParla, matchLocale, parseAcceptLanguage } from '../src/index.ts';
+import type {
+  Catalog,
+  Loader,
+  MessageModule,
+  MessageRuntime,
+  Namespace,
+  NamespaceKind,
+} from '../src/index.ts';
 
 interface Common {
   nav: { home: () => string };
@@ -20,6 +27,12 @@ const accessorOf = (messages: Messages): object =>
 const chunk = (messages: Messages): MessageModule => ({ default: () => accessorOf(messages) });
 
 const catalog: Catalog = { locales: ['en', 'it'], sourceLocale: 'en' };
+
+// A chunk that formats a number, so the locale `Intl` picked shows.
+const amountChunk: Loader = async () =>
+  Promise.resolve({
+    default: (rt: MessageRuntime): object => ({ n: (): string => rt.str(12_345.5) }),
+  });
 
 type Built = Namespace<string, NamespaceKind, 'en' | 'it'>;
 
@@ -53,6 +66,19 @@ function makeNamespaces(): {
 }
 
 describe(createParla, () => {
+  it('formats with the catalog fallbacks where Intl lacks the locale', async () => {
+    const amount: Namespace<string, NamespaceKind, 'en' | 'qaa'> = {
+      name: 'amount',
+      load: { en: amountChunk, qaa: amountChunk },
+    };
+    const parla = createParla({
+      catalog: { locales: ['en', 'qaa'], sourceLocale: 'en', fallbacks: { qaa: ['it', 'en'] } },
+      locale: 'qaa',
+    });
+    const t = await parla.load([amount]);
+    expect((t['amount'] as { n: () => string }).n()).toBe('12.345,5');
+  });
+
   it('loads each namespace once and returns messages keyed by name', async () => {
     const { common, checkout, calls } = makeNamespaces();
     const parla = createParla({ catalog });
@@ -66,6 +92,26 @@ describe(createParla, () => {
     const single = await parla.load([common]);
     expect(single['common']).toBe(a['common']);
     expect(calls).toStrictEqual(['en/checkout', 'en/common']);
+  });
+
+  it("formats dates in its timeZone, not the host's", async () => {
+    const dates = {
+      name: 'dates',
+      load: {
+        en: async (): Promise<MessageModule> =>
+          Promise.resolve({
+            default: (rt) => ({ day: (d: Date) => rt.f('date', d, { day: 'numeric' }) }),
+          }),
+        it: async (): Promise<MessageModule> => Promise.reject(new Error('unused')),
+      },
+    };
+    const late = new Date(Date.UTC(2026, 10, 28, 3));
+    const day = async (timeZone: string): Promise<string> => {
+      const t = await createParla({ catalog, timeZone }).load([dates]);
+      return (t['dates'] as unknown as { day: (d: Date) => string }).day(late);
+    };
+    await expect(day('Europe/Rome')).resolves.toBe('28');
+    await expect(day('America/Los_Angeles')).resolves.toBe('27');
   });
 
   it('loads where Array#toSorted is missing, as on Hermes', async () => {
@@ -165,6 +211,20 @@ describe(createParla, () => {
     expect(attempts).toBe(2);
   });
 
+  it('reads loaded namespaces without downloading, as load would return them', async () => {
+    const { common, checkout, calls } = makeNamespaces();
+    const parla = createParla({ catalog });
+    expect(parla.loaded([common])).toBeUndefined();
+    expect(calls).toStrictEqual([]);
+    const t = await parla.load([common, checkout]);
+    expect(parla.loaded([checkout, common])).toBe(t);
+    expect(parla.loaded([common])?.['common']).toBe(t['common']);
+    await parla.setLocale('it');
+    const italian = parla.loaded([common]);
+    expect((italian?.['common'] as Common | undefined)?.nav.home()).toBe('Inizio');
+    expect(calls).toStrictEqual(['en/checkout', 'en/common', 'it/checkout', 'it/common']);
+  });
+
   it('rejects an unknown locale', () => {
     expect(() => createParla({ catalog, locale: 'fr' })).toThrow(/unknown locale "fr"/);
   });
@@ -260,5 +320,31 @@ describe(matchLocale, () => {
     expect(matchLocale(['pt-BR-x-foo'], ['pt-PT', 'pt-BR'], 'en')).toBe('pt-BR');
     expect(matchLocale(['pt-PT'], ['en', 'pt-BR'], 'en')).toBe('pt-BR');
     expect(matchLocale(['1234', 'fr'], ['en', 'it'], 'en')).toBe('en');
+  });
+});
+
+describe(parseAcceptLanguage, () => {
+  it('lists tags by weight, keeping the header order between equal weights', () => {
+    expect(parseAcceptLanguage('de-CH;q=0.5, fr;q=0.9, it ,en;Q = 0.900, pt;q=1.0')).toStrictEqual([
+      'it',
+      'pt',
+      'fr',
+      'en',
+      'de-CH',
+    ]);
+  });
+
+  it('drops *, q=0, weights outside RFC 9110 and empty parts', () => {
+    expect(
+      parseAcceptLanguage('*;q=0.8, en;q=0, , de;q=x, es;q=1.5, nl;q=0.5555, pl;q, fr;level=1'),
+    ).toStrictEqual(['fr']);
+    expect(parseAcceptLanguage('')).toStrictEqual([]);
+    expect(parseAcceptLanguage(null)).toStrictEqual([]);
+    expect(parseAcceptLanguage(undefined)).toStrictEqual([]);
+  });
+
+  it('feeds matchLocale', () => {
+    const header = 'pt-BR, it-IT;q=0.8, en;q=0.5';
+    expect(matchLocale(parseAcceptLanguage(header), ['en', 'it'], 'en')).toBe('it');
   });
 });
