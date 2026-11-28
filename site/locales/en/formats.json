@@ -1,0 +1,10 @@
+{
+  "price": "Total: {$amount :currency currency=EUR}",
+  "discount": "Discount: {$rate :percent}",
+  "distance": "Distance: {$km :unit unit=kilometer}",
+  "weight": "Weight: {$kg :unit unit=kilogram unitDisplay=long}",
+  "views": "Views: {$views :number notation=compact}",
+  "day": "Date: {$when :date style=full}",
+  "time": "Time: {$when :time}",
+  "stamp": "Updated: {$when :datetime}"
+}

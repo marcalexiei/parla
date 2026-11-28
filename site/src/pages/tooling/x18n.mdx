@@ -1,0 +1,47 @@
+---
+description: The x18n plugin, which reads Parla's catalogs and every t.ns.key() usage.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# `@parlajs/x18n-plugin`
+
+<Badge>Tooling</Badge> `pnpm add -D @x18n/cli @parlajs/x18n-plugin`, a plugin for
+[x18n](https://x18n.dev).
+
+```ts
+import parla from '@parlajs/x18n-plugin';
+import { defineConfig } from '@x18n/cli';
+
+export default defineConfig({
+  sourceLocale: 'en',
+  locales: ['en', 'it'],
+  // `checkout:cart.items`: Parla's namespaces and keys may contain dots.
+  namespace: { separator: ':' },
+  plugins: [parla()],
+  usage: { include: ['src/**/*.{ts,tsx}'], exclude: ['src/parla/**'] },
+});
+```
+
+## What it reads
+
+|                   |                                                                                                |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| Catalogs          | Each under the namespace its `parla.config.ts` gives it                                        |
+| Usages            | `t.ns.key()` on a `t` from `useParla([ns])`, or a `{ t }: { t: Translations<typeof ns> }` prop |
+| Templates         | `.vue`, `.svelte` and `.astro`: scripts, frontmatter and template expressions                  |
+| Params and markup | Parla's own ICU and MF2 parsers, with the config's `functions` and `markup`                    |
+| Custom formats    | A namespace's messages through its own adapter, from the config's `formats`                    |
+| Selects           | Branches that need different params are left to TypeScript, which checks each one              |
+
+For templates, add their extensions to `usage.include`. A namespace counts only when imported from
+its `namespaces/{ns}.js`. A catalog read through [`parseFile`](/formats/writing-an-adapter#catalog-files)
+needs an x18n format for its extension too, since x18n also writes it.
+
+## Options
+
+| Option    | Default                    |                                                         |
+| --------- | -------------------------- | ------------------------------------------------------- |
+| `callees` | `['useParla']`             | Hooks that take a list of namespaces and return `{ t }` |
+| `configs` | every `**/parla.config.ts` | Configs to read, relative to x18n's root                |

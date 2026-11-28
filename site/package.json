@@ -1,0 +1,27 @@
+{
+  "name": "@parlajs/site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --app",
+    "preview": "vite preview",
+    "catalogs": "node --conditions=@parlajs/source ../packages/compiler/src/cli.ts build --strict",
+    "typecheck": "pnpm run catalogs && tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@parlajs/compiler": "workspace:^",
+    "@parlajs/react": "workspace:^",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-server-dom-webpack": "19.3.1",
+    "vite": "8.3.8",
+    "vocs": "2.14.1",
+    "waku": "1.0.0-rc.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0"
+  }
+}

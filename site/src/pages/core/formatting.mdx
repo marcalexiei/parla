@@ -1,0 +1,65 @@
+---
+description: Numbers, currencies, units and dates through Intl, with no locale data to ship.
+showAskAi: false
+---
+
+import { FormatsDemo } from '../../examples/FormatsDemo.tsx';
+
+# Formatting
+
+Formatting uses the platform's `Intl`, so no locale data ships. Formatters are cached. A locale `Intl`
+has no data for, such as `fur`, formats like the first of its [fallbacks](/core/fallbacks) it knows.
+
+```json
+{
+  "price": "Total: {$amount :currency currency=EUR}",
+  "distance": "Distance: {$km :unit unit=kilometer}",
+  "views": "Views: {$views :number notation=compact}",
+  "day": "Date: {$when :date style=full}"
+}
+```
+
+<FormatsDemo />
+
+| MF2                    | ICU                             | `Intl`                                          |
+| ---------------------- | ------------------------------- | ----------------------------------------------- |
+| `:number`              | `{n, number}`                   | `NumberFormat`                                  |
+| `:integer`             | `{n, number, integer}`          | `NumberFormat`, `maximumFractionDigits: 0`      |
+| `:currency currency=…` | `{n, number, ::currency/EUR}`   | `NumberFormat`, `style: 'currency'`             |
+| `:percent`             | `{n, number, percent}`          | `NumberFormat`, `style: 'percent'`: 0.25 → 25%  |
+| `:unit unit=…`         | `{n, number, ::unit/kilometer}` | `NumberFormat`, `style: 'unit'`                 |
+| `:date`                | `{d, date, medium}`             | `DateTimeFormat`, `dateStyle`, default `medium` |
+| `:time`                | `{d, time, short}`              | `DateTimeFormat`, `timeStyle`, default `short`  |
+| `:datetime`            | –                               | `dateStyle: 'medium'`, `timeStyle: 'short'`     |
+| `{$x}`, no function    | `{x}`                           | Numbers and dates with the locale's defaults    |
+
+Other options pass through to `Intl`: `minimumFractionDigits=2`, `notation=compact`,
+`unitDisplay=long`, `signDisplay=always`, `timeZone=UTC`.
+
+| Function    | Param type       |
+| ----------- | ---------------- |
+| Number ones | `number`         |
+| Date ones   | `Date \| number` |
+| `:string`   | `string`         |
+
+## Your own functions
+
+Declare it in the config; implement it on the instance:
+
+```ts
+// parla.config.ts
+functions: { capitalize: 'string' },
+
+// the app
+createParla({
+  catalog,
+  functions: { capitalize: ({ value, locale }) => String(value).toLocaleUpperCase(locale) },
+});
+```
+
+```json
+{ "shout": "{$name :capitalize}!" }
+```
+
+A function gets `{ value, options, locale, locales }`; pass `locales`, the locale then its fallbacks,
+to `Intl`. `createParla` requires every declared function. Built-in names cannot be redefined.

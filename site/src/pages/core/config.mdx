@@ -1,0 +1,59 @@
+---
+description: Every option of parla.config.ts.
+showAskAi: false
+---
+
+# `parla.config.ts`
+
+Node imports it directly, with type stripping: no loader.
+
+```ts
+import { defineConfig } from '@parlajs/compiler';
+
+export default defineConfig({
+  locales: ['en', 'it', 'de'],
+  sourceLocale: 'en',
+  fallbacks: { de: ['en'] },
+  outDir: 'src/parla',
+  namespaces: { checkout: { format: 'mf2', path: 'locales/{locale}/checkout.json' } },
+  functions: { capitalize: 'string' },
+  markup: ['strong', 'br'],
+});
+```
+
+| Option         | Type                                            | Default                                                |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| `locales`      | `string[]`: tags such as `en`, `pt-BR`          | `[sourceLocale]`                                       |
+| `sourceLocale` | `string`, one of `locales`                      | `'en'`                                                 |
+| `fallbacks`    | `Record<locale, locale[]>`, for keys and `Intl` | `{}`, see [Fallbacks](/core/fallbacks)                 |
+| `outDir`       | Relative to the config                          | `'src/parla'`                                          |
+| `namespaces`   | `Record<name, { format, path }>`                | `{}`                                                   |
+| `functions`    | `Record<name, 'string' \| 'number' \| 'date'>`  | `{}`                                                   |
+| `markup`       | `string[]`: tags a call may leave out           | `[]`                                                   |
+| `formats`      | `Record<name, FormatAdapter>`                   | `{}`; `icu` and `mf2` are built in                     |
+| `runtime`      | Module the types import and augment             | `@parlajs/react` if a dependency, else `@parlajs/core` |
+
+## `namespaces`
+
+| Field    |                                                              |
+| -------- | ------------------------------------------------------------ |
+| `format` | `'icu'`, `'mf2'` or a key of `formats`                       |
+| `path`   | Catalog path relative to the config, with a `{locale}` token |
+
+A name is letters, digits, `_`, `-` or inner dots; prefer an identifier
+([Names](/core/namespaces#names)). A catalog maps keys to messages or groups, in JSON or whatever the
+format's [`parseFile`](/formats/writing-an-adapter#catalog-files) reads.
+
+## `functions`
+
+Each value types the param; `createParla({ functions })` implements each. See
+[Your own functions](/core/formatting#your-own-functions).
+
+## `markup`
+
+Tags `createParla({ markup })` renders. See [Rich text](/core/rich-text).
+
+## `formats`
+
+Extra syntaxes, keyed by the name a namespace's `format` gives. The CLI, the Vite plugin and
+[x18n](/tooling/x18n) read them here. See [Writing a format adapter](/formats/writing-an-adapter).

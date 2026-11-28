@@ -22,6 +22,7 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 | `packages/x18n-plugin` | x18n plugin: catalogs, `t.ns.key()` usages, params        |
 | `scripts/`             | Repo tooling (`validate.ts`), via `tsconfig.scripts.json` |
 | `bench/`               | Benchmarks against `main`, via `vitest.config.bench.ts`   |
+| `site/`                | Docs site (Vocs), deployed to Pages by `site.yml`         |
 
 Comparisons with other libraries live in `parla-benchmark`, keeping their dependencies out of here.
 
@@ -71,12 +72,20 @@ pnpm lint             # oxlint (`lint:fix`, `lint:knip`, `lint:publish`, `lint:l
 pnpm format           # oxfmt
 pnpm pack:all         # tarballs in .packs/
 pnpm validate         # every CI check, cheapest first (`-k` keeps going)
+pnpm site:dev         # docs site; `site:build` builds it
 ```
 
 - **Keep `scripts/validate.ts` in step with `.github/workflows/ci.yml`**, all but `bench`: CI runs it
   against the base on one runner, and CI OK does not need it, so a deliberate trade-off can merge.
 - **`typecheck` builds first**: packages resolve siblings through their `.d.ts`.
 - **The source condition is `@parlajs/source`**; vitest needs it in `ssr.resolve.conditions` too.
+
+## Site
+
+- **Run through `vite`, not `vocs`**: the `vocs` CLI fixes its own Vite config, which `parla()` cannot join.
+- **The site runs on the packages' `build/`**, as an app would: `site:build` builds them first.
+- **`lint` generates the site's catalogs first** (`site:catalogs`): type-aware rules need `src/parla/`.
+- **`site/tsconfig.json` leaves out the Vocs and Vite configs**: Vocs's dependencies fail lib check on TS 7.
 
 ## Changesets
 
@@ -118,6 +127,7 @@ oxlint (type-aware) and oxfmt, from `@marcalexiei/oxlint-config` and `@marcalexi
 
 - **Each override carries its reason in `oxlint.config.ts`**; an inline disable, after `--`.
 - **Read the diff after `oxlint --fix`**, then typecheck and test.
+- **knip passes on a clean checkout**, with no `build/` or generated catalogs: CI runs it first.
 
 ## Dependencies
 
