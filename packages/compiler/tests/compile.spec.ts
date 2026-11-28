@@ -1,6 +1,7 @@
 import { createRuntime } from '@parlajs/core';
 import { icu } from '@parlajs/format-icu';
 import { mf2 } from '@parlajs/format-mf2';
+import type { Model } from 'messageformat';
 import { describe, expect, it } from 'vitest';
 
 import { compileMessage, ModuleScope } from '../src/compile.ts';
@@ -148,6 +149,15 @@ describe('ICU', () => {
 });
 
 describe(signature, () => {
+  it('quotes a param that is no identifier, and types a select without keys as a string', () => {
+    expect(compile('mf2', '{$my-name}').sig).toBe(
+      '(params: { "my-name": string | number }): string',
+    );
+    expect(
+      compile('mf2', '.input {$x :string}\n.input {$y :string}\n.match $x $y\n* * {{a}}').sig,
+    ).toBe('(params: { x: (string & {}); y: (string & {}) }): string');
+  });
+
   it('makes default markup optional, and the params too when nothing else is needed', () => {
     const { info } = compile('icu', 'See <b>this</b>');
     expect(signature(info, new Set(['b']))).toBe(
@@ -228,7 +238,30 @@ describe('MF2', () => {
     expect(out).toStrictEqual(['Read the ', { a: 'guide' }, { br: true }, 'now']);
   });
 
+  it('takes literal operands and options, or none', () => {
+    expect(run('mf2', '{$n :number useGrouping=false}', { n: 12_345 })).toBe('12345');
+    expect(run('mf2', '{|hello| :string}')).toBe('hello');
+    expect(compile('mf2', '{:number}').info.params.size).toBe(0);
+  });
+
+  it('rejects selectors that cannot select', () => {
+    expect(() => compile('mf2', '.input {$d :datetime}\n.match $d\na {{A}}\n* {{B}}')).toThrow(
+      ':datetime cannot be used as a selector',
+    );
+    // MF2 rejects it when parsing; a custom format may not
+    const model: Model.SelectMessage = {
+      type: 'select',
+      declarations: [],
+      selectors: [{ type: 'variable', name: 'x' }],
+      variants: [{ keys: [{ type: '*' }], value: ['B'] }],
+    };
+    expect(() => compileMessage(model, new ModuleScope(), {})).toThrow(
+      'selector $x needs an annotation such as :number or :string',
+    );
+  });
+
   it('rejects unknown functions and bad markup', () => {
+    expect(() => compile('mf2', '{#b}x{/i}')).toThrow('closing markup {/i} has no matching open');
     expect(() => compile('mf2', '{$x :sparkle}')).toThrow(/unknown function :sparkle/);
     expect(() => compile('mf2', '{#b}never closed')).toThrow(/never closed/);
     expect(() => mf2.parse('{{unclosed')).toThrow('MF2 missing-syntax at 10');

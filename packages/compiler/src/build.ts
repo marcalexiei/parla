@@ -389,18 +389,16 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
       for (const [key, srcEntry] of source) {
         let entry = own.get(key);
         if (!entry) {
-          const from = chain.find((l) => catalogs.get(l)?.has(key));
-          entry = from ? catalogs.get(from)?.get(key) : undefined;
+          // the chain ends at the source locale, which has every key
+          const from = chain.find((l) => catalogs.get(l)?.has(key)) ?? config.sourceLocale;
+          entry = catalogs.get(from)?.get(key) ?? srcEntry;
           if (!gapsAllowed && !reported.has(locale) && !reported.has(`${locale}\0${key}`)) {
             at({
               level: 'warning',
               code: 'missing-translation',
               key,
-              message: from ? `untranslated, using "${from}"` : 'untranslated, no fallback',
+              message: `untranslated, using "${from}"`,
             });
-          }
-          if (!entry) {
-            continue;
           }
         }
         let compiled;

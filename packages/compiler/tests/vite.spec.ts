@@ -128,14 +128,20 @@ describe('the Vite plugin, so `parla build --watch` is not needed', { timeout: 2
   });
 });
 
-/** A logger that keeps parla's lines. */
-function capture(): { logger: Logger; lines: Array<string> } {
+/** A logger that keeps warnings in `lines` and parla's errors in `errors`. */
+function capture(): { logger: Logger; lines: Array<string>; errors: Array<string> } {
   const lines: Array<string> = [];
+  const errors: Array<string> = [];
   const logger = createLogger('silent');
   logger.warn = (msg): void => {
     lines.push(msg);
   };
-  return { logger, lines };
+  logger.error = (msg): void => {
+    if (msg.includes('parla')) {
+      errors.push(msg);
+    }
+  };
+  return { logger, lines, errors };
 }
 
 /** `app` in en and it, where it leaves out `missing`. */
@@ -211,5 +217,54 @@ describe('the Vite plugin warns once', { timeout: 20_000 }, () => {
     expect(lines).toStrictEqual([
       '[parla] warning [missing-translation] app › it › a, b: untranslated, using "en" (locales/it/app.json)',
     ]);
+  });
+
+  it('reports errors as errors in dev, and a config that breaks', async () => {
+    rmSync(tmp, { recursive: true, force: true });
+    partly([]);
+    put(join(app, 'index.html'), '<script type="module" src="/main.js"></script>');
+    put(join(app, 'main.js'), '');
+    const { logger, lines, errors } = capture();
+    server = await createServer({
+      root: app,
+      logLevel: 'silent',
+      customLogger: logger,
+      server: { port: 0, ws: false },
+      plugins: [parla()],
+    });
+    await server.listen();
+    await writeUntil(join(app, 'locales/it/app.json'), { title: '{oops', a: 'A', b: 'B' }, () => {
+      expect(errors).toHaveLength(1);
+    });
+    expect(errors[0]).toMatch(/^\[parla\] error {3}\[invalid-syntax\] app › it › title:/);
+    await writeUntil(join(app, 'parla.config.ts'), 'throw new Error("boom");\n', () => {
+      expect(errors).toHaveLength(2);
+    });
+    expect(errors[1]).toMatch(/^parla: Cannot load .*parla\.config\.ts: boom$/);
+    // another save, as broken: nothing more
+    put(join(app, 'parla.config.ts'), 'throw new Error("boom"); // still\n');
+    await new Promise((resolve) => {
+      setTimeout(resolve, 300);
+    });
+    expect(errors).toHaveLength(2);
+    expect(lines).toStrictEqual([]);
+  });
+
+  it('fails a build on catalog errors, printed once', async () => {
+    rmSync(tmp, { recursive: true, force: true });
+    partly([]);
+    put(join(app, 'locales/en/app.json'), { title: '{oops', a: 'A', b: 'B' });
+    put(join(app, 'main.js'), 'export const x = 1;');
+    const { logger, errors } = capture();
+    await expect(
+      viteBuild({
+        root: app,
+        logLevel: 'silent',
+        customLogger: logger,
+        plugins: [parla()],
+        build: { lib: { entry: 'main.js', formats: ['es'], fileName: 'main' } },
+      }),
+    ).rejects.toThrow('parla: catalog errors, see above');
+    expect(errors.filter((line) => line.startsWith('[parla]'))).toHaveLength(1);
   });
 });

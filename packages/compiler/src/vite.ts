@@ -50,18 +50,25 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
     },
     configureServer(server: ViteDevServer) {
       server.watcher.add([...watchFiles]);
+      // a save that leaves the config as broken as before repeats nothing
+      let failure: string | undefined;
       const onChange = async (file: string): Promise<void> => {
         if (!watchFiles.has(resolve(file))) {
           return;
         }
         try {
           const result = await run();
+          failure = undefined;
           server.watcher.add([...watchFiles]);
           if (result.written.length > 0) {
             server.ws.send({ type: 'full-reload' });
           }
         } catch (error) {
-          server.config.logger.error(`parla: ${(error as Error).message}`);
+          const line = `parla: ${(error as Error).message}`;
+          if (line !== failure) {
+            server.config.logger.error(line);
+          }
+          failure = line;
         }
       };
       for (const event of ['change', 'add', 'unlink'] as const) {
