@@ -5,8 +5,8 @@ showAskAi: false
 
 # Monorepos
 
-One package owns each namespace and builds it. Every other package imports the built objects, and
-builds nothing for them. Usually one package owns them all:
+One package owns and builds each namespace; others import the built objects. Usually one package
+owns them all:
 
 ```
 packages/i18n/
@@ -50,11 +50,10 @@ const t = await parla.load([checkout]);
 
 ## Subsets
 
-A package ships only what it imports. Import each namespace from its own module: the bundler then
-splits exactly those chunks, a shared one once, and `tsc` reads only their `.d.ts`.
+A package ships only the [namespaces](/core/namespaces) it imports:
 
 ```ts
-// packages/checkout-ui: reads two of the owner's namespaces
+// packages/checkout-ui
 import { checkout } from '@acme/i18n/namespaces/checkout.js';
 import { common } from '@acme/i18n/namespaces/common.js';
 ```
@@ -70,5 +69,4 @@ import { common } from '@acme/i18n/namespaces/common.js';
 | Two namespaces of one name load apart                    | Keyed by object: an app's `common` beside a package's, or two copies of the owner |
 | One `load` of both throws                                | `t` holds one per name                                                            |
 
-`catalog.d.ts` augments the runtime the owner depends on, one member per locale, function or tag, so
-two catalogs in one program add up instead of clashing.
+Two catalogs in one program add up their locales, functions and tags.

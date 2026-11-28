@@ -5,13 +5,12 @@ showAskAi: false
 
 # Introducing Parla: i18n where the types know what loaded
 
-Most i18n bugs aren't translation bugs. A key that doesn't exist, a `{count}` nobody passed, a
-namespace read before it loaded: each renders a blank or a raw key, and each is something TypeScript
-could catch. Today's libraries type the keys but not the params, or type both but leave "is it loaded
-yet?" to a `ready` flag or an empty string.
+Most i18n bugs aren't translation bugs: a missing key, a `{count}` nobody passed, a namespace read
+before it loaded. TypeScript could catch each. Today's libraries type keys but not params, or leave
+"is it loaded?" to a `ready` flag.
 
-Parla is my answer: a type-safe i18n library for TypeScript, with React bindings. A compiler turns
-ICU or MessageFormat 2 catalogs into typed functions and lazy chunks, one per locale and namespace.
+Parla is a type-safe i18n library for TypeScript, with React bindings. A compiler turns ICU or
+MessageFormat 2 catalogs into typed functions and lazy chunks, one per locale and namespace.
 
 ```tsx
 import { checkout } from './parla/namespaces/checkout.js';
@@ -22,25 +21,18 @@ t.checkout.cart.items({ count: 3 }); // count: number, required
 t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 ```
 
-What that buys you:
+- **Params come from the message**: a plural's number, a select's params per branch, a renderer per
+  tag.
+- **`t` is proof of loading**: reading a namespace you didn't load is a type error.
+- **Namespaces are imports**: the bundler ships only what you import.
+- **No flash on switch**: `setLocale` loads first, then switches.
+- **ICU and MF2**, per namespace.
 
-- **Params come from the message.** A plural needs its number, each branch of a select types its own
-  params, a rich-text tag needs its renderer.
-- **`t` is proof of loading.** It holds only the namespaces you loaded; reading another is a type
-  error, not an empty string.
-- **Namespaces are imports.** The bundler ships only what you import, and tooling follows the imports.
-- **One way to call it.** `parla.load([…])` and `useParla([…])`, always with a list.
-- **No flash on switch.** `setLocale` loads the new locale first, then switches.
-- **ICU and MF2**, per namespace, through one data model.
-- **No locale data to ship.** Formatting uses `Intl`; React Native works with `Intl` polyfills.
-- **Monorepos.** Each namespace has one owner package; apps import it.
+It's 2.7 kB gzipped with the React bindings, and formats a plain message at over 35M/s, against
+about 0.9M/s for i18next ([parla-benchmark](https://github.com/marcalexiei/parla-benchmark)). How it
+compares with other libraries: [Why Parla](/why).
 
-It's small and fast: 2.7 kB gzipped with the React bindings, and a plain message formats at over
-35M/s, against about 0.9M/s for i18next, on the same 200 messages. The numbers are in
-[parla-benchmark](https://github.com/marcalexiei/parla-benchmark); how i18next, react-intl, Lingui, Paraglide and typesafe-i18n compare is on
-[Why Parla](/why).
-
-None of these ideas is new on its own. Parla combines them:
+No idea here is new. Parla combines:
 
 - namespaces and fallbacks, from [i18next](https://www.i18next.com);
 - ICU messages formatted through `Intl`, from [FormatJS](https://formatjs.github.io);
@@ -54,8 +46,8 @@ pnpm add @parlajs/react
 pnpm add -D @parlajs/compiler
 ```
 
-Start with [Getting started](/getting-started), or try the
-[playground](https://github.com/marcalexiei/parla-playground). The source is on
+Start with [Getting started](/getting-started) or the
+[playground](https://github.com/marcalexiei/parla-playground). Source:
 [GitHub](https://github.com/marcalexiei/parla).
 
 Parla is built with the help of AI coding tools.

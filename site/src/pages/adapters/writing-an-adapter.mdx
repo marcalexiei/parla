@@ -45,8 +45,5 @@ export function watch<NS extends Namespace>(
 }
 ```
 
-`setLocale` loads every loaded namespace before it notifies, so `loaded` already has the new `t` when
-a listener runs.
-
-Vue's refs, Svelte's stores, Solid's signals and Angular's signals fit this shape; there are no
-packages for them yet.
+A listener's `loaded` already has the new locale's `t`. Vue, Svelte, Solid and Angular fit this
+shape; there are no packages for them yet.

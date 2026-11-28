@@ -7,9 +7,8 @@ import { SelectsDemo } from '../../examples/SelectsDemo.tsx';
 
 # Plurals and selects
 
-Each namespace picks its syntax with `format`: [ICU](/formats/icu), [MF2](/formats/mf2) or
-[your own](/formats/writing-an-adapter). Each compiles to the same data model and the same functions.
-Live, one ICU and one MF2 namespace with the same messages:
+A namespace's `format` picks [ICU](/formats/icu), [MF2](/formats/mf2) or
+[your own](/formats/writing-an-adapter); all compile to the same functions. Live, ICU beside MF2:
 
 <SelectsDemo />
 
@@ -29,8 +28,7 @@ Live, one ICU and one MF2 namespace with the same messages:
 
 :::
 
-Exact values (`=0`, `0`) beat categories (`one`), which beat the catch-all. Categories come from
-`Intl.PluralRules` for the locale.
+Exact values (`=0`, `0`) beat categories (`one`, from `Intl.PluralRules`), which beat the catch-all.
 
 ## Ordinals
 
@@ -68,7 +66,7 @@ A locale with one ordinal form needs no select: German writes `Du bist {$place :
 
 :::
 
-When one `:string` selector decides which params a message reads, each branch types only its own:
+When one `:string` selector decides the params, each branch types its own:
 
 ```ts
 t.shop.delivery({ method: 'pickup', store: 'Milano Centrale' }); // store only
@@ -79,7 +77,7 @@ declare const method: string; // may hold any key
 t.shop.delivery({ method, store: '…', courier: '…', day: new Date() }); // needs every branch's
 ```
 
-The generated type, one union member per key:
+The generated type:
 
 ```ts
 delivery(

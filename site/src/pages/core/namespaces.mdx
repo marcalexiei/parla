@@ -5,8 +5,8 @@ showAskAi: false
 
 # Namespaces
 
-Each namespace in `parla.config.ts` compiles to `<outDir>/namespaces/<name>.js`, which exports it
-under its name. Import it, and pass it:
+Each namespace in `parla.config.ts` compiles to `<outDir>/namespaces/<name>.js`. Import it and pass
+it:
 
 ```ts
 import { checkout } from './parla/namespaces/checkout.js';
@@ -17,7 +17,7 @@ t.checkout.title();
 t.common.save();
 ```
 
-The object is `{ name, load }`: one chunk loader per locale. Its `.d.ts` types every message.
+It is `{ name, load }`, one chunk loader per locale; its `.d.ts` types every message.
 
 | Because a namespace is an import  |                                                                       |
 | --------------------------------- | --------------------------------------------------------------------- |
@@ -26,13 +26,12 @@ The object is `{ name, load }`: one chunk loader per locale. Its `.d.ts` types e
 | Tooling follows                   | Tools such as [x18n](/tooling/x18n) read which namespaces a file uses |
 | A name does not type-check        | `parla.load(['checkout'])` is an error                                |
 
-Import each namespace from its own module, never through a barrel: the bundler then splits exactly
-those chunks.
+Import each from its own module, not a barrel, so the bundler splits exactly those chunks.
 
 ## Names
 
-A namespace's name is its module, its export, its key in `t` and its name at runtime. Make it an
-identifier in your project's case, and map a file name that differs:
+The name is the module, the export and the key in `t`. Make it an identifier, and map a file name
+that differs:
 
 ```ts
 namespaces: { scopeAudit: { format: 'icu', path: 'locales/{locale}/scope_audit.json' } },
@@ -41,7 +40,7 @@ namespaces: { scopeAudit: { format: 'icu', path: 'locales/{locale}/scope_audit.j
 - A name that is no identifier (`foo-bar`) exports as `fooBar` while `t` keeps `foo-bar`; the build
   warns.
 - Alias a clash with a local name as `<name>Namespace`: `import { user as userNamespace }`.
-- Rename a namespace that clashes often, rather than prefixing every one.
+- Rename one that clashes often rather than prefixing them all.
 
 ## By name, from data
 
@@ -52,11 +51,11 @@ const byName = { checkout, common };
 await parla.load([byName[route.namespace]]);
 ```
 
-A missed lookup passes `undefined`: `load` throws a `TypeError` naming it.
+A missed lookup passes `undefined`, and `load` throws a `TypeError`.
 
 ## All of them, in a test
 
-A test that loads every namespace can glob them with Vite:
+Glob them with Vite:
 
 ```ts
 const all = Object.values(

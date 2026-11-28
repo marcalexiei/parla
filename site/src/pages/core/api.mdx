@@ -42,8 +42,8 @@ t.checkout.cart.items({ count: 3 }); // "3 articoli"
 | `setLocale(locale)`   | `Promise<void>`                       | Loads, then switches; see [Switching locale](/core/switching-locale) |
 | `subscribe(listener)` | `() => void`, to unsubscribe          | Called after each switch                                             |
 
-`load` returns a promise carrying `status` and `value` once settled, which React's `use()` reads
-without suspending.
+`load`'s promise carries `status` and `value` once settled, so React's `use()` reads it without
+suspending.
 
 ## Functions and types
 
@@ -59,5 +59,4 @@ without suspending.
 | `MessageFunction`                                      | `(value, options, locale) => string`, for `functions`                                  |
 | `LocaleRegistry`, `FunctionRegistry`, `MarkupRegistry` | Augmented by generated code; never by hand                                             |
 
-Load one copy of `@parlajs/core`: a library depending on it makes it a `peerDependency`. Two copies
-split locale state, and the second warns.
+Load one copy of `@parlajs/core`: a library makes it a `peerDependency`. A second copy warns.

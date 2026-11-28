@@ -52,8 +52,8 @@ Both mix: a wider `t` satisfies any child's `Translations<typeof ns>`.
 
 ## Preload in route loaders
 
-A child that suspends only after its parent rendered starts its download late. Load a route's
-namespaces before it renders, and nothing below suspends:
+A child that suspends after its parent renders starts downloading late. Load a route's namespaces
+before it renders:
 
 ```tsx
 // React Router, TanStack Router or any loader
@@ -63,7 +63,4 @@ export async function loader() {
 }
 ```
 
-`load` caches by list and by namespace, so the components' own `useParla` calls resolve at once,
-whatever lists they pass.
-
-On the server, or anywhere without React, `parla.load` is the whole API: `await` it and use `t`.
+`load` caches by namespace, so the components' `useParla` calls resolve at once, whatever their lists.

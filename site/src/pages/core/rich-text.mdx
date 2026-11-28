@@ -17,7 +17,7 @@ showAskAi: false
 
 :::
 
-Each tag is a param: a function from its children to a node. In core the node is a `string`:
+Each tag is a param: a function from its children to a node, a `string` in core:
 
 ```ts
 import { createParla } from '@parlajs/core';
@@ -27,8 +27,7 @@ const t = await parla.load([home]);
 t.home.terms({ link: (c) => `[${c}](https://example.com/terms)` }); // a string
 ```
 
-The call passes `link` and leaves out `strong`: `strong` is declared in the config's `markup`, so the
-instance renders it.
+The call leaves out `strong`: the config's `markup` declares it, so the instance renders it.
 
 ```ts
 // parla.config.ts
@@ -43,15 +42,14 @@ markup: ['strong'],
 
 ## The node follows the instance
 
-`createParla` takes a `wrapRich(parts)` that joins a message's parts into one node, and the instance
-is a `Parla<Node>`: its `t` is a `Translations<typeof ns, Node>`. Core's default joins strings;
-[framework adapters](/adapters/writing-an-adapter) pass their own.
+`createParla`'s `wrapRich(parts)` joins parts into one node, making a `Parla<Node>` whose `t` is a
+`Translations<typeof ns, Node>`. Core joins strings; [framework adapters](/adapters/writing-an-adapter)
+pass their own.
 
 | Instance                            | `Node`      | `t.home.terms(…)` returns |
 | ----------------------------------- | ----------- | ------------------------- |
 | `createParla` from `@parlajs/core`  | `string`    | a `string`                |
 | `createParla` from `@parlajs/react` | `ReactNode` | a `ReactNode`             |
 
-Messages without markup return `string` in both, so either instance's `t` fits code that reads only
-those. One namespace serves both a React app and, say, emails. React's rich text, live:
-[React](/adapters/react#rich-text).
+Messages without markup return `string` in both, so one namespace serves a React app and, say,
+emails. Live: [React](/adapters/react#rich-text).

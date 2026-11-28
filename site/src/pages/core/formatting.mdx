@@ -7,8 +7,7 @@ import { FormatsDemo } from '../../examples/FormatsDemo.tsx';
 
 # Formatting
 
-Formatting runs on the platform's `Intl`: no locale data ships with the app. Formatters are cached
-per locale and options.
+Formatting uses the platform's `Intl`, so no locale data ships. Formatters are cached.
 
 ```json
 {
@@ -44,7 +43,7 @@ Other options pass through to `Intl`: `minimumFractionDigits=2`, `notation=compa
 
 ## Your own functions
 
-Declare a function and what its value is; implement it on the instance:
+Declare it in the config; implement it on the instance:
 
 ```ts
 // parla.config.ts
@@ -61,5 +60,4 @@ createParla({
 { "shout": "{$name :capitalize}!" }
 ```
 
-`createParla` requires every declared function, typed by the generated catalog. Built-in names cannot
-be redefined.
+`createParla` requires every declared function. Built-in names cannot be redefined.

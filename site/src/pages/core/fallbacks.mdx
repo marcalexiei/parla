@@ -5,8 +5,8 @@ showAskAi: false
 
 # Fallbacks
 
-A locale need not translate everything. A missing message is copied in at build time from the first
-locale in its chain that has it, so the runtime never looks anything up.
+A missing message is copied in at build time from the first locale in its chain that has it. The
+runtime looks nothing up.
 
 ```ts
 export default defineConfig({
@@ -35,6 +35,6 @@ export default defineConfig({
 | A key only in a translation      | `unknown-key`: dropped                   | warning |
 | A translation with other params  | `param-mismatch`                         | error   |
 
-`parla check --strict` fails on warnings too: run it in CI once every locale should be complete.
+`parla check --strict` fails on warnings too, for CI once every locale is complete.
 
-A borrowed message keeps its text and is compiled for the locale it fills, plural rules included.
+A borrowed message compiles with the plural rules of the locale it fills.

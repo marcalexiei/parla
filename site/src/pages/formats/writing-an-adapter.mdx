@@ -10,14 +10,13 @@ import { Badge } from 'vocs';
 <Badge>Format adapter</Badge> Registered in [`parla.config.ts`](/core/config#formats) as `formats`.
 
 A `FormatAdapter` parses one message into the
-[MF2 data model](https://messageformat.unicode.org/docs/reference/data-model/), which is all the
-compiler reads. A namespace's `format` names it; the CLI, the Vite plugin and [x18n](/tooling/x18n)
-read it from the config.
+[MF2 data model](https://messageformat.unicode.org/docs/reference/data-model/), all the compiler reads.
+A namespace's `format` names it.
 
 | `FormatAdapter` |                                                                                 |
 | --------------- | ------------------------------------------------------------------------------- |
-| `name`          | The adapter's name                                                              |
-| `parse`         | `(source) => Model.Message`: one message into the MF2 data model                |
+| `name`          | Its name                                                                        |
+| `parse`         | `(source) => Model.Message`                                                     |
 | `parseFile`     | Optional. `(text) => { key: message \| group }`, for catalogs that are not JSON |
 
 ```ts
@@ -39,9 +38,8 @@ export default defineConfig({
 
 ## Catalog files
 
-Without `parseFile`, catalogs are read as JSON. With it, a namespace's catalogs can be `.po`, `.ftl`,
-`.properties` or anything else; a `parseFile` that throws is an `invalid-resource` diagnostic for that
-file.
+Without `parseFile`, catalogs are JSON. With it, they can be `.po`, `.ftl`, `.properties` or anything
+else; a throw is an `invalid-resource` diagnostic.
 
 ```ts
 // Plain-text messages in `key = message` lines.
@@ -62,4 +60,4 @@ const properties: FormatAdapter = {
 };
 ```
 
-[x18n](/tooling/x18n) also needs its own format for such a file's extension: it reads and writes it.
+[x18n](/tooling/x18n#what-it-reads) needs a format of its own for the extension.

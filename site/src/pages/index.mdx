@@ -12,7 +12,7 @@ import { HomeDemo } from '../examples/HomeDemo.tsx';
 
 Type-safe i18n: one API, per-locale lazy loading, ICU and MessageFormat 2.
 
-New: [Introducing Parla](/blog/introducing-parla), why it exists and what it does.
+New: [Introducing Parla](/blog/introducing-parla).
 
 :::warning
 Experimental (`0.0.0`), not on npm yet.
@@ -28,19 +28,19 @@ t.checkout.cart.items({ count: 3 }); // "3 items"; count: number, required
 t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 ```
 
-Live, built by this site's own Parla plugin:
+Live:
 
 <HomeDemo />
 
 ## Why
 
-- **One way to do each thing**: `load` a list of namespaces, get `t`; every message is a typed function.
-- **Typed loading**: `t` exists only once its namespaces load, and has only those.
-- **Namespaces are imports**: the bundler ships what the app imports, and the types match.
-- **Lazy per locale**: one chunk per _locale × namespace_, loaded with `import()`.
-- **No flash on switch**: `setLocale` loads first, then switches.
-- **ICU and MF2**, per namespace, through one data model.
-- **Monorepos**: each namespace has one owner package, which other packages import from.
+- **Typed messages**: each message is a function, with params from the message.
+- **Typed loading**: `t` has only the namespaces that loaded.
+- **Namespaces are imports**: the bundler ships only what the app imports.
+- **Lazy**: one chunk per locale and namespace.
+- **No flash on switch**: `setLocale` loads first.
+- **ICU and MF2**, per namespace.
+- **Monorepos**: one package owns each namespace.
 
 ## Layers
 

@@ -5,7 +5,7 @@ showAskAi: false
 
 # `parla.config.ts`
 
-Imported by Node itself, through its type stripping: no loader, no build step.
+Node imports it directly, with type stripping: no loader.
 
 ```ts
 import { defineConfig } from '@parlajs/compiler';
@@ -40,25 +40,20 @@ export default defineConfig({
 | `format` | `'icu'`, `'mf2'` or a key of `formats`                       |
 | `path`   | Catalog path relative to the config, with a `{locale}` token |
 
-A name is letters, digits, `_`, `-` or inner dots: it names files. Make it an identifier, see
-[Names](/core/namespaces#names).
-
-A catalog is JSON, or whatever its format's [`parseFile`](/formats/writing-an-adapter#catalog-files) reads: a message per key, or a
-group of them.
+A name is letters, digits, `_`, `-` or inner dots; prefer an identifier
+([Names](/core/namespaces#names)). A catalog maps keys to messages or groups, in JSON or whatever the
+format's [`parseFile`](/formats/writing-an-adapter#catalog-files) reads.
 
 ## `functions`
 
-Message functions beyond the built-in ones, by what their value is: it types the param.
-`createParla({ functions })` must implement each. Built-in names (`number`, `date`, …) cannot be
-redefined. See [Your own functions](/core/formatting#your-own-functions).
+Each value types the param; `createParla({ functions })` implements each. See
+[Your own functions](/core/formatting#your-own-functions).
 
 ## `markup`
 
-Tags that `createParla({ markup })` renders, so a call may leave them out. See
-[Rich text](/core/rich-text).
+Tags `createParla({ markup })` renders. See [Rich text](/core/rich-text).
 
 ## `formats`
 
-Message syntaxes beyond `icu` and `mf2`, each a `FormatAdapter`, by the name a namespace's `format`
-gives. The CLI, the Vite plugin and [x18n](/tooling/x18n) read them from here. See
-[Writing a format adapter](/formats/writing-an-adapter).
+Extra syntaxes, keyed by the name a namespace's `format` gives. The CLI, the Vite plugin and
+[x18n](/tooling/x18n) read them here. See [Writing a format adapter](/formats/writing-an-adapter).

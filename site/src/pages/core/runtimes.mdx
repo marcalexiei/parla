@@ -26,7 +26,7 @@ import '@formatjs/intl-pluralrules/locale-data/en.js'; // one per locale
 
 ## The device's locales
 
-React Native has no `navigator.languages`; `expo-localization` (or `react-native-localize`) does:
+React Native has no `navigator.languages`; use `expo-localization` or `react-native-localize`:
 
 ```ts
 import { getLocales } from 'expo-localization';
@@ -35,8 +35,7 @@ const tags = getLocales().map((l) => l.languageTag);
 createParla({ catalog, locale: matchLocale(tags, catalog.locales, catalog.sourceLocale) });
 ```
 
-Without `Intl.Locale`, `matchLocale` compares the tags' own subtags: `de-AT` still finds `de`, but
-`zh-TW` no longer infers `zh-Hant`. Android's `it_IT` is read as `it-IT`.
+Without `Intl.Locale`, `de-AT` still finds `de`, but `zh-TW` no longer infers `zh-Hant`.
 
 ## Known differences
 

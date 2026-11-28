@@ -11,8 +11,7 @@ import { RichTextDemo } from '../../examples/RichTextDemo.tsx';
 
 <Badge>Framework adapter</Badge> `pnpm add @parlajs/react`
 
-Requires React 19. Re-exports [`@parlajs/core`](/core/api); `Parla`, `ParlaOptions`,
-`Translations` and `WrapRich` type rich text as `ReactNode`.
+Requires React 19. Re-exports [`@parlajs/core`](/core/api), with rich text typed as `ReactNode`.
 
 ```tsx
 import { createParla, ParlaProvider, useLocale, useParla, useParlaLoaded } from '@parlajs/react';
@@ -42,8 +41,8 @@ createRoot(root).render(
 
 ## Loading
 
-`useParla` suspends until its namespaces load, through core's [`load`](/core/loading).
-`useParlaLoaded` never suspends: `t` is `undefined` until they load, for a placeholder of your own.
+`useParla` suspends until its namespaces [load](/core/loading). `useParlaLoaded` never suspends: `t`
+is `undefined` until then.
 
 ```tsx
 function Cart() {
@@ -58,12 +57,11 @@ function CartBadge() {
 }
 ```
 
-A child takes `t` as a prop typed `Translations<typeof ns>`; see
-[Components and routes](/adapters/react-components).
+Passing `t` to children: [Components and routes](/adapters/react-components).
 
 ## Switching locale
 
-`setLocale` loads first, then switches and re-renders: nothing suspends.
+`setLocale` loads first, then [switches](/core/switching-locale) and re-renders: nothing suspends.
 
 ```tsx
 const { locale, locales, setLocale } = useLocale();
@@ -74,8 +72,6 @@ const { locale, locales, setLocale } = useLocale();
   ))}
 </select>;
 ```
-
-See [Switching locale](/core/switching-locale) for what `setLocale` does.
 
 ## Rich text
 
@@ -89,5 +85,4 @@ createParla({ catalog, markup: { strong: (c) => <strong>{c}</strong> } });
 
 <RichTextDemo />
 
-The second line passes its own `strong`; the first uses the instance's. See
-[Rich text](/core/rich-text).
+The first line uses the instance's `strong`. See [Rich text](/core/rich-text).

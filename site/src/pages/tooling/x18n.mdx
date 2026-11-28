@@ -7,9 +7,8 @@ import { Badge } from 'vocs';
 
 # `@parlajs/x18n-plugin`
 
-<Badge>Tooling</Badge> `pnpm add -D @x18n/cli @parlajs/x18n-plugin`
-
-Parla's plugin for [x18n](https://x18n.dev).
+<Badge>Tooling</Badge> `pnpm add -D @x18n/cli @parlajs/x18n-plugin`, a plugin for
+[x18n](https://x18n.dev).
 
 ```ts
 import parla from '@parlajs/x18n-plugin';
@@ -18,15 +17,12 @@ import { defineConfig } from '@x18n/cli';
 export default defineConfig({
   sourceLocale: 'en',
   locales: ['en', 'it'],
-  // x18n then names keys `checkout:cart.items`: with its default `.`, a dotted namespace blurs into the key.
+  // `checkout:cart.items`: Parla's namespaces and keys may contain dots.
   namespace: { separator: ':' },
   plugins: [parla()],
   usage: { include: ['src/**/*.{ts,tsx}'], exclude: ['src/parla/**'] },
 });
 ```
-
-x18n puts `namespace.separator` between namespace and key in the names it prints and queries. Parla's
-keys, and even its namespaces (`admin_user.v2-beta`), may contain dots, so `:` keeps them apart.
 
 ## What it reads
 
@@ -34,17 +30,14 @@ keys, and even its namespaces (`admin_user.v2-beta`), may contain dots, so `:` k
 | ----------------- | ---------------------------------------------------------------------------------------------- |
 | Catalogs          | Each under the namespace its `parla.config.ts` gives it                                        |
 | Usages            | `t.ns.key()` on a `t` from `useParla([ns])`, or a `{ t }: { t: Translations<typeof ns> }` prop |
-| Templates         | In `.vue`, `.svelte` and `.astro`: the scripts, Astro's frontmatter and template expressions   |
+| Templates         | `.vue`, `.svelte` and `.astro`: scripts, frontmatter and template expressions                  |
 | Params and markup | Parla's own ICU and MF2 parsers, with the config's `functions` and `markup`                    |
 | Custom formats    | A namespace's messages through its own adapter, from the config's `formats`                    |
 | Selects           | Branches that need different params are left to TypeScript, which checks each one              |
 
-Template expressions are Vue's `{{ }}` and directives, and Svelte's and Astro's `{…}`, `{#if …}` and
-`{@html …}`, so `{t.ns.key()}` in markup counts: add those extensions to `usage.include`.
-
-A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A catalog
-that is not JSON, read through its adapter's [`parseFile`](/formats/writing-an-adapter#catalog-files), needs an x18n
-format for its extension too: x18n reads and writes it.
+For templates, add their extensions to `usage.include`. A namespace counts only when imported from
+its `namespaces/{ns}.js`. A catalog read through [`parseFile`](/formats/writing-an-adapter#catalog-files)
+needs an x18n format for its extension too, since x18n also writes it.
 
 ## Options
 

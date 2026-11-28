@@ -5,8 +5,7 @@ showAskAi: false
 
 # Loading
 
-One function per job, one way to call it: both take a list, even of one, and return `t` keyed by
-name.
+Both take a list, even of one, and return `t` keyed by name.
 
 ```ts
 const t = await parla.load([checkout, common]); // a route loader, the server, a test
@@ -26,9 +25,8 @@ In React, `useParla` and `useParlaLoaded` wrap these: see [React](/adapters/reac
 
 ## Without Suspense
 
-`parla.loaded(list)` returns `t` if the namespaces are loaded for the current locale, else
-`undefined`, and never downloads. A framework without Suspense renders from it and calls `load`
-otherwise. The same list returns the same `t` as `load`.
+`loaded(list)` returns `t`, or `undefined` until the namespaces load for the current locale. Render
+from it, and call `load` when it is `undefined`:
 
 ```ts
 function render(): void {
@@ -43,8 +41,7 @@ function render(): void {
 
 ## `t` is the proof of loading
 
-`t` has only the namespaces you loaded. There are no `ready` flags and no getters that throw: if you
-hold `t.checkout`, its messages are there.
+`t` has only the namespaces you loaded: no `ready` flags, no getters that throw.
 
 ```ts
 const t = await parla.load([checkout]);
@@ -54,7 +51,7 @@ t.common.save(); // type error: common was not loaded
 
 ## `Translations<typeof ns>`
 
-The type of `t` for some namespaces. A function names what it reads; a wider `t` satisfies it.
+The type of `t` for some namespaces; a wider `t` satisfies it.
 
 ```ts
 import type { Translations } from '@parlajs/core';

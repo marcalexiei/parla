@@ -12,24 +12,21 @@ parla.subscribe(() => render(parla.locale));
 await parla.setLocale('it');
 ```
 
-`setLocale(next)` downloads every namespace loaded so far for `next`, then switches and notifies each
-`subscribe` listener. The old text stays until the new one is ready: no fallback, no flash. Live,
-through the [React adapter](/adapters/react#switching-locale); the dots show the wait:
+`setLocale(next)` loads every loaded namespace for `next`, then switches and notifies listeners. The
+old text stays until then: no flash. Live, through the [React adapter](/adapters/react#switching-locale):
 
 <HomeDemo />
 
-| `setLocale`                                                                  |
-| ---------------------------------------------------------------------------- |
-| Rejects for a locale not in the catalog                                      |
-| A failed download rejects and keeps the current locale: handle it (`.catch`) |
-| Two calls in a row: the last one wins                                        |
-| Namespaces first loaded during the switch are loaded for `next` too          |
-
-`subscribe` returns a function that unsubscribes.
+| `setLocale`                                                         |
+| ------------------------------------------------------------------- |
+| Rejects for a locale not in the catalog                             |
+| A failed download rejects and keeps the current locale              |
+| Two calls in a row: the last one wins                               |
+| Namespaces first loaded during the switch are loaded for `next` too |
 
 ## The first locale
 
-`matchLocale` picks the best supported locale from a preference list:
+`matchLocale` picks the best supported locale:
 
 ```ts
 const parla = createParla({
@@ -45,4 +42,4 @@ const parla = createParla({
 | `it_IT`   | `en`, `it`           | `it`: Android's `_` is read as `-`        |
 | `fr`      | `en`, `de`           | the fallback                              |
 
-A server-rendered page should start in the locale it rendered, then switch.
+A server-rendered page starts in the locale it rendered, then switches.

@@ -5,9 +5,8 @@ showAskAi: false
 
 # Getting started
 
-This page uses three [layers](/#layers): `@parlajs/compiler` builds your catalogs, `@parlajs/core`
-runs them, and `@parlajs/react`, a framework adapter, re-exports core for React. Tooling such as the
-[x18n plugin](/tooling/x18n) is optional.
+Three [layers](/#layers): `@parlajs/compiler` builds the catalogs, `@parlajs/core` runs them, and
+`@parlajs/react` brings core to React. Tooling, such as [x18n](/tooling/x18n), is optional.
 
 ## React + Vite
 
@@ -25,7 +24,7 @@ npm install -D @parlajs/compiler
 
 :::
 
-A catalog per locale and namespace, `locales/en/checkout.json`:
+One catalog per locale and namespace, `locales/en/checkout.json`:
 
 ```json
 {
@@ -51,8 +50,7 @@ export default defineConfig({
 });
 ```
 
-`vite.config.ts`: the plugin builds on start and on every catalog change, and fails a production
-build on catalog errors.
+`vite.config.ts`. The plugin rebuilds on every catalog change:
 
 ```ts
 import { parla } from '@parlajs/compiler/vite';
@@ -91,14 +89,11 @@ createRoot(root).render(
 );
 ```
 
-Without Suspense, `useParlaLoaded([checkout])` never suspends: `t` is `undefined` until loaded. See
-[React](/adapters/react#loading).
-
-Add `src/parla/` to `.gitignore`: it is generated.
+Add `src/parla/` to `.gitignore`. To render without Suspense, see [React](/adapters/react#loading).
 
 ## The CLI, without Vite
 
-Any bundler that understands `import()` works: run the compiler beside it.
+Any bundler with `import()` works. Run the compiler beside it:
 
 ```sh
 parla build            # once, before the bundler
@@ -115,7 +110,7 @@ parla check --strict   # in CI: warnings fail too
 }
 ```
 
-Without React, use `@parlajs/core`: `await parla.load([checkout])` gives `t`. See [Loading](/core/loading).
+Without React, use [`@parlajs/core`](/core/loading).
 
 ## What it writes
 

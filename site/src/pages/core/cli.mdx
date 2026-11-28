@@ -7,8 +7,8 @@ import { Badge } from 'vocs';
 
 # CLI and Vite plugin
 
-<Badge>Core</Badge> `pnpm add -D @parlajs/compiler`. It builds catalogs into typed namespaces, with
-the [ICU](/formats/icu) and [MF2](/formats/mf2) format adapters built in.
+<Badge>Core</Badge> `pnpm add -D @parlajs/compiler`. Builds catalogs into typed namespaces;
+[ICU](/formats/icu) and [MF2](/formats/mf2) are built in.
 
 ## `parla`
 
@@ -25,7 +25,7 @@ parla check [--json]    validate; exit 1 on errors
 | `--strict`            | both     | Warnings exit 1                      |
 | `--json`              | `check`  | Diagnostics as JSON                  |
 
-Each diagnostic has a `level`, a `code`, and where it is: `namespace`, `locale`, `key`, `file`.
+Each diagnostic has a `level`, a `code`, and `namespace`, `locale`, `key`, `file`.
 
 | Code                  | Level                                      |
 | --------------------- | ------------------------------------------ |
@@ -52,15 +52,14 @@ export default defineConfig({ plugins: [parla(), react()] });
 | `root`   | Folder holding the config; default Vite's root. An owner package's, in a [monorepo](/core/monorepos) |
 | `config` | Config file, relative to `root`                                                                      |
 
-Custom formats go in the config, as [`formats`](/core/config#formats).
-
-It builds on start and on every catalog or config change, in `vite` and `vite build --watch`, so a
-Vite app needs no `parla build --watch`. Diagnostics print as warnings; errors fail `vite build`.
+It builds on start and on every catalog or config change, so a Vite app needs no
+`parla build --watch`. Errors fail `vite build`. Custom formats go in the config's
+[`formats`](/core/config#formats).
 
 ## From code
 
-`@parlajs/compiler` exports `build`, `loadConfig`, `compileMessage`, `defineConfig`, `defaultFormats` and the
-`FormatAdapter` type:
+`@parlajs/compiler` exports `build`, `loadConfig`, `compileMessage`, `defineConfig`, `defaultFormats`
+and the `FormatAdapter` type:
 
 ```ts
 import { build, formatDiagnostic } from '@parlajs/compiler';
