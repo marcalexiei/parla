@@ -30,6 +30,7 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | `Text`                      | A message without params or markup: `() => string`                   |
 | `matchLocale(req, sup, fb)` | Best supported locale from a preference list                         |
 | `parseAcceptLanguage(h)`    | An `Accept-Language` header's tags by weight, for `matchLocale`      |
+| `escapeHtml(text)`          | Escapes `& < > " '`, for `createParla({ escape })`                   |
 
 `createParla` also takes `functions` and `markup`, required with every name the config's
 `functions` and `markup` declare. A function gets one object: `value`, `options`, `locale`, and `locales`, the locale then its
@@ -52,8 +53,8 @@ both, e.g. emails beside the app. Another adapter passes `wrapRich` and types `P
 ## On a server
 
 Create one instance per locale at startup and preload it: `setLocale` on a shared instance switches
-every request at once. Pick one with `matchLocale(parseAcceptLanguage(header), …)`. String markup
-inserts params as they are, so escape them in HTML emails.
+every request at once. Pick one with `matchLocale(parseAcceptLanguage(header), …)`. For HTML emails,
+`createParla({ escape: escapeHtml })` escapes every param, not the translations.
 
 ## License
 

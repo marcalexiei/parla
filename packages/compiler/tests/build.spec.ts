@@ -320,7 +320,7 @@ describe('one namespace, two node types', () => {
       'src/usage.ts',
       `import { createElement } from 'react';
 import type { ReactNode } from 'react';
-import { createParla as createCore } from '@parlajs/core';
+import { createParla as createCore, escapeHtml } from '@parlajs/core';
 import type { Translations } from '@parlajs/core';
 import { createParla as createReact } from '@parlajs/react';
 import type { Translations as ReactTranslations, WrapRich } from '@parlajs/react';
@@ -332,6 +332,9 @@ import type { PlainMessages } from './parla/namespaces/plain.js';
 
 const web = createReact({ catalog, markup: { strong: (c) => createElement('b', null, c) } });
 const email = createCore({ catalog, markup: { strong: (c) => \`**\${c}**\` } });
+export const html = createCore({ catalog, markup: { strong: (c) => \`<b>\${c}</b>\` }, escape: escapeHtml });
+// @ts-expect-error React escapes text itself: escaping first would show entities
+createReact({ catalog, markup: { strong: (c) => c }, escape: escapeHtml });
 const { app: w } = await web.load([app]);
 const { app: e } = await email.load([app]);
 // @ts-expect-error a namespace without markup takes no node type

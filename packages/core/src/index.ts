@@ -126,7 +126,36 @@ export type ParlaOptions<Node = string> = {
   /** Turns message parts with markup into one node. Set by framework adapters. */
   wrapRich?: WrapRich<Node>;
 } & Declared<'functions', FunctionName, MessageFunction> &
-  Declared<'markup', MarkupName, (children: NoInfer<Node>) => NoInfer<Node>>;
+  Declared<'markup', MarkupName, (children: NoInfer<Node>) => NoInfer<Node>> &
+  Escape<Node>;
+
+// Only text output needs it: React escapes text itself, so escaping first would show `&lt;`.
+type Escape<Node> = [Node] extends [string]
+  ? {
+      /** Escapes each param's text, e.g. `escapeHtml` in HTML emails; translations stay as written. */
+      escape?: (text: string) => string;
+    }
+  : { escape?: never };
+
+const ENTITIES: Readonly<Record<string, string>> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/** For `createParla({ escape })` in HTML: the five characters i18next escapes too. */
+export function escapeHtml(text: string): string {
+  return text.replaceAll(/[&<>"']/g, (c) => ENTITIES[c] ?? c);
+}
+
+// Every param becomes text through `str` or `f`; translations and markup output never do.
+const escaping = (rt: MessageRuntime, escape: (text: string) => string): MessageRuntime => ({
+  ...rt,
+  str: (value) => escape(rt.str(value)),
+  f: (name, value, options) => escape(rt.f(name, value, options)),
+});
 
 /**
  * Messages keyed by namespace name, `t.checkout.title()`: holding one proves its namespaces loaded.
@@ -185,7 +214,7 @@ g[INSTANCE] = marker;
 
 /** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
-  const { wrapRich, timeZone } = options;
+  const { wrapRich, timeZone, escape } = options;
   const { locales, sourceLocale, fallbacks = {} } = options.catalog;
   const functions = options.functions as Readonly<Record<string, MessageFunction>> | undefined;
   const markup = options.markup as
@@ -220,6 +249,9 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
         fallbacks: fallbacks[locale],
         timeZone,
       });
+      if (escape) {
+        rt = escaping(rt, escape);
+      }
       runtimes.set(locale, rt);
     }
     return rt;

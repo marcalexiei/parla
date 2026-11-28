@@ -1,6 +1,6 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createParla, matchLocale, parseAcceptLanguage } from '../src/index.ts';
+import { createParla, escapeHtml, matchLocale, parseAcceptLanguage } from '../src/index.ts';
 import type {
   Catalog,
   Loader,
@@ -112,6 +112,56 @@ describe(createParla, () => {
     };
     await expect(day('Europe/Rome')).resolves.toBe('28');
     await expect(day('America/Los_Angeles')).resolves.toBe('27');
+  });
+
+  it('escapes params, not translations or markup, when given escape', async () => {
+    type Welcome = (p: { name: string; b: (c: string) => string }) => string;
+    const mail = {
+      name: 'mail',
+      load: {
+        en: async (): Promise<MessageModule> =>
+          Promise.resolve({
+            default: (rt) => ({
+              welcome: (p: Record<string, unknown>) =>
+                rt.rich([
+                  '<p>Hi ',
+                  rt.tag(p, 'b', [rt.str(p['name'])]),
+                  ', ',
+                  rt.f('string', p['name']),
+                  '</p>',
+                ]),
+            }),
+          }),
+        it: async (): Promise<MessageModule> => Promise.reject(new Error('unused')),
+      },
+    };
+    const welcome = async (escape?: (text: string) => string): Promise<string> => {
+      const parla = createParla(escape ? { catalog, escape } : { catalog });
+      const t = await parla.load([mail]);
+      const message = (t['mail'] as unknown as { welcome: Welcome }).welcome;
+      return message({ name: `<i>O'Brien & co</i>`, b: (c) => `<b>${c}</b>` });
+    };
+    const name = '&lt;i&gt;O&#39;Brien &amp; co&lt;/i&gt;';
+    await expect(welcome(escapeHtml)).resolves.toBe(`<p>Hi <b>${name}</b>, ${name}</p>`);
+    await expect(welcome()).resolves.toBe(
+      `<p>Hi <b><i>O'Brien & co</i></b>, <i>O'Brien & co</i></p>`,
+    );
+    expect(escapeHtml('"a"')).toBe('&quot;a&quot;');
+  });
+
+  it('escapeHtml leaves no markup, attribute or entity a param could break out with', () => {
+    const payloads = [
+      '<script>alert(1)</script>',
+      '<img src=x onerror=alert(1)>',
+      '" onmouseover="alert(1)',
+      "' onfocus='alert(1)",
+      '&lt;script&gt;',
+    ];
+    for (const payload of payloads) {
+      expect(escapeHtml(payload)).not.toMatch(/[<>"']|&(?!amp;|lt;|gt;|quot;|#39;)/);
+    }
+    // Escapes what is already escaped, so the reader sees what was sent.
+    expect(escapeHtml('&lt;')).toBe('&amp;lt;');
   });
 
   it('loads where Array#toSorted is missing, as on Hermes', async () => {
