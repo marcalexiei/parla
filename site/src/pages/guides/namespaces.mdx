@@ -19,12 +19,12 @@ t.common.save();
 
 The object is `{ name, load }`: one chunk loader per locale. Its `.d.ts` types every message.
 
-| Because a namespace is an import  |                                                          |
-| --------------------------------- | -------------------------------------------------------- |
-| The bundler ships what you import | Nothing lists every namespace, so none ships by accident |
-| The types follow                  | `tsc` reads only the `.d.ts` of imported namespaces      |
-| Tooling follows                   | Tools such as x18n read which namespaces a file uses     |
-| A name does not type-check        | `useParla(['checkout'])` is an error                     |
+| Because a namespace is an import  |                                                                         |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| The bundler ships what you import | Nothing lists every namespace, so none ships by accident                |
+| The types follow                  | `tsc` reads only the `.d.ts` of imported namespaces                     |
+| Tooling follows                   | Tools such as [x18n](/reference/x18n) read which namespaces a file uses |
+| A name does not type-check        | `useParla(['checkout'])` is an error                                    |
 
 Import each namespace from its own module, never through a barrel: the bundler then splits exactly
 those chunks.

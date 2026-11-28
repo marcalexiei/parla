@@ -9,7 +9,7 @@ Requires React 19. Re-exports [`@parlajs/core`](/reference/core); `Parla`, `Parl
 `Translations` and `WrapRich` type rich text as `ReactNode`.
 
 ```tsx
-import { createParla, ParlaProvider, useLocale, useParla } from '@parlajs/react';
+import { createParla, ParlaProvider, useLocale, useParla, useParlaLoaded } from '@parlajs/react';
 
 const parla = createParla({ catalog });
 
@@ -27,9 +27,10 @@ createRoot(root).render(
 | `createParla(options)`    | Core's, with rich text rendered as React nodes                  |
 | `<ParlaProvider parla>`   | Puts the instance in context                                    |
 | `useParla(list)`          | `{ t }`. Suspends until loaded; loaded namespaces never suspend |
+| `useParlaLoaded(list)`    | `{ t }`, `undefined` until loaded. Never suspends               |
 | `useLocale()`             | `{ locale, locales, setLocale }`; re-renders on switch          |
 | `Translations<typeof ns>` | The type of `t`, with `ReactNode` rich text                     |
 
 - A locale switch never suspends: `setLocale` loads first.
 - A failed download reaches the nearest error boundary; a failed switch rejects `setLocale`.
-- Both hooks throw outside `<ParlaProvider>`.
+- The hooks throw outside `<ParlaProvider>`.

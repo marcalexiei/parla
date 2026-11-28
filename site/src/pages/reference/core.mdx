@@ -28,13 +28,14 @@ t.checkout.cart.items({ count: 3 }); // "3 articoli"
 
 ## `Parla<Node>`
 
-| Member                | Type                              |                                                                        |
-| --------------------- | --------------------------------- | ---------------------------------------------------------------------- |
-| `locale`              | `Locale`                          | Current                                                                |
-| `locales`             | `readonly Locale[]`               | The catalog's                                                          |
-| `load(list)`          | `Promise<Translations<NS, Node>>` | See [Loading](/guides/loading)                                         |
-| `setLocale(locale)`   | `Promise<void>`                   | Loads, then switches; see [Switching locale](/guides/switching-locale) |
-| `subscribe(listener)` | `() => void`, to unsubscribe      | Called after each switch                                               |
+| Member                | Type                                  |                                                                        |
+| --------------------- | ------------------------------------- | ---------------------------------------------------------------------- |
+| `locale`              | `Locale`                              | Current                                                                |
+| `locales`             | `readonly Locale[]`                   | The catalog's                                                          |
+| `load(list)`          | `Promise<Translations<NS, Node>>`     | See [Loading](/guides/loading)                                         |
+| `loaded(list)`        | `Translations<NS, Node> \| undefined` | `t` if loaded for the current locale; never downloads                  |
+| `setLocale(locale)`   | `Promise<void>`                       | Loads, then switches; see [Switching locale](/guides/switching-locale) |
+| `subscribe(listener)` | `() => void`, to unsubscribe          | Called after each switch                                               |
 
 `load` returns a promise carrying `status` and `value` once settled, which React's `use()` reads
 without suspending.

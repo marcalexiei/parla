@@ -55,6 +55,7 @@ export default defineConfig({
         { text: 'parla.config.ts', link: '/reference/config' },
         { text: '@parlajs/core', link: '/reference/core' },
         { text: '@parlajs/react', link: '/reference/react' },
+        { text: '@parlajs/x18n', link: '/reference/x18n' },
       ],
     },
     {

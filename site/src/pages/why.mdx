@@ -18,7 +18,7 @@ Parla keeps what runs and what type-checks aligned.
   params, and each rich-text tag takes a callback whose node type follows the instance: `ReactNode`
   with `@parlajs/react`, `string` with `@parlajs/core`.
 - **One way to call each thing.** `parla.load([…])` and `useParla([…])` always take a list, so
-  tooling such as x18n has one shape to read.
+  tooling such as [x18n](/reference/x18n) has one shape to read.
 - **No flash on switch.** `setLocale` loads the new locale first, then switches.
 - **ICU and MessageFormat 2**, per namespace, through one data model.
 - **No locale data to ship.** Formatting uses `Intl`; on Hermes (React Native), add its polyfills.

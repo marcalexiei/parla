@@ -1,5 +1,5 @@
 ---
-description: load and useParla take a list and return t, which proves the namespaces loaded.
+description: load, loaded and their React hooks take a list and return t, which proves the namespaces loaded.
 showAskAi: false
 ---
 
@@ -11,6 +11,8 @@ name.
 ```tsx
 const t = await parla.load([checkout, common]); // anywhere: a route loader, the server, a test
 const { t } = useParla([checkout, common]); // in a component: suspends until loaded
+const { t } = useParlaLoaded([checkout, common]); // never suspends: undefined until loaded
+const t = parla.loaded([checkout, common]); // undefined unless loaded; never downloads
 ```
 
 | `parla.load(list)`                                                    |
@@ -21,6 +23,24 @@ const { t } = useParla([checkout, common]); // in a component: suspends until lo
 | Throws at once for a namespace built without one of the app's locales |
 | Throws for two namespaces of one name: `t` holds one per name         |
 | A failed download rejects, and is retried after a second              |
+
+## Without Suspense
+
+`parla.loaded(list)` returns `t` if the namespaces are loaded for the current locale, else
+`undefined`, and never downloads: a framework without Suspense renders from it and calls `load`
+otherwise. The same list returns the same `t` as `load`.
+
+In React, `useParlaLoaded(list)` does both: it loads, never suspends, and returns `{ t }` with `t`
+undefined until the namespaces load, for a placeholder of your own. A failed download still reaches
+the error boundary.
+
+```tsx
+function Cart() {
+  const { t } = useParlaLoaded([checkout]);
+  if (!t) return <p>…</p>;
+  return <h1>{t.checkout.title()}</h1>;
+}
+```
 
 ## `t` is the proof of loading
 

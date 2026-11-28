@@ -87,6 +87,9 @@ createRoot(root).render(
 );
 ```
 
+Without Suspense, `useParlaLoaded([checkout])` never suspends: `t` is `undefined` until loaded. See
+[Loading](/guides/loading#without-suspense).
+
 Add `src/parla/` to `.gitignore`: it is generated.
 
 ## The CLI, without Vite
