@@ -5,23 +5,23 @@ Rules for agents in this repo. Pending work lives in `.claude/scratch/` (untrack
 ## Always
 
 - **A change to `packages/*` carries a changeset, unasked.**
-- **Run `pnpm check-all` before handing work over**: it is every CI check.
+- **Run `pnpm validate` before handing work over**: it is every CI check.
 - **Never hand-edit generated output** (`src/parla/`, `.tmp/`): change the compiler and rebuild.
 - **Keep these rules true**: fix one in the change that breaks it.
 - **Keep text short**: docs, comments and changesets; cut what code or a table shows.
 
 ## Layout
 
-| Path                   |                                                            |
-| ---------------------- | ---------------------------------------------------------- |
-| `packages/core`        | Runtime: locale state, lazy loading, `Intl`                |
-| `packages/react`       | `ParlaProvider`, `useParla`, `useLocale`                   |
-| `packages/compiler`    | `parla` CLI and Vite plugin: catalogs → typed namespaces   |
-| `packages/format-icu`  | ICU → MF2 data model                                       |
-| `packages/format-mf2`  | MF2 → MF2 data model                                       |
-| `packages/x18n-plugin` | x18n plugin: catalogs, `t.ns.key()` usages, params         |
-| `scripts/`             | Repo tooling (`check-all.ts`), via `tsconfig.scripts.json` |
-| `bench/`               | Benchmarks against `main`, via `vitest.config.bench.ts`    |
+| Path                   |                                                           |
+| ---------------------- | --------------------------------------------------------- |
+| `packages/core`        | Runtime: locale state, lazy loading, `Intl`               |
+| `packages/react`       | `ParlaProvider`, `useParla`, `useLocale`                  |
+| `packages/compiler`    | `parla` CLI and Vite plugin: catalogs → typed namespaces  |
+| `packages/format-icu`  | ICU → MF2 data model                                      |
+| `packages/format-mf2`  | MF2 → MF2 data model                                      |
+| `packages/x18n-plugin` | x18n plugin: catalogs, `t.ns.key()` usages, params        |
+| `scripts/`             | Repo tooling (`validate.ts`), via `tsconfig.scripts.json` |
+| `bench/`               | Benchmarks against `main`, via `vitest.config.bench.ts`   |
 
 Comparisons with other libraries live in `parla-benchmark`, keeping their dependencies out of here.
 
@@ -70,10 +70,10 @@ pnpm typecheck        # builds, then tsc
 pnpm lint             # oxlint (`lint:fix`, `lint:knip`, `lint:publish`, `lint:lib-check`)
 pnpm format           # oxfmt
 pnpm pack:all         # tarballs in .packs/
-pnpm check-all        # every CI check, cheapest first (`-k` keeps going)
+pnpm validate         # every CI check, cheapest first (`-k` keeps going)
 ```
 
-- **Keep `scripts/check-all.ts` in step with `.github/workflows/ci.yml`**, all but `bench`: CI runs it
+- **Keep `scripts/validate.ts` in step with `.github/workflows/ci.yml`**, all but `bench`: CI runs it
   against the base on one runner, and CI OK does not need it, so a deliberate trade-off can merge.
 - **`typecheck` builds first**: packages resolve siblings through their `.d.ts`.
 - **The source condition is `@parlajs/source`**; vitest needs it in `ssr.resolve.conditions` too.

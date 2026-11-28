@@ -17,7 +17,7 @@
     "lint:publish": "pnpm -r --filter \"./packages/*\" run lint:publish",
     "lint:lib-check": "node scripts/lib-check.ts",
     "typecheck": "pnpm run build:packages && pnpm -r --filter \"./packages/*\" run typecheck && tsc -p tsconfig.scripts.json",
-    "check-all": "node scripts/check-all.ts",
+    "validate": "node scripts/validate.ts",
     "pack:all": "pnpm run build:packages && rm -rf .packs && pnpm -r --filter \"./packages/*\" exec pnpm pack --pack-destination ../../.packs",
     "release": "pnpm run build:packages && changeset publish"
   },
