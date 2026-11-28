@@ -4,6 +4,8 @@ import type { CustomFunctions, ResolvedConfig } from '@parlajs/compiler';
 import type { Plugin, Scanner } from '@x18n/core';
 import { parseSync, Visitor } from 'oxc-parser';
 
+import { scriptView, viewName } from './templates.ts';
+
 type Usage = Awaited<ReturnType<Scanner['scan']>>['usages'][number];
 
 type PlaceholderSyntax = NonNullable<Plugin['placeholders']>[number];
@@ -259,12 +261,18 @@ function resolve(
 const paramKeys = (params: Node | undefined): Array<string> | undefined =>
   params ? staticKeys(params) : [];
 
+// Offsets in the view are the file's, so usages point into the template itself.
+const TEMPLATE = /\.(?:vue|svelte|astro)$/;
+
 function accessorScanner(callees: ReadonlySet<string>, declared: Declared): Scanner {
   return {
     id: 'parla:accessor',
-    extensions: ['js', 'jsx', 'mjs', 'ts', 'tsx', 'mts'],
+    extensions: ['js', 'jsx', 'mjs', 'ts', 'tsx', 'mts', 'vue', 'svelte', 'astro'],
     scan(file): { usages: Array<Usage> } {
-      const { program } = parseSync(file.path, file.text);
+      const template = TEMPLATE.test(file.path);
+      const { program } = template
+        ? parseSync(viewName(file.path), scriptView(file.path, file.text))
+        : parseSync(file.path, file.text);
       const bindings: Array<Binding> = [];
       const root = program as unknown as Node;
       collectBindings(root, root, { callees, imports: namespaceImports(root), out: bindings });
