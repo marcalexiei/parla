@@ -106,7 +106,7 @@ function fields(
   for (const tag of [...info.markup].toSorted()) {
     if (!info.params.has(tag)) {
       const optional = defaults.has(tag);
-      out.push(`${prop(tag)}${optional ? '?' : ''}: (children: Node) => Node`);
+      out.push(`${prop(tag)}${optional ? '?' : ''}: Markup<Node>`);
       required += optional ? 0 : 1;
     }
   }
@@ -138,21 +138,32 @@ export function signature(info: MessageInfo, defaults: ReadonlySet<string> = new
   return `(params${own.required === 0 ? '?' : ''}: { ${own.fields.join('; ')} }): ${ret}`;
 }
 
-interface Tree {
-  [segment: string]: Tree | { leaf: string; doc: string };
+interface Leaf {
+  readonly leaf: string;
+  readonly doc?: string;
+  readonly rich?: boolean;
 }
 
-const isLeaf = (n: Tree[string]): n is { leaf: string; doc: string } =>
-  typeof (n as { leaf?: unknown }).leaf === 'string';
+interface Tree {
+  [segment: string]: Tree | Leaf;
+}
+
+const isLeaf = (n: Tree[string]): n is Leaf => typeof (n as { leaf?: unknown }).leaf === 'string';
+
+/** Whether `node` holds a message with markup (`rich`) or one without. */
+const holds = (node: Tree[string], rich: boolean): boolean =>
+  isLeaf(node) ? Boolean(node.rich) === rich : Object.values(node).some((n) => holds(n, rich));
 
 function render(tree: Tree, indent: string): string {
   const lines: Array<string> = [];
   for (const [key, node] of Object.entries(tree)) {
     if (isLeaf(node)) {
-      lines.push(
-        `${indent}/** ${node.doc.replaceAll('*/', String.raw`*\/`).replaceAll(/\s*\n\s*/g, ' ')} */`,
-        `${indent}${prop(key)}${node.leaf};`,
-      );
+      if (node.doc !== undefined) {
+        lines.push(
+          `${indent}/** ${node.doc.replaceAll('*/', String.raw`*\/`).replaceAll(/\s*\n\s*/g, ' ')} */`,
+        );
+      }
+      lines.push(`${indent}${prop(key)}${node.leaf};`);
     } else {
       lines.push(`${indent}${prop(key)}: {`, render(node, `${indent}  `), `${indent}};`);
     }
@@ -169,7 +180,7 @@ export interface NamespaceTypes {
   readonly usesText: boolean;
 }
 
-function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]>): Tree {
+function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Leaf]>): Tree {
   const tree: Tree = {};
   for (const [path, leaf] of entries) {
     const last = path.at(-1) ?? '';
@@ -187,40 +198,79 @@ function treeOf(entries: ReadonlyArray<[path: Array<string>, leaf: Tree[string]]
   return tree;
 }
 
+const pascal = (key: string): string =>
+  key
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+
 /**
  * Plain messages in a non-generic `XText`, and those with markup in `XMessages<Node> extends XText`,
- * so a wider `t` checks against a narrower one without instantiating every plain message.
+ * so instantiating `Node` skips every plain message. A group holding both splits the same way.
  */
+function declare(
+  tree: Tree,
+  name: string,
+  unique: (name: string) => string,
+  out: Array<string>,
+): void {
+  const plain: Tree = {};
+  const rich: Tree = {};
+  for (const [key, node] of Object.entries(tree)) {
+    if (!holds(node, true)) {
+      plain[key] = node;
+    } else if (isLeaf(node) || !holds(node, false)) {
+      rich[key] = node;
+    } else {
+      const group = unique(name.replace(/Messages$/, `${pascal(key)}Messages`));
+      declare(node, group, unique, out);
+      rich[key] = { leaf: `: ${group}<Node>` };
+    }
+  }
+  const text = name.replace(/Messages$/, 'Text');
+  const body = (members: Tree): string => render(members, '  ');
+  if (Object.keys(rich).length === 0) {
+    out.push(`export interface ${name} {\n${body(plain)}\n}`);
+  } else if (Object.keys(plain).length === 0) {
+    out.push(`export interface ${name}<Node> {\n${body(rich)}\n}`);
+  } else {
+    out.push(
+      `export interface ${text} {\n${body(plain)}\n}`,
+      `export interface ${name}<Node> extends ${text} {\n${body(rich)}\n}`,
+    );
+  }
+}
+
 export function namespaceTypes(
   messages: Map<string, { info: MessageInfo; source: string }>,
   name: string,
   defaults: ReadonlySet<string>,
 ): NamespaceTypes {
-  const keys = [...messages.keys()];
-  // A group goes whole into one interface: an extending interface cannot add to a base's group.
-  const richTop = new Set(
-    keys.filter((k) => messages.get(k)?.info.rich).map((k) => k.split('.')[0] ?? k),
-  );
-  const plain: Array<[Array<string>, Tree[string]]> = [];
-  const rich: Array<[Array<string>, Tree[string]]> = [];
-  for (const [key, { info, source }] of messages) {
-    const path = key.split('.');
-    const leaf = { leaf: signature(info, defaults), doc: source };
-    (richTop.has(path[0] ?? key) ? rich : plain).push([path, leaf]);
-  }
-  const body = (entries: typeof plain): string => render(treeOf(entries), '  ');
-  const text = name.replace(/Messages$/, 'Text');
-  let code = `export interface ${name}<Node> extends ${text} {\n${body(rich)}\n}`;
-  if (rich.length === 0) {
-    code = `export interface ${name} {\n${body(plain)}\n}`;
-  } else if (plain.length === 0) {
-    code = `export interface ${name}<Node> {\n${body(rich)}\n}`;
-  } else {
-    code = `export interface ${text} {\n${body(plain)}\n}\n\n${code}`;
-  }
+  const leaves: Array<[Array<string>, Leaf]> = [...messages].map(([key, { info, source }]) => [
+    key.split('.'),
+    { leaf: signature(info, defaults), doc: source, rich: info.rich },
+  ]);
+  const tree = treeOf(leaves);
+  const used = new Set([name]);
+  const unique = (base: string): string => {
+    let group = base;
+    for (let n = 2; used.has(group); n += 1) {
+      group = base.replace(/Messages$/, `${n}Messages`);
+    }
+    used.add(group);
+    return group;
+  };
+  const out: Array<string> = [];
+  declare(tree, name, unique, out);
+  const code = out.join('\n\n');
   return {
-    code,
-    generic: rich.length > 0,
-    usesText: [...plain, ...rich].some(([, leaf]) => isLeaf(leaf) && leaf.leaf === ': Text'),
+    // One alias: TypeScript instantiates it once per node type, not once per tag. `export {}` keeps
+    // it private, as a .d.ts otherwise exports every top-level name.
+    code: code.includes('Markup<Node>')
+      ? `type Markup<Node> = (children: Node) => Node;\n\n${code}\n\nexport {};`
+      : code,
+    generic: holds(tree, true),
+    usesText: leaves.some(([, leaf]) => leaf.leaf === ': Text'),
   };
 }
