@@ -1,16 +1,7 @@
-import { createParla as createCoreParla } from '@parlajs/core';
-import type {
-  Locale,
-  Namespace,
-  Parla as CoreParla,
-  ParlaOptions as CoreParlaOptions,
-  Translations as CoreTranslations,
-  WrapRich as CoreWrapRich,
-} from '@parlajs/core';
+import type { Locale, Namespace } from '@parlajs/core';
 import {
   createContext,
   createElement,
-  Fragment,
   use,
   useContext,
   useEffect,
@@ -20,42 +11,10 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 
-// Named rather than `export *`, which would clash with this module's own exports.
-export {
-  createRuntime,
-  matchLocale,
-  parseAcceptLanguage,
-  type Catalog,
-  type FunctionName,
-  type FunctionRegistry,
-  type Loader,
-  type Locale,
-  type LocaleRegistry,
-  type MarkupName,
-  type MarkupRegistry,
-  type MessageFactory,
-  type MessageFunction,
-  type MessageModule,
-  type MessageRuntime,
-  type Namespace,
-  type NamespaceKind,
-  type SelectorValue,
-  type Text,
-} from '@parlajs/core';
+import type { Parla, Translations } from './server.ts';
 
-/* Core's types with rich text as a `ReactNode`. */
-export type Parla = CoreParla<ReactNode>;
-export type ParlaOptions = CoreParlaOptions<ReactNode>;
-export type Translations<NS extends Namespace> = CoreTranslations<NS, ReactNode>;
-export type WrapRich = CoreWrapRich<ReactNode>;
-
-/** Children passed as arguments, so React does not ask for keys. */
-const wrapRich: WrapRich = (parts) => createElement(Fragment, null, ...parts);
-
-/** `createParla` from `@parlajs/core`, with rich text rendered as React nodes. */
-export function createParla(options: ParlaOptions): Parla {
-  return createCoreParla<ReactNode>({ wrapRich, ...options });
-}
+// The server entry's exports, then the hooks it cannot have.
+export * from './server.ts';
 
 const ParlaContext = createContext<Parla | null>(null);
 ParlaContext.displayName = 'ParlaContext';

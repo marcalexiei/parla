@@ -45,6 +45,8 @@ createRoot(root).render(
 - A failed download reaches the nearest error boundary.
 - `Parla`, `ParlaOptions` and `Translations` type rich text as `ReactNode`;
   `@parlajs/core`'s stay `string`.
+- In Server Components (the `react-server` condition) only `createParla` and the types exist, no
+  hooks: `const t = await parla.load([checkout])` in an async component.
 
 ## License
 

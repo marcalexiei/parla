@@ -32,6 +32,10 @@
   "type": "module",
   "exports": {
     ".": {
+      "react-server": {
+        "@parlajs/source": "./src/server.ts",
+        "default": "./build/server.js"
+      },
       "@parlajs/source": "./src/index.ts",
       "default": "./build/index.js"
     }
