@@ -1,4 +1,5 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,19 +33,25 @@ const names = (value: string): Array<string> =>
     .toSorted();
 
 const finder = (options?: ParlaOptions): LocaleFinder => only(parla(options).localeFinders);
+// Every source catalog exists, so a read never fails.
+const read = async (path: string): Promise<string> => readFile(join(root, path), 'utf8');
 const finderContext = (globbed: Array<string>): FinderContext =>
-  ({ host: { root, glob: async () => Promise.resolve(globbed) } }) as unknown as FinderContext;
+  ({
+    host: { root, glob: async () => Promise.resolve(globbed), readFile: read },
+  }) as unknown as FinderContext;
 
 // The scanner reads only the file; x18n's context carries config it does not need.
 const context = {} as ScanContext;
 
-async function usages(
-  text: string,
-  options?: ParlaOptions,
-): Promise<
-  Array<{ raw: string; namespace: string | undefined; params: ReadonlyArray<string> | undefined }>
-> {
-  const result = await scanner(options).scan({ path: 'app.tsx', text } as never, context);
+interface Found {
+  readonly raw: string;
+  readonly namespace: string | undefined;
+  readonly params: ReadonlyArray<string> | undefined;
+}
+
+async function usages(text: string, options?: ParlaOptions | Scanner): Promise<Array<Found>> {
+  const scan = options && 'scan' in options ? options : scanner(options);
+  const result = await scan.scan({ path: 'app.tsx', text } as never, context);
   return result.usages.map(({ raw, namespace, params }) => ({ raw, namespace, params }));
 }
 
@@ -108,6 +115,31 @@ function A() {
     ]);
   });
 
+  it('follows a t typed Translations<typeof ns> in a function parameter', async () => {
+    await expect(
+      usages(`${header}
+function Row({ t }: { t: Translations<typeof checkout | typeof shared> }) {
+  t.checkout.title();
+  t.common.total({ amount });
+}
+const Cell = ({ u, t: tr }: { u: string; t: Translations<typeof checkout> }) => tr.checkout.cell();
+function Skipped(props: Props, { t }: { t: string }, { u }: { u: Translations<typeof checkout> }) {
+  t.checkout.title();
+}
+function Unknown({ t }: { t: Translations<typeof other> }, { t: a }: { t: Props<typeof checkout> }) {
+  t.checkout.title();
+  a.checkout.title();
+}
+function Elsewhere({ t }: Props) {
+  t.checkout.title();
+}`),
+    ).resolves.toStrictEqual([
+      { raw: 'title', namespace: 'checkout', params: [] },
+      { raw: 'total', namespace: 'common', params: ['amount'] },
+      { raw: 'cell', namespace: 'checkout', params: [] },
+    ]);
+  });
+
   it('needs every listed namespace to be an imported namespace object', async () => {
     await expect(
       usages(`${header}
@@ -142,14 +174,23 @@ describe('catalogs', () => {
     rmSync(root, { recursive: true, force: true });
     const config = {
       locales: ['en', 'it'],
+      functions: { relative: 'number' },
+      markup: ['code'],
       namespaces: {
         common: { format: 'icu', path: 'locales/{locale}/common.json' },
         scopeAudit: { format: 'mf2', path: 'locales/{locale}/scope_audit.json' },
       },
     };
     const file = join(root, 'app/parla.config.ts');
+    mkdirSync(join(root, 'app/locales/en'), { recursive: true });
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, `export default ${JSON.stringify(config)};\n`);
+    const ref = '{kind, select, part {Part {part}} other {{title}}}';
+    writeFileSync(
+      join(root, 'app/locales/en/common.json'),
+      JSON.stringify({ order: { ref }, plain: '{name}', broken: '{name' }),
+    );
+    writeFileSync(join(root, 'app/locales/en/scope_audit.json'), '{ not json');
   });
 
   it('names each catalog file by the namespace its config gives it', async () => {
@@ -172,5 +213,28 @@ describe('catalogs', () => {
     expect(place('it', 'scopeAudit')).toBe('app/locales/it/scope_audit.json');
     expect(place('de', 'common')).toBeUndefined();
     expect(place('en', 'nope')).toBeUndefined();
+  });
+
+  it('takes functions, markup and branchy selects from the configs', async () => {
+    const plugin = parla({ configs: ['app/parla.config.ts'] });
+    const syntax = only(plugin.placeholders);
+    expect(syntax.validate?.('{$when :relative}')).toHaveLength(1);
+    await only(plugin.localeFinders).find(finderContext([]));
+    expect(syntax.implicit).toStrictEqual(['code']);
+    expect(syntax.validate?.('{$when :relative}')).toStrictEqual([]);
+    await expect(
+      usages(
+        `import { common } from './parla/namespaces/common.js';
+function A() {
+  const { t } = useParla([common]);
+  t.common.order.ref({ kind: 'part', part: 1 });
+  t.common.plain({ name });
+}`,
+        only(plugin.scanners),
+      ),
+    ).resolves.toStrictEqual([
+      { raw: 'order.ref', namespace: 'common', params: undefined },
+      { raw: 'plain', namespace: 'common', params: ['name'] },
+    ]);
   });
 });
