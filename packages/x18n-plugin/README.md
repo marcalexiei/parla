@@ -12,7 +12,7 @@ import { defineConfig } from '@x18n/cli';
 export default defineConfig({
   sourceLocale: 'en',
   locales: ['en', 'it'],
-  // Parla's keys are dotted paths inside a namespace.
+  // x18n then names keys `checkout:cart.items`: with its default `.`, a dotted namespace blurs into the key.
   namespace: { separator: ':' },
   plugins: [parla()],
   usage: { include: ['src/**/*.{ts,tsx}'], exclude: ['src/parla/**'] },
