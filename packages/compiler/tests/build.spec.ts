@@ -216,10 +216,10 @@ await parla.load(['checkout']);
 await parla.load(checkout);
 // @ts-expect-error built for en and it, not de
 await parla.load([german]);
-const peeked = parla.peek([checkout]);
+const maybe = parla.loaded([checkout]);
 // @ts-expect-error undefined until its namespaces load
-peeked.checkout.title();
-peeked?.checkout.title();
+maybe.checkout.title();
+maybe?.checkout.title();
 `,
     );
     expect(typecheck(join(tmp, 'build-test'), { include: ['app/src'] })).toBe('');
@@ -253,7 +253,7 @@ describe('types for a package that depends on an adapter only', () => {
       pkg,
       'src/usage.ts',
       `import type { ReactNode } from 'react';
-import { useParla } from '@parlajs/react';
+import { useParla, useParlaLoaded } from '@parlajs/react';
 import type { Parla, Translations } from '@parlajs/react';
 import './parla/catalog.js';
 import { widget } from './parla/namespaces/widget.js';
@@ -272,6 +272,10 @@ declare const parla: Parla;
 export const loaded: Translations<typeof widget> = await parla.load([widget]);
 // @ts-expect-error a child demanding a namespace needs a \`t\` that loaded it
 export const unloaded: Translations<typeof widget> = await parla.load([]);
+const lazy = useParlaLoaded([widget]).t;
+// @ts-expect-error undefined until it loads
+lazy.widget.title();
+export const later: ReactNode = lazy?.widget.terms({ link: (children) => children });
 `,
     );
     expect(typecheck(pkg)).toBe('');

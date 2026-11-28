@@ -145,7 +145,7 @@ export interface Parla<Node = string> {
    * `t`, if the namespaces are loaded for the current locale; never downloads. Frameworks without
    * Suspense render from it, and `load` otherwise. The same list returns the same `t` as `load`.
    */
-  readonly peek: <NS extends Namespace>(
+  readonly loaded: <NS extends Namespace>(
     namespaces: ReadonlyArray<NS>,
   ) => Translations<NS, Node> | undefined;
   /** Called after each locale switch. */
@@ -321,7 +321,7 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
   };
 
   // Before the namespaces settle, `load` would download them; after, it builds `t` from what settled.
-  const peek = (
+  const loadedOf = (
     list: ReadonlyArray<[name: string, id: number]>,
     locale: Locale,
   ): object | undefined =>
@@ -345,7 +345,7 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     },
     locales,
     load: (namespaces) => load(resolve(namespaces), current) as never,
-    peek: (namespaces) => peek(resolve(namespaces), current) as never,
+    loaded: (namespaces) => loadedOf(resolve(namespaces), current) as never,
     async setLocale(locale) {
       assertLocale(locale);
       switchToken += 1;
