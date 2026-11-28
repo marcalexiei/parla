@@ -216,6 +216,10 @@ await parla.load(['checkout']);
 await parla.load(checkout);
 // @ts-expect-error built for en and it, not de
 await parla.load([german]);
+const peeked = parla.peek([checkout]);
+// @ts-expect-error undefined until its namespaces load
+peeked.checkout.title();
+peeked?.checkout.title();
 `,
     );
     expect(typecheck(join(tmp, 'build-test'), { include: ['app/src'] })).toBe('');

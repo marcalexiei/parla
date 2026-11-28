@@ -141,6 +141,13 @@ export interface Parla<Node = string> {
   readonly load: <NS extends Namespace>(
     namespaces: ReadonlyArray<NS>,
   ) => Promise<Translations<NS, Node>>;
+  /**
+   * `t`, if the namespaces are loaded for the current locale; never downloads. Frameworks without
+   * Suspense render from it, and `load` otherwise. The same list returns the same `t` as `load`.
+   */
+  readonly peek: <NS extends Namespace>(
+    namespaces: ReadonlyArray<NS>,
+  ) => Translations<NS, Node> | undefined;
   /** Called after each locale switch. */
   readonly subscribe: (listener: () => void) => () => void;
 }
@@ -272,8 +279,8 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     return id;
   };
 
-  // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
-  const load = (namespaces: ReadonlyArray<Loadable>, locale: Locale): Promise<object> => {
+  /** `[name, id]` per namespace, sorted by name: one cache key for any order. */
+  const resolve = (namespaces: ReadonlyArray<Loadable>): Array<[name: string, id: number]> => {
     const byName = new Map<string, number>();
     for (const ns of namespaces) {
       const id = adopt(ns);
@@ -285,7 +292,14 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
       byName.set(ns.name, id);
     }
     // Not `toSorted`: Hermes (React Native) lacks it, and the spread is a copy already.
-    const list = [...byName].sort(([a], [b]) => a.localeCompare(b));
+    return [...byName].sort(([a], [b]) => a.localeCompare(b));
+  };
+
+  // oxlint-disable-next-line typescript/promise-function-async -- `use()` needs the cached promise itself
+  const load = (
+    list: ReadonlyArray<[name: string, id: number]>,
+    locale: Locale,
+  ): Promise<object> => {
     const key = `${locale}\u0000${list.map(([, id]) => id).join('\u0000')}`;
     let promise = translations.get(key);
     if (!promise) {
@@ -306,6 +320,15 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
     return promise;
   };
 
+  // Before the namespaces settle, `load` would download them; after, it builds `t` from what settled.
+  const peek = (
+    list: ReadonlyArray<[name: string, id: number]>,
+    locale: Locale,
+  ): object | undefined =>
+    list.every(([, id]) => settled.has(`${locale}\u0000${id}`))
+      ? (load(list, locale) as Promise<object> & { value?: object }).value
+      : undefined;
+
   // Every namespace loaded so far, again until none is missing: one first loaded meanwhile is ready too.
   const loadAll = async (locale: Locale): Promise<void> => {
     const missing = [...loaded].filter((id) => !settled.has(`${locale}\u0000${id}`));
@@ -321,7 +344,8 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
       return current;
     },
     locales,
-    load: (namespaces) => load(namespaces, current) as never,
+    load: (namespaces) => load(resolve(namespaces), current) as never,
+    peek: (namespaces) => peek(resolve(namespaces), current) as never,
     async setLocale(locale) {
       assertLocale(locale);
       switchToken += 1;

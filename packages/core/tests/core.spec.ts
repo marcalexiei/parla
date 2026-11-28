@@ -165,6 +165,20 @@ describe(createParla, () => {
     expect(attempts).toBe(2);
   });
 
+  it('peeks at loaded namespaces without downloading, as load would return them', async () => {
+    const { common, checkout, calls } = makeNamespaces();
+    const parla = createParla({ catalog });
+    expect(parla.peek([common])).toBeUndefined();
+    expect(calls).toStrictEqual([]);
+    const t = await parla.load([common, checkout]);
+    expect(parla.peek([checkout, common])).toBe(t);
+    expect(parla.peek([common])?.['common']).toBe(t['common']);
+    await parla.setLocale('it');
+    const italian = parla.peek([common]);
+    expect((italian?.['common'] as Common | undefined)?.nav.home()).toBe('Inizio');
+    expect(calls).toStrictEqual(['en/checkout', 'en/common', 'it/checkout', 'it/common']);
+  });
+
   it('rejects an unknown locale', () => {
     expect(() => createParla({ catalog, locale: 'fr' })).toThrow(/unknown locale "fr"/);
   });
