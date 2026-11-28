@@ -325,16 +325,19 @@ describe(matchLocale, () => {
 
 describe(parseAcceptLanguage, () => {
   it('lists tags by weight, keeping the header order between equal weights', () => {
-    expect(parseAcceptLanguage('de-CH;q=0.5, fr;q=0.9, it ,en;Q=0.9')).toStrictEqual([
+    expect(parseAcceptLanguage('de-CH;q=0.5, fr;q=0.9, it ,en;Q = 0.900, pt;q=1.0')).toStrictEqual([
       'it',
+      'pt',
       'fr',
       'en',
       'de-CH',
     ]);
   });
 
-  it('drops *, q=0, malformed weights and empty parts', () => {
-    expect(parseAcceptLanguage('*;q=0.8, en;q=0, , de;q=x, fr;level=1')).toStrictEqual(['fr']);
+  it('drops *, q=0, weights outside RFC 9110 and empty parts', () => {
+    expect(
+      parseAcceptLanguage('*;q=0.8, en;q=0, , de;q=x, es;q=1.5, nl;q=0.5555, pl;q, fr;level=1'),
+    ).toStrictEqual(['fr']);
     expect(parseAcceptLanguage('')).toStrictEqual([]);
     expect(parseAcceptLanguage(null)).toStrictEqual([]);
     expect(parseAcceptLanguage(undefined)).toStrictEqual([]);
