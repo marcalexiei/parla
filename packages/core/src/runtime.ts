@@ -197,8 +197,61 @@ function intl<K extends IntlName>(name: K): (typeof Intl)[K] {
   return ctor;
 }
 
-/** Formatters kept per locale. A catalog's constant options need far fewer. */
+type Format = (value: number | bigint) => string;
+
+/** Formatters kept per constructor. A catalog's constant options need far fewer. */
 const CACHE_SIZE = 256;
+/** Results kept per formatter: a re-render formats the same counts and dates again. */
+const MEMO_SIZE = 128;
+
+function memo(format: Format): Format {
+  const seen = new Map<number | bigint, string>();
+  return (value) => {
+    // -0 formats as "-0", but a `Map` keys it as 0.
+    if (Object.is(value, -0)) {
+      return format(value);
+    }
+    let out = seen.get(value);
+    if (out === undefined) {
+      out = format(value);
+      if (seen.size < MEMO_SIZE) {
+        seen.set(value, out);
+      }
+    }
+    return out;
+  };
+}
+
+// Shared by every runtime, as a server's instance per request would build its own; by constructor,
+// so a polyfill installed later gets its own.
+const formats = new WeakMap<object, Map<string, Format>>();
+
+type Formatter = Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules;
+
+function shared<K extends IntlName>(
+  name: K,
+  key: string,
+  make: (ctor: (typeof Intl)[K]) => Formatter,
+): Format {
+  const ctor = intl(name);
+  let cache = formats.get(ctor);
+  if (!cache) {
+    cache = new Map();
+    formats.set(ctor, cache);
+  }
+  let hit = cache.get(key);
+  if (!hit) {
+    // Options bound to params (`minimumFractionDigits=$d`) make new keys: drop the oldest.
+    const [oldest] = cache.keys();
+    if (cache.size >= CACHE_SIZE && oldest !== undefined) {
+      cache.delete(oldest);
+    }
+    const made = make(ctor);
+    hit = memo((v) => ('select' in made ? made.select(v as number) : made.format(v as number)));
+    cache.set(key, hit);
+  }
+  return hit;
+}
 
 const asParts: WrapRich<unknown> = (parts) => parts;
 
@@ -208,36 +261,22 @@ export function createRuntime(
 ): MessageRuntime {
   const tags = [locale, ...fallbacks];
   const zone: Intl.DateTimeFormatOptions = timeZone === undefined ? {} : { timeZone };
+  const scope = `${tags.join(',')}\u0000${timeZone ?? ''}\u0000`;
   const functions = new Map(Object.entries(extensions.functions ?? {}));
   const markup = new Map(Object.entries(extensions.markup ?? {}));
-  const cache = new Map<string, Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>();
-  const cached = <T extends Intl.NumberFormat | Intl.DateTimeFormat | Intl.PluralRules>(
-    key: string,
-    make: () => T,
-  ): T => {
-    let hit = cache.get(key) as T | undefined;
-    if (!hit) {
-      // Options bound to params (`minimumFractionDigits=$d`) make new keys: drop the oldest.
-      const [oldest] = cache.keys();
-      if (cache.size >= CACHE_SIZE && oldest !== undefined) {
-        cache.delete(oldest);
-      }
-      cache.set(key, (hit = make()));
-    }
-    return hit;
-  };
 
   // Hoisted constant options and `NO_OPTIONS` are one object each: found by identity, no key built.
-  const byOptions = new WeakMap<object, Map<string, Intl.NumberFormat | Intl.DateTimeFormat>>();
-  const formatter = <T extends Intl.NumberFormat | Intl.DateTimeFormat>(
+  const byOptions = new WeakMap<object, Map<string, Format>>();
+  const formatter = <K extends IntlName>(
+    ctor: K,
     name: string,
     options: Readonly<Record<string, unknown>>,
-    make: () => T,
-  ): T => {
+    make: (ctor: (typeof Intl)[K]) => Formatter,
+  ): Format => {
     let named = byOptions.get(options);
-    let hit = named?.get(name) as T | undefined;
+    let hit = named?.get(name);
     if (!hit) {
-      hit = cached(name + JSON.stringify(options), make);
+      hit = shared(ctor, scope + name + JSON.stringify(options), make);
       if (!named) {
         named = new Map();
         byOptions.set(options, named);
@@ -246,42 +285,45 @@ export function createRuntime(
     }
     return hit;
   };
+  const numbers = (name: string, options: Readonly<Record<string, unknown>>): Format =>
+    formatter('NumberFormat', name, options, (NF) => new NF(tags, numberOptions(name, options)));
 
   const rt: MessageRuntime = {
     locale,
     str(value) {
       if (typeof value === 'number' || typeof value === 'bigint') {
-        const nf = cached('n', () => new (intl('NumberFormat'))(tags));
+        const nf = numbers('number', NO_OPTIONS);
         if (typeof value === 'number') {
-          return nf.format(value);
+          return nf(value);
         }
         try {
-          return nf.format(value);
+          return nf(value);
         } catch {
           // Hermes formats numbers only: plain digits beat a rounded number.
           return value.toString();
         }
       }
       if (value instanceof Date) {
-        return cached('d', () => new (intl('DateTimeFormat'))(tags, zone)).format(value);
+        return formatter(
+          'DateTimeFormat',
+          '',
+          NO_OPTIONS,
+          (DTF) => new DTF(tags, zone),
+        )(value.getTime());
       }
       return text(value);
     },
     f(name, value, options = NO_OPTIONS) {
       if (NUMBER_FNS.has(name)) {
-        const n = Number(value) - Number(options['offset'] ?? 0);
-        return formatter(
-          name,
-          options,
-          () => new (intl('NumberFormat'))(tags, numberOptions(name, options)),
-        ).format(n);
+        return numbers(name, options)(Number(value) - Number(options['offset'] ?? 0));
       }
       if (DATE_FNS.has(name)) {
         return formatter(
+          'DateTimeFormat',
           name,
           options,
-          () => new (intl('DateTimeFormat'))(tags, dateOptions(name, options, zone)),
-        ).format(toDate(value));
+          (DTF) => new DTF(tags, dateOptions(name, options, zone)),
+        )(toDate(value).getTime());
       }
       if (name === 'string') {
         return text(value);
@@ -298,8 +340,8 @@ export function createRuntime(
         return { n, cat: '' };
       }
       const type = options['select'] === 'ordinal' ? 'ordinal' : 'cardinal';
-      const rules = cached(type, () => new (intl('PluralRules'))(tags, { type }));
-      return { n, cat: rules.select(n - Number(options['offset'] ?? 0)) };
+      const rules = formatter('PluralRules', type, NO_OPTIONS, (PR) => new PR(tags, { type }));
+      return { n, cat: rules(n - Number(options['offset'] ?? 0)) };
     },
     ss(value) {
       return { s: text(value) };
