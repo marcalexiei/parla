@@ -4,8 +4,9 @@ import type { MessageFunction, MessageRuntime, WrapRich } from './runtime.ts';
 export {
   createRuntime,
   type MessageFunction,
+  type MessageFunctionInput,
   type MessageRuntime,
-  type RuntimeExtensions,
+  type RuntimeOptions,
   type SelectorValue,
   type WrapRich,
 } from './runtime.ts';
@@ -186,10 +187,10 @@ g[INSTANCE] = marker;
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
   const { wrapRich, timeZone } = options;
   const { locales, sourceLocale, fallbacks = {} } = options.catalog;
-  const extensions = {
-    functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
-    markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
-  };
+  const functions = options.functions as Readonly<Record<string, MessageFunction>> | undefined;
+  const markup = options.markup as
+    | Readonly<Record<string, (children: unknown) => unknown>>
+    | undefined;
   // By object, not name: two packages may each own a `common`, and each `t` gets its own.
   const ids = new WeakMap<Loadable, number>();
   const registered = new Map<number, Loadable>();
@@ -212,13 +213,13 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
   const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
     if (!rt) {
-      rt = createRuntime(
-        locale,
-        wrapRich as WrapRich<unknown> | undefined,
-        extensions,
-        fallbacks[locale],
+      rt = createRuntime(locale, {
+        wrapRich: wrapRich as WrapRich<unknown> | undefined,
+        functions,
+        markup,
+        fallbacks: fallbacks[locale],
         timeZone,
-      );
+      });
       runtimes.set(locale, rt);
     }
     return rt;

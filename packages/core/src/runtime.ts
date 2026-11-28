@@ -30,18 +30,28 @@ export interface MessageRuntime {
 export type WrapRich<Node> = (parts: Array<Node | string>) => Node;
 
 /** A message function beyond the built-in ones, declared in the config's `functions`. */
-export type MessageFunction = (
-  value: unknown,
-  options: Readonly<Record<string, unknown>>,
-  locale: string,
-) => string;
+export type MessageFunction = (input: MessageFunctionInput) => string;
+
+/** A call's value and options, `{$x :name opt=…}`, and its locale. */
+export interface MessageFunctionInput {
+  readonly value: unknown;
+  readonly options: Readonly<Record<string, unknown>>;
+  readonly locale: string;
+  /** `locale` then its fallbacks: pass it to `Intl`, which may lack `locale`. */
+  readonly locales: ReadonlyArray<string>;
+}
 
 /** Renders markup that a call does not pass a callback for, declared in the config's `markup`. */
 type MarkupRenderer = (children: unknown) => unknown;
 
-export interface RuntimeExtensions {
+export interface RuntimeOptions {
+  readonly wrapRich?: WrapRich<unknown> | undefined;
   readonly functions?: Readonly<Record<string, MessageFunction>> | undefined;
   readonly markup?: Readonly<Record<string, MarkupRenderer>> | undefined;
+  /** Locales `Intl` tries when it has no data for `locale`, such as `fur` in browsers. */
+  readonly fallbacks?: ReadonlyArray<string> | undefined;
+  /** Dates' zone unless a message sets its own; the host's when omitted. */
+  readonly timeZone?: string | undefined;
 }
 
 const NUMBER_FNS = new Set(['number', 'integer', 'currency', 'percent', 'unit']);
@@ -190,14 +200,11 @@ function intl<K extends IntlName>(name: K): (typeof Intl)[K] {
 /** Formatters kept per locale. A catalog's constant options need far fewer. */
 const CACHE_SIZE = 256;
 
+const asParts: WrapRich<unknown> = (parts) => parts;
+
 export function createRuntime(
   locale: string,
-  wrapRich: WrapRich<unknown> = (parts) => parts,
-  extensions: RuntimeExtensions = {},
-  /** Locales `Intl` tries when it has no data for `locale`, such as `fur` in browsers. */
-  fallbacks: ReadonlyArray<string> = [],
-  /** Dates' zone unless a message sets its own; the host's when omitted. */
-  timeZone?: string,
+  { wrapRich = asParts, fallbacks = [], timeZone, ...extensions }: RuntimeOptions = {},
 ): MessageRuntime {
   const tags = [locale, ...fallbacks];
   const zone: Intl.DateTimeFormatOptions = timeZone === undefined ? {} : { timeZone };
@@ -281,7 +288,7 @@ export function createRuntime(
       }
       const custom = functions.get(name);
       if (custom) {
-        return custom(value, options, locale);
+        return custom({ value, options, locale, locales: tags });
       }
       throw new Error(`[parla] unknown message function :${name}`);
     },
