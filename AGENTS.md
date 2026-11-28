@@ -94,7 +94,8 @@ TypeScript **7.x**, `oxlint-tsgolint` on the same major; strict flags in `tsconf
 - **Never widen a signature for a test; adapt the test.**
 - **Consumers may keep `skipLibCheck: false`**: so does this repo, every type test, and
   `lint:lib-check`, which type-checks the built packages and a generated catalog as an app would.
-- **Named exports only.**
+- **Named exports only**, but `@parlajs/x18n-plugin` default-exports its plugin: x18n's JSON and
+  YAML configs load a plugin by name.
 - **Build configs set `noCheck`**: a green build proves nothing.
 
 ## Tests
