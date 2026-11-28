@@ -1,0 +1,68 @@
+---
+description: The parla CLI and the Vite plugin, from @parlajs/compiler.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# CLI and Vite plugin
+
+<Badge>Core</Badge> `pnpm add -D @parlajs/compiler`. Builds catalogs into typed namespaces;
+[ICU](/formats/icu) and [MF2](/formats/mf2) are built in.
+
+## `parla`
+
+```
+parla build [--watch]   catalog.js, namespaces/, messages/
+parla check [--json]    validate; exit 1 on errors
+            [--strict]  warnings fail too
+```
+
+| Option                | Commands | Default                              |
+| --------------------- | -------- | ------------------------------------ |
+| `-c, --config <file>` | both     | `parla.config.ts`                    |
+| `-w, --watch`         | `build`  | Rebuilds on catalog or config change |
+| `--strict`            | both     | Warnings exit 1                      |
+| `--json`              | `check`  | Diagnostics as JSON                  |
+
+Each diagnostic has a `level`, a `code`, and `namespace`, `locale`, `key`, `file`.
+
+| Code                  | Level                                      |
+| --------------------- | ------------------------------------------ |
+| `invalid-syntax`      | error                                      |
+| `invalid-resource`    | error                                      |
+| `key-conflict`        | error: a key is both a message and a group |
+| `param-mismatch`      | error                                      |
+| `unknown-format`      | error                                      |
+| `missing-file`        | error in the source locale, else warning   |
+| `missing-translation` | warning                                    |
+| `unknown-key`         | warning                                    |
+| `namespace-name`      | warning: the name is no identifier         |
+
+## `@parlajs/compiler/vite`
+
+```ts
+import { parla } from '@parlajs/compiler/vite';
+
+export default defineConfig({ plugins: [parla(), react()] });
+```
+
+| Option   |                                                                                                      |
+| -------- | ---------------------------------------------------------------------------------------------------- |
+| `root`   | Folder holding the config; default Vite's root. An owner package's, in a [monorepo](/core/monorepos) |
+| `config` | Config file, relative to `root`                                                                      |
+
+It builds on start and on every catalog or config change, so a Vite app needs no
+`parla build --watch`. Errors fail `vite build`. Custom formats go in the config's
+[`formats`](/core/config#formats).
+
+## From code
+
+`@parlajs/compiler` exports `build`, `loadConfig`, `compileMessage`, `defineConfig`, `defaultFormats`
+and the `FormatAdapter` type:
+
+```ts
+import { build, formatDiagnostic } from '@parlajs/compiler';
+
+const { diagnostics, written } = await build({ cwd: 'packages/i18n', write: false });
+```

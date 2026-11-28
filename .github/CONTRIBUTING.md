@@ -2,7 +2,7 @@
 
 ```bash
 pnpm install && pnpm build:packages
-pnpm check-all   # every check CI runs; run it before a pull request
+pnpm validate   # every check CI runs; run it before a pull request
 ```
 
 A change to a published package carries a changeset (`pnpm exec changeset`); its first line is a

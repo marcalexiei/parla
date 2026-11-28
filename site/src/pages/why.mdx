@@ -1,0 +1,45 @@
+---
+description: Why Parla exists, and what other i18n libraries have and lack.
+showAskAi: false
+---
+
+# Why Parla
+
+A missing key, a missing param, a namespace read before it loads: each renders a blank, and
+TypeScript could catch each. Parla makes the types match what runs.
+
+## The reasons
+
+- **`t` is proof of loading.** It holds only the loaded namespaces; reading another is a type error.
+  Namespaces are imports, so types and bundle follow the same imports.
+- **Params come from the message**: a plural's number, a select's params per branch, a callback per
+  rich-text tag.
+- **One way to call each thing.** `load` and `useParla` always take a list, so tooling such as
+  [x18n](/tooling/x18n) reads one shape.
+- **No flash on switch.** `setLocale` loads first, then switches.
+- **ICU and MessageFormat 2**, per namespace.
+- **No locale data to ship.** Formatting uses `Intl`.
+- **Monorepos.** One package owns each namespace; apps import it.
+
+## What each library has and lacks
+
+From each library's docs and [parla-benchmark](https://github.com/marcalexiei/parla-benchmark).
+
+|                  | Parla                                                     | i18next                                                       | react-intl                                     | Lingui                                | Paraglide                                                | typesafe-i18n                |
+| ---------------- | --------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------- | -------------------------------------------------------- | ---------------------------- |
+| Typed keys       | Yes                                                       | Opt-in, `CustomTypeOptions`                                   | Opt-in, augmented `ids`                        | Opt-in, augmented `Register`          | Yes, generated functions                                 | Yes, generated               |
+| Typed params     | Yes, from the message; selects per branch                 | Inferred from `as const` resources, ~100k type instantiations | Opt-in, per call; not read from the ICU string | No: `Record<string, unknown>`         | Names                                                    | Yes                          |
+| Typed loading    | `t` has only loaded namespaces                            | No: suspends, or a `ready` flag                               | No                                             | No                                    | No loading: messages are imports                         | No: empty string before load |
+| Lazy chunks      | Per locale × namespace, built in                          | Backends, wired by the app                                    | Not documented                                 | Per locale, app code                  | Every locale per message; per-locale builds experimental | Per locale, generated        |
+| Syntax           | ICU and MF2, per namespace                                | Own; ICU and MF2 via plugins                                  | ICU                                            | ICU                                   | inlang's, MF2-inspired; ICU via plugin                   | Own                          |
+| Rich text        | Each tag a typed callback; node type follows the instance | `<Trans>`; tag typing not documented                          | Value functions; typed by opt-in generics      | Components; tag typing not documented | Markup names type-checked (React adapter)                | Not built in                 |
+| Monorepos        | One owner package per namespace, imported                 | Per-package namespace types                                   | Libraries take the app's `intl`                | Catalog per app, or merged            | Shared project, each package compiles                    | Not documented               |
+| Runtime, gzip    | 2.7 kB with React                                         | 18.2 kB with react-i18next                                    | 14.6 kB                                        | 4.4 kB                                | 4.2 kB, no React binding                                 | 1.6 kB                       |
+| Switching locale | Loads first, then switches; never suspends                | Suspends while loading                                        | Recreate the `intl` object                     | App code: load, then activate         | Reloads the page by default                              | Not documented               |
+
+Sizes exclude React; see [Benchmarks](/benchmarks).
+
+Each library gets part of this right; none types keys, params and loading at once. No idea here is
+new: the [launch post](/blog/introducing-parla) credits each.
+
+Parla is built with the help of AI coding tools.

@@ -33,12 +33,13 @@ await parla.setLocale('it'); // loads what's loaded so far, then switches
 | `escapeHtml(text)`          | Escapes `& < > " '`, for `createParla({ escape })`                   |
 
 `createParla` also takes `functions` and `markup`, required with every name the config's
-`functions` and `markup` declare:
+`functions` and `markup` declare. A function gets one object: `value`, `options`, `locale`, and `locales`, the locale then its
+fallbacks, for `Intl`:
 
 ```ts
 createParla({
   catalog,
-  functions: { capitalize: (value, options, locale) => String(value).toLocaleUpperCase(locale) },
+  functions: { capitalize: ({ value, locale }) => String(value).toLocaleUpperCase(locale) },
   markup: { strong: (children) => `**${children}**` }, // a call's own `strong` wins
 });
 ```

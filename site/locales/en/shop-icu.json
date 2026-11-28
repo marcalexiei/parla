@@ -1,0 +1,5 @@
+{
+  "items": "{count, plural, =0 {Your cart is empty} one {# item} other {# items}}",
+  "rank": "You finished {place, selectordinal, one {#st} two {#nd} few {#rd} other {#th}}",
+  "delivery": "{method, select, pickup {Collect it from {store}} courier {{courier} delivers it on {day, date, long}} other {Ships soon}}"
+}

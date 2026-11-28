@@ -1,0 +1,55 @@
+---
+description: Markup in messages becomes a typed callback; its node type follows the instance.
+showAskAi: false
+---
+
+# Rich text
+
+:::code-group
+
+```json [MF2]
+{ "terms": "Accept the {#link}terms{/link}, {#strong}today{/strong}." }
+```
+
+```json [ICU]
+{ "terms": "Accept the <link>terms</link>, <strong>today</strong>." }
+```
+
+:::
+
+Each tag is a param: a function from its children to a node, a `string` in core:
+
+```ts
+import { createParla } from '@parlajs/core';
+
+const parla = createParla({ catalog, markup: { strong: (c) => `**${c}**` } });
+const t = await parla.load([home]);
+t.home.terms({ link: (c) => `[${c}](https://example.com/terms)` }); // a string
+```
+
+The call leaves out `strong`: the config's `markup` declares it, so the instance renders it.
+
+```ts
+// parla.config.ts
+markup: ['strong'],
+```
+
+| Markup                  | Param                                |
+| ----------------------- | ------------------------------------ |
+| In the message          | Required: `link: (children) => Node` |
+| Also in config `markup` | Optional; a call's own wins          |
+| Self-closing, `{#br/}`  | Its callback gets empty children     |
+
+## The node follows the instance
+
+`createParla`'s `wrapRich(parts)` joins parts into one node, making a `Parla<Node>` whose `t` is a
+`Translations<typeof ns, Node>`. Core joins strings; [framework adapters](/adapters/writing-an-adapter)
+pass their own.
+
+| Instance                            | `Node`      | `t.home.terms(…)` returns |
+| ----------------------------------- | ----------- | ------------------------- |
+| `createParla` from `@parlajs/core`  | `string`    | a `string`                |
+| `createParla` from `@parlajs/react` | `ReactNode` | a `ReactNode`             |
+
+Messages without markup return `string` in both, so one namespace serves a React app and, say,
+emails. Live: [React](/adapters/react#rich-text).

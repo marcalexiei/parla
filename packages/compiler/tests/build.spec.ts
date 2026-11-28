@@ -639,7 +639,7 @@ describe('custom functions and default markup', () => {
     const parla = createParla({
       catalog,
       functions: {
-        capitalize: (value: unknown) =>
+        capitalize: ({ value }: { value: unknown }) =>
           String(value).charAt(0).toUpperCase() + String(value).slice(1),
       },
       markup: { strong: (children: unknown) => `**${String(children)}**` },
@@ -662,7 +662,7 @@ import { catalog } from './parla/catalog.js';
 import { app } from './parla/namespaces/app.js';
 export const parla = createParla({
   catalog,
-  functions: { capitalize: (v) => String(v) },
+  functions: { capitalize: ({ value }) => String(value) },
   markup: { strong: (c) => c },
 });
 const { app: t } = await parla.load([app]);
@@ -672,7 +672,7 @@ t.link();
 // @ts-expect-error a declared function needs its implementation
 createParla({ catalog, markup: { strong: (c) => c } });
 // @ts-expect-error declared markup needs its renderer
-createParla({ catalog, functions: { capitalize: (v) => String(v) }, markup: {} });
+createParla({ catalog, functions: { capitalize: ({ value }) => String(value) }, markup: {} });
 `,
     );
     expect(typecheck(dir)).toBe('');

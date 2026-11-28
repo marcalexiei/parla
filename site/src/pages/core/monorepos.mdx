@@ -1,0 +1,72 @@
+---
+description: One package owns each namespace; every other package imports its built objects.
+showAskAi: false
+---
+
+# Monorepos
+
+One package owns and builds each namespace; others import the built objects. Usually one package
+owns them all:
+
+```
+packages/i18n/
+  package.json
+  parla.config.ts
+  locales/{en,it,de}/*.json
+  src/parla/            ← built here, once
+apps/web/               ← imports @acme/i18n
+packages/checkout-ui/   ← imports @acme/i18n
+```
+
+The owner exports its `outDir`:
+
+```json
+{
+  "name": "@acme/i18n",
+  "exports": {
+    "./catalog.js": "./src/parla/catalog.js",
+    "./namespaces/*": "./src/parla/namespaces/*"
+  }
+}
+```
+
+An app imports its catalog and the namespaces it reads:
+
+```ts
+import { catalog } from '@acme/i18n/catalog.js';
+import { checkout } from '@acme/i18n/namespaces/checkout.js';
+
+const parla = createParla({ catalog });
+const t = await parla.load([checkout]);
+```
+
+## Building the owner
+
+| Setup       | How                                                                      |
+| ----------- | ------------------------------------------------------------------------ |
+| Vite app    | `parla({ root: '../../packages/i18n' })`: rebuilds on catalog change     |
+| Other tools | `parla build` in the owner first, e.g. Turborepo `dependsOn: ['^build']` |
+| Published   | The owner ships its `outDir` and peers on `@parlajs/react` or `core`     |
+
+## Subsets
+
+A package ships only the [namespaces](/core/namespaces) it imports:
+
+```ts
+// packages/checkout-ui
+import { checkout } from '@acme/i18n/namespaces/checkout.js';
+import { common } from '@acme/i18n/namespaces/common.js';
+```
+
+## Rules
+
+| Rule                                                     | Because                                                                           |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| The owner fixes locales and fallbacks                    | An app may have fewer locales, not more                                           |
+| A namespace built without an app's locale fails          | In types, and at its first `load`                                                 |
+| The owner's catalog carries its `functions` and `markup` | `createParla` asks for each                                                       |
+| An app that owns namespaces too builds its own catalog   | Declare the owner's `functions` and `markup` in it as well                        |
+| Two namespaces of one name load apart                    | Keyed by object: an app's `common` beside a package's, or two copies of the owner |
+| One `load` of both throws                                | `t` holds one per name                                                            |
+
+Two catalogs in one program add up their locales, functions and tags.
