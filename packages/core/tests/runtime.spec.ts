@@ -103,6 +103,13 @@ describe(createRuntime, () => {
     expect(rt.pick([], [['a']])).toBe(0);
   });
 
+  it('matches a number exactly only against a number literal', () => {
+    expect(rt.pick([rt.sn(-2)], [['-2'], [null]])).toBe(0);
+    expect(rt.pick([rt.sn(0.5)], [['0.5'], [null]])).toBe(0);
+    expect(rt.pick([rt.sn(Infinity)], [['Infinity'], [null]])).toBe(1);
+    expect(rt.pick([rt.sn(0, { select: 'exact' })], [[''], ['0']])).toBe(1);
+  });
+
   it('lets the first differing key decide between variants, then the earlier variant', () => {
     const variants = [
       ['one', null],

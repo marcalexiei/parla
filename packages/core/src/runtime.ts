@@ -167,10 +167,11 @@ function scoreOf(
         return Infinity;
       }
       rank = 0;
-    } else if (key !== '' && Number(key) === sel.n) {
-      rank = 0;
     } else if (key === sel.cat) {
       rank = 1;
+      // A letter starts a category, never a number: parsing costs more than the rest of `pick`.
+    } else if ((key?.codePointAt(0) ?? 65) < 65 && Number(key) === sel.n) {
+      rank = 0;
     } else {
       return Infinity;
     }
