@@ -25,4 +25,5 @@ export default defineConfig({
 | `configs` | every `**/parla.config.ts` | Configs to read, relative to x18n's root                |
 
 A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A select
-whose branches need different params is left to TypeScript, which checks it per branch.
+whose branches need different params is left to TypeScript, which checks it per branch. A catalog
+that is not JSON needs an x18n format for its extension too: x18n reads and writes it.

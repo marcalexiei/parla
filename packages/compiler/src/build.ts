@@ -143,15 +143,16 @@ function readCatalog(
   if (!existsSync(file)) {
     return { file, entries, exists: false };
   }
-  let json: unknown;
+  let tree: unknown;
   try {
-    json = JSON.parse(readFileSync(file, 'utf8'));
+    const text = readFileSync(file, 'utf8');
+    tree = adapter.parseFile ? adapter.parseFile(text) : JSON.parse(text);
   } catch (error) {
     diag({ level: 'error', code: 'invalid-resource', message: (error as Error).message, file });
     return { file, entries, exists: true };
   }
   const flat = new Map<string, string>();
-  flatten(json, '', flat, (key, message) => {
+  flatten(tree, '', flat, (key, message) => {
     diag({ level: 'error', code: 'invalid-resource', key, message, file });
   });
   const keys = [...flat.keys()].toSorted();

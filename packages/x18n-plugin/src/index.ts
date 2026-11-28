@@ -381,10 +381,18 @@ function* leaves(catalog: Catalog, prefix = ''): Generator<[string, string]> {
   }
 }
 
-/** A catalog's JSON; an unreadable one counts as empty. */
-async function readCatalog(readFile: ReadFile, path: string): Promise<Catalog> {
+/** A catalog's messages, read as its format reads them; an unreadable one counts as empty. */
+async function readCatalog(
+  readFile: ReadFile,
+  path: string,
+  adapter: FormatAdapter | undefined,
+): Promise<Catalog> {
   try {
-    return JSON.parse((await readFile(path)) ?? '{}') as Catalog;
+    const text = await readFile(path);
+    if (text === undefined) {
+      return {};
+    }
+    return (adapter?.parseFile ? adapter.parseFile(text) : JSON.parse(text)) as Catalog;
   } catch {
     return {};
   }
@@ -426,7 +434,7 @@ async function declare(
     }),
   );
   const catalogs = await Promise.all(
-    sources.map(async ({ ns, locale }) => readCatalog(readFile, ns.file(locale))),
+    sources.map(async ({ ns, adapter, locale }) => readCatalog(readFile, ns.file(locale), adapter)),
   );
   for (const [index, { config, ns, adapter, own, locale }] of sources.entries()) {
     for (const [key, value] of leaves(catalogs[index] ?? {})) {
