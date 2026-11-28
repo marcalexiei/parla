@@ -42,18 +42,20 @@ import { parla } from '@parlajs/compiler/vite';
 export default defineConfig({ plugins: [parla(), react()] });
 ```
 
-| Option    |                                                                                                        |
-| --------- | ------------------------------------------------------------------------------------------------------ |
-| `root`    | Folder holding the config; default Vite's root. An owner package's, in a [monorepo](/guides/monorepos) |
-| `config`  | Config file, relative to `root`                                                                        |
-| `formats` | Extra format adapters, by name                                                                         |
+| Option   |                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------ |
+| `root`   | Folder holding the config; default Vite's root. An owner package's, in a [monorepo](/guides/monorepos) |
+| `config` | Config file, relative to `root`                                                                        |
+
+Custom formats go in the config, as [`formats`](/reference/config#formats).
 
 It builds on start and on every catalog or config change, in `vite` and `vite build --watch`, so a
 Vite app needs no `parla build --watch`. Diagnostics print as warnings; errors fail `vite build`.
 
 ## From code
 
-`@parlajs/compiler` exports `build`, `loadConfig`, `compileMessage` and `defineConfig`:
+`@parlajs/compiler` exports `build`, `loadConfig`, `compileMessage`, `defineConfig`, `defaultFormats` and the
+`FormatAdapter` type:
 
 ```ts
 import { build, formatDiagnostic } from '@parlajs/compiler';

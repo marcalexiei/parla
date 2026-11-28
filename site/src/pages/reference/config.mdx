@@ -30,13 +30,14 @@ export default defineConfig({
 | `namespaces`   | `Record<name, { format, path }>`               | `{}`                                                   |
 | `functions`    | `Record<name, 'string' \| 'number' \| 'date'>` | `{}`                                                   |
 | `markup`       | `string[]`: tags a call may leave out          | `[]`                                                   |
+| `formats`      | `Record<name, FormatAdapter>`                  | `{}`; `icu` and `mf2` are built in                     |
 | `runtime`      | Module the types import and augment            | `@parlajs/react` if a dependency, else `@parlajs/core` |
 
 ## `namespaces`
 
 | Field    |                                                              |
 | -------- | ------------------------------------------------------------ |
-| `format` | `'icu'` or `'mf2'`                                           |
+| `format` | `'icu'`, `'mf2'` or a key of `formats`                       |
 | `path`   | Catalog path relative to the config, with a `{locale}` token |
 
 A name is letters, digits, `_`, `-` or inner dots: it names files. Make it an identifier, see
@@ -54,3 +55,25 @@ redefined. See [Your own functions](/guides/formatting#your-own-functions).
 
 Tags that `createParla({ markup })` renders, so a call may leave them out. See
 [Rich text](/guides/rich-text).
+
+## `formats`
+
+Message syntaxes beyond `icu` and `mf2`. A `FormatAdapter` parses one message into the
+[MF2 data model](https://messageformat.unicode.org/docs/reference/data-model/), which is all the
+compiler reads; a namespace's `format` names one. The CLI, the Vite plugin and
+[x18n](/reference/x18n) read it from here.
+
+```ts
+import { defineConfig, type FormatAdapter } from '@parlajs/compiler';
+
+// Every message as plain text: no params, no markup.
+const text: FormatAdapter = {
+  name: 'text',
+  parse: (source) => ({ type: 'message', declarations: [], pattern: [source] }),
+};
+
+export default defineConfig({
+  formats: { text },
+  namespaces: { legal: { format: 'text', path: 'locales/{locale}/legal.json' } },
+});
+```
