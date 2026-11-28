@@ -38,6 +38,8 @@ createRoot(root).render(
 
 - A failed download reaches the nearest error boundary; a failed switch rejects `setLocale`.
 - The hooks throw outside `<ParlaProvider>`.
+- In Server Components (the `react-server` condition) there are no hooks: `await parla.load([…])` in
+  an async component.
 
 ## Loading
 

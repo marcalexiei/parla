@@ -23,13 +23,14 @@ t.checkout.cart.items({ count: 3 }); // "3 articoli"
 
 ## `createParla(options)`
 
-| Option      |                                                             |
-| ----------- | ----------------------------------------------------------- |
-| `catalog`   | `catalog.js`, written by the build                          |
-| `locale`    | The first locale; default the source locale                 |
-| `functions` | Required, with every name the config's `functions` declares |
-| `markup`    | Required, with every name the config's `markup` declares    |
-| `wrapRich`  | Joins rich parts into one node; set by framework adapters   |
+| Option      |                                                                          |
+| ----------- | ------------------------------------------------------------------------ |
+| `catalog`   | `catalog.js`, written by the build                                       |
+| `locale`    | The first locale; default the source locale                              |
+| `timeZone`  | IANA zone dates format in, unless a message sets one; default the host's |
+| `functions` | Required, with every name the config's `functions` declares              |
+| `markup`    | Required, with every name the config's `markup` declares                 |
+| `wrapRich`  | Joins rich parts into one node; set by framework adapters                |
 
 ## `Parla<Node>`
 
@@ -50,6 +51,7 @@ suspending.
 | Export                                                 |                                                                                        |
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | `matchLocale(requested, supported, fallback)`          | Best supported locale from a preference list                                           |
+| `parseAcceptLanguage(header)`                          | An `Accept-Language` header's tags by weight, for `matchLocale`                        |
 | `Translations<typeof ns>`                              | The type of `t` for those namespaces; `Node` is `string`                               |
 | `Namespace<Name, Kind, L>`                             | A namespace object: `{ name, load }`                                                   |
 | `Catalog`                                              | `{ locales, sourceLocale, fallbacks? }`; `Intl` follows `fallbacks`                    |
