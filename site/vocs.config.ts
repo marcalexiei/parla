@@ -46,6 +46,7 @@ export default defineConfig({
         { text: 'Fallbacks', link: '/core/fallbacks' },
         { text: 'Monorepos', link: '/core/monorepos' },
         { text: 'Runtimes and React Native', link: '/core/runtimes' },
+        { text: 'Server', link: '/core/server' },
         {
           text: 'Reference',
           items: [

@@ -1,0 +1,109 @@
+---
+description: One instance per locale, preloaded at startup; never setLocale on a shared one.
+showAskAi: false
+---
+
+# Server
+
+Node runs the generated chunks without a bundler, and nothing in `@parlajs/core` needs a browser.
+
+## One instance per locale
+
+Create one instance per locale at startup and preload what the server uses:
+
+```ts
+import { createParla, matchLocale, parseAcceptLanguage } from '@parlajs/core';
+
+import { catalog } from './parla/catalog.js';
+import { emails } from './parla/namespaces/emails.js';
+import { errors } from './parla/namespaces/errors.js';
+
+const instances = new Map(
+  await Promise.all(
+    catalog.locales.map(async (locale) => {
+      const parla = createParla({ catalog, locale, timeZone: 'Europe/Rome' });
+      await parla.load([emails, errors]);
+      return [locale, parla] as const;
+    }),
+  ),
+);
+
+export function parlaFor(acceptLanguage: string | null | undefined) {
+  const requested = parseAcceptLanguage(acceptLanguage);
+  return instances.get(matchLocale(requested, catalog.locales, catalog.sourceLocale))!;
+}
+```
+
+```ts
+const parla = parlaFor(req.headers['accept-language']);
+const t = await parla.load([errors]); // loaded at startup: resolves at once
+res.setHeader('content-language', parla.locale);
+res.end(t.errors.notFound({ path: req.url ?? '' }));
+```
+
+:::warning
+Never `setLocale` on a shared instance: it switches every request at once, so concurrent requests
+in `it` and `de` both answer in German.
+:::
+
+An instance per request also works, at ~80 µs a request instead of ~2 µs: each builds its own `Intl`
+formatters. Node's module cache imports each chunk once either way.
+
+## Time zones
+
+Dates format in the host's zone, rarely the reader's. `createParla({ timeZone })` sets the zone; a
+message's own `timeZone` option still wins. For a zone per reader, keep an instance per locale and
+zone.
+
+## Server rendering
+
+Render with the request's instance and put its locale in `<html lang>`. The client creates its
+instance in that locale and zone; otherwise hydration fails and re-renders in the source locale.
+
+```tsx
+// server: createParla from @parlajs/react, so rich text is React nodes
+renderToPipeableStream(
+  <html lang={parla.locale}>
+    <body>
+      <ParlaProvider parla={parla}>
+        <App />
+      </ParlaProvider>
+    </body>
+  </html>,
+);
+```
+
+```tsx
+// client
+const parla = createParla({
+  catalog,
+  locale: matchLocale([document.documentElement.lang], catalog.locales, catalog.sourceLocale),
+  timeZone: 'Europe/Rome',
+});
+hydrateRoot(document, <Root parla={parla} />);
+```
+
+The client need not preload: while `useParla` suspends, React keeps the server's HTML.
+`renderToString` does not wait, so its instance must be preloaded.
+
+## Server Components
+
+Under the `react-server` condition, `@parlajs/react` has `createParla` and the types, no hooks or
+provider. Load in the component:
+
+```tsx
+export default async function Checkout({ parla }: { parla: Parla }) {
+  const t = await parla.load([checkout]);
+  return <h1>{t.checkout.title()}</h1>;
+}
+```
+
+## HTML emails
+
+String markup inserts params as they are. Escape each string param where text becomes HTML:
+
+```ts
+const html = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+t.emails.welcome({ name: html(user.name), b: (c) => `<b>${c}</b>` });
+```
