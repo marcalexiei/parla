@@ -20,7 +20,7 @@
     "site:catalogs": "pnpm --filter @parlajs/site run catalogs",
     "site:dev": "pnpm run build:packages && pnpm --filter @parlajs/site run dev",
     "site:build": "pnpm run build:packages && pnpm --filter @parlajs/site run build",
-    "check-all": "node scripts/check-all.ts",
+    "validate": "node scripts/validate.ts",
     "pack:all": "pnpm run build:packages && rm -rf .packs && pnpm -r --filter \"./packages/*\" exec pnpm pack --pack-destination ../../.packs",
     "release": "pnpm run build:packages && changeset publish"
   },
