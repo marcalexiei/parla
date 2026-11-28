@@ -1,6 +1,6 @@
 // x18n's JS scanner does not read accessor chains yet, so Parla's `t.cart.items()` needs its own.
 import { compileMessage, defaultFormats, loadConfig, ModuleScope } from '@parlajs/compiler';
-import type { CustomFunctions, ResolvedConfig } from '@parlajs/compiler';
+import type { CustomFunctions, FormatAdapter, ResolvedConfig } from '@parlajs/compiler';
 import type { Plugin, Scanner } from '@x18n/core';
 import { parseSync, Visitor } from 'oxc-parser';
 
@@ -18,6 +18,8 @@ type ReadFile = (path: string) => Promise<string | undefined>;
 /** What the configs declare, filled once `configFinder` has loaded them. */
 interface Declared {
   readonly functions: Record<string, CustomFunctions[string]>;
+  /** Each message of a namespace in a config's own format, to its parser. */
+  readonly syntaxes: Map<string, FormatAdapter>;
   /** The configs' `markup`, which a call may leave out. */
   readonly markup: Array<string>;
   /** `ns:key` of each `:string` select whose keys need different params. */
@@ -316,20 +318,20 @@ function accessorScanner(callees: ReadonlySet<string>, declared: Declared): Scan
 }
 
 // A namespace's format is in parla's config, which a placeholder syntax never sees: only MF2
-// writes `{$name}` or starts with a declaration, and ICU is tried first for the rest.
+// writes `{$name}` or starts with a declaration, and ICU is tried first. A config's own formats are
+// known for the messages `declare` read.
 const MF2_ONLY = /\{\s*\$|^\s*\.(?:input|local|match)\b/;
 
 /** Params and markup a message reads, through parla's own parsers. Throws on invalid syntax. */
-function messageNames(value: string, functions: CustomFunctions): Array<string> {
-  const formats = MF2_ONLY.test(value) ? ['mf2'] : ['icu', 'mf2'];
+function messageNames(value: string, declared: Declared): Array<string> {
+  const own = declared.syntaxes.get(value);
+  const builtIn = (MF2_ONLY.test(value) ? ['mf2'] : ['icu', 'mf2']).flatMap(
+    (id) => defaultFormats[id] ?? [],
+  );
   let firstError: unknown;
-  for (const id of formats) {
-    const format = defaultFormats[id];
-    if (!format) {
-      continue;
-    }
+  for (const format of own ? [own] : builtIn) {
     try {
-      const { info } = compileMessage(format.parse(value), new ModuleScope(), functions);
+      const { info } = compileMessage(format.parse(value), new ModuleScope(), declared.functions);
       return [...new Set([...info.params.keys(), ...info.markup])];
     } catch (error) {
       firstError ??= error;
@@ -345,7 +347,7 @@ const placeholders = (declared: Declared): PlaceholderSyntax => ({
   find(value): Array<Placeholder> {
     let names: Array<string>;
     try {
-      names = messageNames(value, declared.functions);
+      names = messageNames(value, declared);
     } catch {
       return [];
     }
@@ -356,7 +358,7 @@ const placeholders = (declared: Declared): PlaceholderSyntax => ({
   },
   validate(value): Array<string> {
     try {
-      messageNames(value, declared.functions);
+      messageNames(value, declared);
       return [];
     } catch (error) {
       return [(error as Error).message];
@@ -389,8 +391,11 @@ async function readCatalog(readFile: ReadFile, path: string): Promise<Catalog> {
 }
 
 /** Whether a message selects on keys that need different params. */
-function hasBranches(format: string, value: string, functions: CustomFunctions): boolean {
-  const adapter = defaultFormats[format];
+function hasBranches(
+  adapter: FormatAdapter | undefined,
+  value: string,
+  functions: CustomFunctions,
+): boolean {
   try {
     return Boolean(
       adapter && compileMessage(adapter.parse(value), new ModuleScope(), functions).info.branches,
@@ -411,13 +416,24 @@ async function declare(
     Object.assign(declared.functions, config.functions);
     declared.markup.push(...config.markup.filter((tag) => !declared.markup.includes(tag)));
   }
-  const sources = configs.flatMap((config) => config.namespaces.map((ns) => ({ config, ns })));
-  const catalogs = await Promise.all(
-    sources.map(async ({ config, ns }) => readCatalog(readFile, ns.file(config.sourceLocale))),
+  // Every locale of a namespace in its config's own format; the source locale of the rest.
+  const sources = configs.flatMap((config) =>
+    config.namespaces.flatMap((ns) => {
+      const adapter = config.formats[ns.format];
+      const own = adapter !== defaultFormats[ns.format];
+      const locales = own ? config.locales : [config.sourceLocale];
+      return locales.map((locale) => ({ config, ns, adapter, own, locale }));
+    }),
   );
-  for (const [index, { config, ns }] of sources.entries()) {
+  const catalogs = await Promise.all(
+    sources.map(async ({ ns, locale }) => readCatalog(readFile, ns.file(locale))),
+  );
+  for (const [index, { config, ns, adapter, own, locale }] of sources.entries()) {
     for (const [key, value] of leaves(catalogs[index] ?? {})) {
-      if (hasBranches(ns.format, value, config.functions)) {
+      if (own && adapter) {
+        declared.syntaxes.set(value, adapter);
+      }
+      if (locale === config.sourceLocale && hasBranches(adapter, value, config.functions)) {
         declared.branchy.add(`${ns.name}:${key}`);
       }
     }
@@ -475,7 +491,12 @@ function configFinder(
 
 /** The x18n plugin: Parla's catalogs, `t.ns.key()` usages, and ICU and MF2 params. */
 export default function parla(options: ParlaOptions = {}): Plugin {
-  const declared: Declared = { functions: {}, markup: [], branchy: new Set() };
+  const declared: Declared = {
+    functions: {},
+    syntaxes: new Map(),
+    markup: [],
+    branchy: new Set(),
+  };
   return {
     name: 'parla',
     enforce: 'pre',
