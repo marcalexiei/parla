@@ -1,6 +1,6 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import { createParla, matchLocale } from '../src/index.ts';
+import { createParla, matchLocale, parseAcceptLanguage } from '../src/index.ts';
 import type {
   Catalog,
   Loader,
@@ -320,5 +320,28 @@ describe(matchLocale, () => {
     expect(matchLocale(['pt-BR-x-foo'], ['pt-PT', 'pt-BR'], 'en')).toBe('pt-BR');
     expect(matchLocale(['pt-PT'], ['en', 'pt-BR'], 'en')).toBe('pt-BR');
     expect(matchLocale(['1234', 'fr'], ['en', 'it'], 'en')).toBe('en');
+  });
+});
+
+describe(parseAcceptLanguage, () => {
+  it('lists tags by weight, keeping the header order between equal weights', () => {
+    expect(parseAcceptLanguage('de-CH;q=0.5, fr;q=0.9, it ,en;Q=0.9')).toStrictEqual([
+      'it',
+      'fr',
+      'en',
+      'de-CH',
+    ]);
+  });
+
+  it('drops *, q=0, malformed weights and empty parts', () => {
+    expect(parseAcceptLanguage('*;q=0.8, en;q=0, , de;q=x, fr;level=1')).toStrictEqual(['fr']);
+    expect(parseAcceptLanguage('')).toStrictEqual([]);
+    expect(parseAcceptLanguage(null)).toStrictEqual([]);
+    expect(parseAcceptLanguage(undefined)).toStrictEqual([]);
+  });
+
+  it('feeds matchLocale', () => {
+    const header = 'pt-BR, it-IT;q=0.8, en;q=0.5';
+    expect(matchLocale(parseAcceptLanguage(header), ['en', 'it'], 'en')).toBe('it');
   });
 });

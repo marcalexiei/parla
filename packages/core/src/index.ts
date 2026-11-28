@@ -447,3 +447,21 @@ export function matchLocale<L extends string>(
   }
   return fallback;
 }
+
+/**
+ * The tags of an `Accept-Language` header, most wanted first, for `matchLocale`. Drops `*` and
+ * `q=0`; equal weights keep the header's order.
+ */
+export function parseAcceptLanguage(header: string | null | undefined): Array<string> {
+  const weighted: Array<{ tag: string; q: number }> = [];
+  for (const part of (header ?? '').split(',')) {
+    const [tag = '', ...params] = part.split(';').map((s) => s.trim());
+    const quality = params.find((param) => /^q=/i.test(param));
+    // A malformed weight is NaN, which fails `> 0` like `q=0`.
+    const weight = quality === undefined ? 1 : Number(quality.slice(2));
+    if (tag !== '' && tag !== '*' && weight > 0) {
+      weighted.push({ tag, q: weight });
+    }
+  }
+  return weighted.sort((a, b) => b.q - a.q).map(({ tag }) => tag);
+}
