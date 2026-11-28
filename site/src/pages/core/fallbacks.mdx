@@ -23,7 +23,8 @@ export default defineConfig({
 | `it`    | `en`        | The source locale is always last       |
 | `pt-BR` | `pt` → `en` | The base language, when it is a locale |
 
-`fallbacks` lists extra steps; the base language and the source locale are added.
+`fallbacks` lists extra steps; the base language and the source locale are added. `Intl` follows the
+same chain for numbers, dates and plurals: with `fur: ['it']`, Friulian formats like Italian.
 
 ## What the build reports
 

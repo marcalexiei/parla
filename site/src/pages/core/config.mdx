@@ -21,17 +21,17 @@ export default defineConfig({
 });
 ```
 
-| Option         | Type                                           | Default                                                |
-| -------------- | ---------------------------------------------- | ------------------------------------------------------ |
-| `locales`      | `string[]`: tags such as `en`, `pt-BR`         | `[sourceLocale]`                                       |
-| `sourceLocale` | `string`, one of `locales`                     | `'en'`                                                 |
-| `fallbacks`    | `Record<locale, locale[]>`                     | `{}`, see [Fallbacks](/core/fallbacks)                 |
-| `outDir`       | Relative to the config                         | `'src/parla'`                                          |
-| `namespaces`   | `Record<name, { format, path }>`               | `{}`                                                   |
-| `functions`    | `Record<name, 'string' \| 'number' \| 'date'>` | `{}`                                                   |
-| `markup`       | `string[]`: tags a call may leave out          | `[]`                                                   |
-| `formats`      | `Record<name, FormatAdapter>`                  | `{}`; `icu` and `mf2` are built in                     |
-| `runtime`      | Module the types import and augment            | `@parlajs/react` if a dependency, else `@parlajs/core` |
+| Option         | Type                                            | Default                                                |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------ |
+| `locales`      | `string[]`: tags such as `en`, `pt-BR`          | `[sourceLocale]`                                       |
+| `sourceLocale` | `string`, one of `locales`                      | `'en'`                                                 |
+| `fallbacks`    | `Record<locale, locale[]>`, for keys and `Intl` | `{}`, see [Fallbacks](/core/fallbacks)                 |
+| `outDir`       | Relative to the config                          | `'src/parla'`                                          |
+| `namespaces`   | `Record<name, { format, path }>`                | `{}`                                                   |
+| `functions`    | `Record<name, 'string' \| 'number' \| 'date'>`  | `{}`                                                   |
+| `markup`       | `string[]`: tags a call may leave out           | `[]`                                                   |
+| `formats`      | `Record<name, FormatAdapter>`                   | `{}`; `icu` and `mf2` are built in                     |
+| `runtime`      | Module the types import and augment             | `@parlajs/react` if a dependency, else `@parlajs/core` |
 
 ## `namespaces`
 

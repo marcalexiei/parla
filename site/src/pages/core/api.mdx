@@ -52,7 +52,7 @@ suspending.
 | `matchLocale(requested, supported, fallback)`          | Best supported locale from a preference list                                           |
 | `Translations<typeof ns>`                              | The type of `t` for those namespaces; `Node` is `string`                               |
 | `Namespace<Name, Kind, L>`                             | A namespace object: `{ name, load }`                                                   |
-| `Catalog`                                              | `{ locales, sourceLocale }`                                                            |
+| `Catalog`                                              | `{ locales, sourceLocale, fallbacks? }`; `Intl` follows `fallbacks`                    |
 | `Locale`                                               | The app's locales, once a catalog is built                                             |
 | `Text`                                                 | A message without params or markup: `() => string`                                     |
 | `WrapRich<Node>`                                       | Joins rich parts into one node; see [Writing an adapter](/adapters/writing-an-adapter) |
