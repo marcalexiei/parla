@@ -322,7 +322,7 @@ importers:
         specifier: catalog:default
         version: 5.1.1(@types/node@26.6.6)(@vitest/coverage-v8@5.1.1)(happy-dom@21.0.4)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
-  packages/x18n:
+  packages/x18n-plugin:
     dependencies:
       '@parlajs/compiler':
         specifier: workspace:^

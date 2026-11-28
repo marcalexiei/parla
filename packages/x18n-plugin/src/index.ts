@@ -1,6 +1,6 @@
 // x18n's JS scanner does not read accessor chains yet, so Parla's `t.cart.items()` needs its own.
 import { compileMessage, defaultFormats, loadConfig, ModuleScope } from '@parlajs/compiler';
-import type { ResolvedConfig } from '@parlajs/compiler';
+import type { CustomFunctions, ResolvedConfig } from '@parlajs/compiler';
 import type { Plugin, Scanner } from '@x18n/core';
 import { parseSync, Visitor } from 'oxc-parser';
 
@@ -12,6 +12,17 @@ type Placeholder = ReturnType<PlaceholderSyntax['find']>[number];
 type Node = { type: string; start: number; end: number } & Record<string, unknown>;
 
 type LocaleFinder = NonNullable<Plugin['localeFinders']>[number];
+type Host = Parameters<LocaleFinder['find']>[0]['host'];
+type ReadFile = (path: string) => Promise<string | undefined>;
+
+/** What the configs declare, filled once `configFinder` has loaded them. */
+interface Declared {
+  readonly functions: Record<string, CustomFunctions[string]>;
+  /** The configs' `markup`, which a call may leave out. */
+  readonly markup: Array<string>;
+  /** `ns:key` of each `:string` select whose keys need different params. */
+  readonly branchy: Set<string>;
+}
 
 /** `file` relative to `root`, as x18n names resources. */
 const relative = (root: string, file: string): string =>
@@ -115,6 +126,31 @@ function namespacesOf(
   return namespaces.every((ns) => ns !== undefined) ? namespaces : undefined;
 }
 
+/** `Translations<typeof a | typeof b>` → the namespaces of `a` and `b`; undefined for anything else. */
+function translationsOf(
+  type: unknown,
+  imports: ReadonlyMap<string, string>,
+): Array<string> | undefined {
+  if (!isNode(type) || type.type !== 'TSTypeReference') {
+    return undefined;
+  }
+  const name = type['typeName'];
+  const arg = ((type['typeArguments'] as Node | null)?.['params'] as Array<Node> | undefined)?.at(
+    0,
+  );
+  if (!isNode(name) || name['name'] !== 'Translations' || !arg) {
+    return undefined;
+  }
+  const queries = arg.type === 'TSUnionType' ? (arg['types'] as Array<Node>) : [arg];
+  const namespaces = queries.map((query) => {
+    const expr = query['exprName'];
+    return query.type === 'TSTypeQuery' && isNode(expr)
+      ? imports.get(expr['name'] as string)
+      : undefined;
+  });
+  return namespaces.every((ns) => ns !== undefined) ? namespaces : undefined;
+}
+
 /** The local name `t` is bound to in `{ t }` or `{ t: alias }`. */
 function tName(pattern: Node): string | undefined {
   for (const property of pattern['properties'] as Array<Node>) {
@@ -133,14 +169,42 @@ function tName(pattern: Node): string | undefined {
   return undefined;
 }
 
-function collectBindings(
-  node: Node,
-  scope: Node,
-  callees: ReadonlySet<string>,
+/** `{ t }: { t: Translations<typeof ns> }` in a component's params: `t` passed down by a parent. */
+function propBinding(
+  param: Node,
   imports: ReadonlyMap<string, string>,
-  out: Array<Binding>,
-): void {
+): [string, Array<string>] | undefined {
+  const literal = (param['typeAnnotation'] as Node | null)?.['typeAnnotation'];
+  const name = param.type === 'ObjectPattern' ? tName(param) : undefined;
+  if (!isNode(literal) || literal.type !== 'TSTypeLiteral' || name === undefined) {
+    return undefined;
+  }
+  for (const member of literal['members'] as Array<Node>) {
+    const { key } = member;
+    if (member.type === 'TSPropertySignature' && isNode(key) && key['name'] === 't') {
+      const annotation = (member['typeAnnotation'] as Node | null)?.['typeAnnotation'];
+      const namespaces = translationsOf(annotation, imports);
+      return namespaces && [name, namespaces];
+    }
+  }
+  return undefined;
+}
+
+interface Collect {
+  readonly callees: ReadonlySet<string>;
+  readonly imports: ReadonlyMap<string, string>;
+  readonly out: Array<Binding>;
+}
+
+function collectBindings(node: Node, scope: Node, collect: Collect): void {
+  const { callees, imports, out } = collect;
   const inner = FUNCTIONS.has(node.type) ? node : scope;
+  for (const param of FUNCTIONS.has(node.type) ? (node['params'] as Array<Node>) : []) {
+    const binding = propBinding(param, imports);
+    if (binding) {
+      out.push({ name: binding[0], namespaces: binding[1], scope: node });
+    }
+  }
   if (node.type === 'VariableDeclarator') {
     const { init } = node;
     const { id } = node;
@@ -168,7 +232,7 @@ function collectBindings(
   for (const value of Object.values(node)) {
     for (const child of Array.isArray(value) ? value : [value]) {
       if (isNode(child)) {
-        collectBindings(child, inner, callees, imports, out);
+        collectBindings(child, inner, collect);
       }
     }
   }
@@ -191,7 +255,11 @@ function resolve(
   return best;
 }
 
-function accessorScanner(callees: ReadonlySet<string>): Scanner {
+/** The keys a call passes: none without an argument, unknown when they are not static. */
+const paramKeys = (params: Node | undefined): Array<string> | undefined =>
+  params ? staticKeys(params) : [];
+
+function accessorScanner(callees: ReadonlySet<string>, declared: Declared): Scanner {
   return {
     id: 'parla:accessor',
     extensions: ['js', 'jsx', 'mjs', 'ts', 'tsx', 'mts'],
@@ -199,7 +267,7 @@ function accessorScanner(callees: ReadonlySet<string>): Scanner {
       const { program } = parseSync(file.path, file.text);
       const bindings: Array<Binding> = [];
       const root = program as unknown as Node;
-      collectBindings(root, root, callees, namespaceImports(root), bindings);
+      collectBindings(root, root, { callees, imports: namespaceImports(root), out: bindings });
       const usages: Array<Usage> = [];
 
       new Visitor({
@@ -228,11 +296,13 @@ function accessorScanner(callees: ReadonlySet<string>): Scanner {
             return;
           }
           const [params] = call['arguments'] as Array<Node>;
+          const raw = segments.map((segment) => segment['name'] as string).join('.');
           usages.push({
-            raw: segments.map((segment) => segment['name'] as string).join('.'),
+            raw,
             range: { start: first.start, end: last.end },
             expression: { start: call.start, end: call.end },
-            params: params ? staticKeys(params) : [],
+            // TypeScript checks such a select's params per key; x18n compares one flat list.
+            params: declared.branchy.has(`${namespace}:${raw}`) ? undefined : paramKeys(params),
             kind: 'accessor',
             dynamic: false,
             namespace,
@@ -250,7 +320,7 @@ function accessorScanner(callees: ReadonlySet<string>): Scanner {
 const MF2_ONLY = /\{\s*\$|^\s*\.(?:input|local|match)\b/;
 
 /** Params and markup a message reads, through parla's own parsers. Throws on invalid syntax. */
-function messageNames(value: string): Array<string> {
+function messageNames(value: string, functions: CustomFunctions): Array<string> {
   const formats = MF2_ONLY.test(value) ? ['mf2'] : ['icu', 'mf2'];
   let firstError: unknown;
   for (const id of formats) {
@@ -259,7 +329,7 @@ function messageNames(value: string): Array<string> {
       continue;
     }
     try {
-      const { info } = compileMessage(format.parse(value), new ModuleScope());
+      const { info } = compileMessage(format.parse(value), new ModuleScope(), functions);
       return [...new Set([...info.params.keys(), ...info.markup])];
     } catch (error) {
       firstError ??= error;
@@ -268,13 +338,14 @@ function messageNames(value: string): Array<string> {
   throw firstError;
 }
 
-const parlaPlaceholders: PlaceholderSyntax = {
+const placeholders = (declared: Declared): PlaceholderSyntax => ({
   id: 'parla',
   example: '{name}',
-  find(value) {
+  implicit: declared.markup,
+  find(value): Array<Placeholder> {
     let names: Array<string>;
     try {
-      names = messageNames(value);
+      names = messageNames(value, declared.functions);
     } catch {
       return [];
     }
@@ -283,29 +354,96 @@ const parlaPlaceholders: PlaceholderSyntax = {
       return { syntax: 'parla', text: name, name, range: { start, end: start + name.length } };
     });
   },
-  validate(value) {
+  validate(value): Array<string> {
     try {
-      messageNames(value);
+      messageNames(value, declared.functions);
       return [];
     } catch (error) {
       return [(error as Error).message];
     }
   },
-};
+});
+
+interface Catalog {
+  readonly [key: string]: string | Catalog;
+}
+
+/** `[path, message]` for every leaf of a catalog. */
+function* leaves(catalog: Catalog, prefix = ''): Generator<[string, string]> {
+  for (const [key, value] of Object.entries(catalog)) {
+    if (typeof value === 'string') {
+      yield [`${prefix}${key}`, value];
+    } else {
+      yield* leaves(value, `${prefix}${key}.`);
+    }
+  }
+}
+
+/** A catalog's JSON; an unreadable one counts as empty. */
+async function readCatalog(readFile: ReadFile, path: string): Promise<Catalog> {
+  try {
+    return JSON.parse((await readFile(path)) ?? '{}') as Catalog;
+  } catch {
+    return {};
+  }
+}
+
+/** Whether a message selects on keys that need different params. */
+function hasBranches(format: string, value: string, functions: CustomFunctions): boolean {
+  const adapter = defaultFormats[format];
+  try {
+    return Boolean(
+      adapter && compileMessage(adapter.parse(value), new ModuleScope(), functions).info.branches,
+    );
+  } catch {
+    // Reported by `validate`.
+    return false;
+  }
+}
+
+/** Fills `declared` from the configs and their source catalogs. */
+async function declare(
+  declared: Declared,
+  configs: ReadonlyArray<ResolvedConfig>,
+  readFile: ReadFile,
+): Promise<void> {
+  for (const config of configs) {
+    Object.assign(declared.functions, config.functions);
+    declared.markup.push(...config.markup.filter((tag) => !declared.markup.includes(tag)));
+  }
+  const sources = configs.flatMap((config) => config.namespaces.map((ns) => ({ config, ns })));
+  const catalogs = await Promise.all(
+    sources.map(async ({ config, ns }) => readCatalog(readFile, ns.file(config.sourceLocale))),
+  );
+  for (const [index, { config, ns }] of sources.entries()) {
+    for (const [key, value] of leaves(catalogs[index] ?? {})) {
+      if (hasBranches(ns.format, value, config.functions)) {
+        declared.branchy.add(`${ns.name}:${key}`);
+      }
+    }
+  }
+}
 
 /**
  * Each catalog file under the namespace its parla config gives it, so `scopeAudit` may live in
  * `scope_audit.json`; `pre`, so these names win over a `resources` pattern matching the same file.
  */
-function configFinder(configs: ReadonlyArray<string> | undefined): LocaleFinder {
+function configFinder(
+  configs: ReadonlyArray<string> | undefined,
+  declared: Declared,
+): LocaleFinder {
   let loaded: Promise<Array<ResolvedConfig>> | undefined;
-  const load = async (
-    root: string,
-    glob: () => Promise<Array<string>>,
-  ): Promise<Array<ResolvedConfig>> => {
+  const load = async (host: Host): Promise<Array<ResolvedConfig>> => {
     loaded ??= (async (): Promise<Array<ResolvedConfig>> => {
-      const files = configs ?? (await glob());
-      return Promise.all(files.map(async (file) => loadConfig(root, file)));
+      const files =
+        configs ??
+        (await host.glob(['**/parla.config.ts'], {
+          ignore: ['**/node_modules/**'],
+          gitignore: true,
+        }));
+      const all = await Promise.all(files.map(async (file) => loadConfig(host.root, file)));
+      await declare(declared, all, async (path) => host.readFile(relative(host.root, path)));
+      return all;
     })();
     return loaded;
   };
@@ -313,9 +451,7 @@ function configFinder(configs: ReadonlyArray<string> | undefined): LocaleFinder 
   return {
     id: 'parla:configs',
     async find({ host }) {
-      resolved = await load(host.root, async () =>
-        host.glob(['**/parla.config.ts'], { ignore: ['**/node_modules/**'], gitignore: true }),
-      );
+      resolved = await load(host);
       return resolved.flatMap((config) =>
         config.namespaces.flatMap((ns) =>
           config.locales.map((locale) => ({
@@ -338,13 +474,14 @@ function configFinder(configs: ReadonlyArray<string> | undefined): LocaleFinder 
 }
 
 /** The x18n plugin: Parla's catalogs, `t.ns.key()` usages, and ICU and MF2 params. */
-export function parla(options: ParlaOptions = {}): Plugin {
+export default function parla(options: ParlaOptions = {}): Plugin {
+  const declared: Declared = { functions: {}, markup: [], branchy: new Set() };
   return {
     name: 'parla',
     enforce: 'pre',
     runtime: 'node',
-    localeFinders: [configFinder(options.configs)],
-    scanners: [accessorScanner(new Set(options.callees ?? ['useParla']))],
-    placeholders: [parlaPlaceholders],
+    localeFinders: [configFinder(options.configs, declared)],
+    scanners: [accessorScanner(new Set(options.callees ?? ['useParla']), declared)],
+    placeholders: [placeholders(declared)],
   };
 }

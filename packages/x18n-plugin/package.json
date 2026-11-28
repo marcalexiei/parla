@@ -1,5 +1,5 @@
 {
-  "name": "@parlajs/x18n",
+  "name": "@parlajs/x18n-plugin",
   "version": "0.0.0",
   "description": "x18n plugin for Parla: catalogs from parla.config.ts, t.ns.key usages, ICU and MF2 params.",
   "keywords": [
@@ -19,7 +19,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/marcalexiei/parla.git",
-    "directory": "packages/x18n"
+    "directory": "packages/x18n-plugin"
   },
   "files": [
     "build",

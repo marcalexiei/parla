@@ -9,7 +9,7 @@ export default defineConfig({
       'packages/format-mf2/vitest.config.ts',
       'packages/compiler/vitest.config.ts',
       'packages/react/vitest.config.ts',
-      'packages/x18n/vitest.config.ts',
+      'packages/x18n-plugin/vitest.config.ts',
     ],
   },
 });

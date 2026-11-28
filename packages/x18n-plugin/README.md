@@ -1,11 +1,12 @@
-# @parlajs/x18n
+# @parlajs/x18n-plugin
 
 [Parla](https://github.com/marcalexiei/parla)'s plugin for [x18n](https://x18n.dev): it reads each
 catalog under the namespace its `parla.config.ts` gives it, finds every `t.ns.key()` on a `t` from
-`useParla([ns])`, and reads params and markup with Parla's own ICU and MF2 parsers.
+`useParla([ns])` or a `{ t }: { t: Translations<typeof ns> }` prop, and reads params and markup
+with Parla's own ICU and MF2 parsers and the config's `functions` and `markup`.
 
 ```ts
-import { parla } from '@parlajs/x18n';
+import parla from '@parlajs/x18n-plugin';
 import { defineConfig } from '@x18n/cli';
 
 export default defineConfig({
@@ -23,4 +24,5 @@ export default defineConfig({
 | `callees` | `['useParla']`             | Hooks that take a list of namespaces and return `{ t }` |
 | `configs` | every `**/parla.config.ts` | Configs to read, relative to x18n's root                |
 
-A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it.
+A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A select
+whose branches need different params is left to TypeScript, which checks it per branch.
