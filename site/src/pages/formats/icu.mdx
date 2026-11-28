@@ -1,0 +1,30 @@
+---
+description: ICU MessageFormat, parsed into the MF2 data model.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# ICU
+
+<Badge>Format adapter</Badge> `@parlajs/format-icu`, built into `@parlajs/compiler`: a namespace
+sets `format: 'icu'`.
+
+```json
+{ "items": "{count, plural, =0 {Your cart is empty} one {# item} other {# items}}" }
+```
+
+| ICU                                        |                                                                   |
+| ------------------------------------------ | ----------------------------------------------------------------- |
+| `{name}`                                   | Placeholder                                                       |
+| `{n, plural, =0 {…} one {# …} other {…}}`  | Plural, with `=N` and `offset`                                    |
+| `{n, selectordinal, one {…} other {…}}`    | Ordinal                                                           |
+| `{g, select, a {…} other {…}}`             | Select                                                            |
+| `{n, number}`, `::currency/EUR`, `percent` | Numbers                                                           |
+| `{d, date}`, `{d, time}`                   | Dates                                                             |
+| `<link>…</link>`                           | [Rich text](/core/rich-text)                                      |
+| `{name, capitalize}`                       | The config's own [functions](/core/formatting#your-own-functions) |
+
+Not `duration`. `'<` quotes up to the next `'`, as in FormatJS: `'<option>'` is text, not markup.
+
+The same messages in MF2: [Plurals and selects](/core/plurals-and-selects).

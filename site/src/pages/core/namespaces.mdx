@@ -1,0 +1,64 @@
+---
+description: A namespace is an object you import; the bundler and the types follow the imports.
+showAskAi: false
+---
+
+# Namespaces
+
+Each namespace in `parla.config.ts` compiles to `<outDir>/namespaces/<name>.js`. Import it and pass
+it:
+
+```ts
+import { checkout } from './parla/namespaces/checkout.js';
+import { common } from './parla/namespaces/common.js';
+
+const t = await parla.load([checkout, common]);
+t.checkout.title();
+t.common.save();
+```
+
+It is `{ name, load }`, one chunk loader per locale; its `.d.ts` types every message.
+
+| Because a namespace is an import  |                                                                       |
+| --------------------------------- | --------------------------------------------------------------------- |
+| The bundler ships what you import | Nothing lists every namespace, so none ships by accident              |
+| The types follow                  | `tsc` reads only the `.d.ts` of imported namespaces                   |
+| Tooling follows                   | Tools such as [x18n](/tooling/x18n) read which namespaces a file uses |
+| A name does not type-check        | `parla.load(['checkout'])` is an error                                |
+
+Import each from its own module, not a barrel, so the bundler splits exactly those chunks.
+
+## Names
+
+The name is the module, the export and the key in `t`. Make it an identifier, and map a file name
+that differs:
+
+```ts
+namespaces: { scopeAudit: { format: 'icu', path: 'locales/{locale}/scope_audit.json' } },
+```
+
+- A name that is no identifier (`foo-bar`) exports as `fooBar` while `t` keeps `foo-bar`; the build
+  warns.
+- Alias a clash with a local name as `<name>Namespace`: `import { user as userNamespace }`.
+- Rename one that clashes often rather than prefixing them all.
+
+## By name, from data
+
+Keep a map:
+
+```ts
+const byName = { checkout, common };
+await parla.load([byName[route.namespace]]);
+```
+
+A missed lookup passes `undefined`, and `load` throws a `TypeError`.
+
+## All of them, in a test
+
+Glob them with Vite:
+
+```ts
+const all = Object.values(
+  import.meta.glob<Record<string, Namespace>>('./parla/namespaces/*.js', { eager: true }),
+).flatMap((mod) => Object.values(mod));
+```

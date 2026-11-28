@@ -1,0 +1,49 @@
+---
+description: What a framework adapter builds on in @parlajs/core.
+showAskAi: false
+---
+
+import { Badge } from 'vocs';
+
+# Writing an adapter
+
+<Badge>Framework adapter</Badge> Built on [`@parlajs/core`](/core/api), as
+[`@parlajs/react`](/adapters/react) is.
+
+| A framework needs          | Core gives                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| To re-render on a switch   | `subscribe(listener)` and `locale`                                                           |
+| Suspense                   | `load(list)`: the same list returns the same promise, with `status` and `value` once settled |
+| No Suspense                | `loaded(list)`: `t`, or `undefined` until loaded                                             |
+| Its own node for rich text | `wrapRich(parts)`, typing `Parla<Node>` and `Translations<NS, Node>`                         |
+| One shared locale state    | `@parlajs/core` as a `peerDependency`: a second copy warns                                   |
+
+```ts
+import { createParla as createCore } from '@parlajs/core';
+import type { Namespace, Parla, ParlaOptions, Translations, WrapRich } from '@parlajs/core';
+
+// Called only when a part is not a string; all-text messages stay strings.
+const wrapRich: WrapRich<MyNode> = (parts) => fragment(parts);
+
+export function createParla(options: ParlaOptions<MyNode>): Parla<MyNode> {
+  return createCore<MyNode>({ wrapRich, ...options });
+}
+
+// `t` for some namespaces, kept current across switches.
+export function watch<NS extends Namespace>(
+  parla: Parla<MyNode>,
+  list: ReadonlyArray<NS>,
+  set: (t: Translations<NS, MyNode> | undefined) => void,
+): () => void {
+  const update = (): void => {
+    const t = parla.loaded(list);
+    set(t);
+    if (!t) void parla.load(list).then(update, reportError);
+  };
+  update();
+  return parla.subscribe(update);
+}
+```
+
+A listener's `loaded` already has the new locale's `t`. Vue, Svelte, Solid and Angular fit this
+shape; there are no packages for them yet.

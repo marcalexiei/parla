@@ -12,13 +12,14 @@ import { styleText } from 'node:util';
 
 /** Each check's name, and the pnpm arguments that run it. */
 const CHECKS: Record<string, Array<string>> = {
+  knip: ['run', 'lint:knip'],
   format: ['run', 'format:check'],
   lint: ['run', 'lint'],
   typecheck: ['run', 'typecheck'],
   publish: ['run', 'lint:publish'],
   'lib-check': ['run', 'lint:lib-check'],
-  knip: ['run', 'lint:knip'],
   tests: ['run', 'test:coverage'],
+  site: ['run', 'site:build'],
 };
 
 /** Runs the rest after a failure, for when the whole list is more useful than the first one. */

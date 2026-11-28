@@ -1,10 +1,14 @@
 packages:
   - packages/*
+  - site
 
 allowBuilds:
   # vite's optional bundler; it fetches its platform binary in a postinstall
   esbuild: true
   lefthook: true
+  # Under Vocs, through Sandpack and Scalar: a donation banner and a Vue 2/3 switch, neither needed
+  es5-ext: false
+  vue-demi: false
 
 catalog:
   '@vitest/coverage-v8': 5.1.1
@@ -25,6 +29,10 @@ trustPolicy: no-downgrade
 
 # Fail on unmet peers and on a Node version outside `engines`, instead of warning
 strictPeerDependencies: true
+# Vocs loads twoslash only for `twoslash` code blocks, which the site never writes: TS 7 dropped its JS API.
+peerDependencyRules:
+  allowedVersions:
+    twoslash>typescript: '7'
 engineStrict: true
 
 # An update re-resolves only what it bumps, leaving older copies another range would share.

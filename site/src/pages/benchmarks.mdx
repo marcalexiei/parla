@@ -1,0 +1,23 @@
+---
+description: How Parla compares with i18next, react-intl, Lingui, Paraglide and typesafe-i18n.
+showAskAi: false
+---
+
+# Benchmarks
+
+[parla-benchmark](https://github.com/marcalexiei/parla-benchmark) runs the same 200 messages through
+Parla, i18next (with and without i18next-icu), react-intl, Lingui, Paraglide and typesafe-i18n. Its
+README has the latest numbers; `results/` has older runs.
+
+| Measure      | Parla                                                                          |
+| ------------ | ------------------------------------------------------------------------------ |
+| Runtime size | Second smallest, after typesafe-i18n                                           |
+| One chunk    | Like the others' catalogs; Paraglide's is larger                               |
+| Type-check   | Near a plain string; i18next and react-intl cost far more                      |
+| Formatting   | Fastest on plain and interpolated messages; tied with typesafe-i18n on plurals |
+| Heap         | Second smallest, after i18next                                                 |
+| Cold start   | Slower than Paraglide (no init) and react-intl (defers parsing)                |
+
+What each library types: [Why Parla](/why#what-each-library-has-and-lacks).
+
+Run it: `pnpm parla:update && pnpm bench`, in a checkout beside this repo.

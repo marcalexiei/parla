@@ -1,0 +1,7 @@
+{
+  "greeting": "Ciao, {$name}!",
+  "cart": {
+    "items": ".input {$count :number}\n.match $count\n0 {{Il carrello è vuoto}}\none {{{$count} articolo}}\n* {{{$count} articoli}}"
+  },
+  "terms": "Accetta i {#link}termini{/link}, {#strong}oggi{/strong}."
+}

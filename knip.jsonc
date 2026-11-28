@@ -8,6 +8,12 @@
       "entry": ["scripts/*.ts", "bench/*.bench.ts"]
     },
     "packages/*": {},
+    "site": {
+      // the MDX pages import the demos
+      "entry": ["src/examples/*Demo.tsx", "parla.config.ts", "vocs.config.ts", "vite.config.ts"],
+      // its plugin loads the config, which imports the compiler's `build/`, absent before a build
+      "vite": false
+    },
     "packages/format-icu": {
       // the types of `@messageformat/parser` import `moo`; `skipLibCheck: false` needs them
       "ignoreDependencies": ["@types/moo"]
