@@ -100,6 +100,7 @@ TypeScript **7.x**, `oxlint-tsgolint` on the same major; strict flags in `tsconf
 
 - **Relative imports name the `.ts` file.**
 - **Interface members are properties** (`readonly load: (…) => …`), never methods.
+- **At most two parameters**: the rest go in one object (`createRuntime(locale, { … })`, `({ value, locale }) => …`).
 - **Never widen a signature for a test; adapt the test.**
 - **Consumers may keep `skipLibCheck: false`**: so does this repo, every type test, and
   `lint:lib-check`, which type-checks the built packages and a generated catalog as an app would.
