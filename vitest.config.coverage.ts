@@ -19,8 +19,8 @@ export default mergeConfig(
           'packages/compiler/src/**': { lines: 96, statements: 96, functions: 97, branches: 85 },
           'packages/format-icu/src/**': { lines: 91, statements: 91, functions: 100, branches: 80 },
           'packages/x18n-plugin/src/**': {
-            lines: 96,
-            statements: 96,
+            lines: 97,
+            statements: 97,
             functions: 100,
             branches: 92,
           },

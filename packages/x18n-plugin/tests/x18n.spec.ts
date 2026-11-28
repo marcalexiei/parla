@@ -151,6 +151,84 @@ function A() {
   });
 });
 
+/** Each usage's key, and the file's text at its range, which must be the key itself. */
+async function inFile(path: string, text: string): Promise<Array<[string, string]>> {
+  const result = await scanner().scan({ path, text } as never, context);
+  return result.usages.map(({ raw, range }) => [raw, text.slice(range.start, range.end)]);
+}
+
+const keys = (...raw: Array<string>): Array<[string, string]> => raw.map((key) => [key, key]);
+
+describe('templates', () => {
+  it('reads a Vue file: its scripts, mustaches and directives', async () => {
+    await expect(
+      inFile(
+        'Cart.vue',
+        `<script setup lang="ts">
+import { checkout } from './parla/namespaces/checkout.js';
+const { t } = useParla([checkout]);
+const total = t.checkout.total({ amount: 1 });
+</script>
+
+<template>
+  <!-- {{ t.checkout.commented() }} -->
+  <h1 :title="t.checkout.title()">{{ t.checkout.heading() }}</h1>
+  <p v-if="t.checkout.shown()">🛒 {{ t.checkout.cart.items({ count }) }}</p>
+  <li v-for="item in items">{{ item }}</li>
+  <button @click="go(t.checkout.go())">x</button>
+</template>
+
+<style>
+.title { color: red; }
+</style>
+`,
+      ),
+    ).resolves.toStrictEqual(keys('total', 'title', 'heading', 'shown', 'cart.items', 'go'));
+  });
+
+  it('reads a Svelte file: its script, markup and block expressions', async () => {
+    await expect(
+      inFile(
+        'Cart.svelte',
+        `<script lang="ts">
+  import { checkout } from './parla/namespaces/checkout.js';
+  const { t } = useParla([checkout]);
+</script>
+
+<h1 title={t.checkout.title()}>{t.checkout.heading()}</h1>
+{#if t.checkout.shown()}
+  <p>{@html t.checkout.terms({ link })}</p>
+{:else}
+  <p>{t.checkout.empty()}</p>
+{/if}
+<p>{t.checkout.quoted({ text: 'a } \\' b' })}</p>
+{#each items as item}{item}{/each}
+{#await load() then value}{value}{/await}
+
+<style>
+  h1 { color: red; }
+</style>
+`,
+      ),
+    ).resolves.toStrictEqual(keys('title', 'heading', 'shown', 'terms', 'empty', 'quoted'));
+  });
+
+  it('reads an Astro file: its frontmatter and JSX markup', async () => {
+    await expect(
+      inFile(
+        'Cart.astro',
+        `---
+import { checkout } from './parla/namespaces/checkout.js';
+const { t } = useParla([checkout]);
+---
+<h1 title={t.checkout.title()}>{t.checkout.heading()}</h1>
+<ul>{items.map((item) => <li>{t.checkout.item({ item })}</li>)}</ul>
+`,
+      ),
+    ).resolves.toStrictEqual(keys('title', 'heading', 'item'));
+  });
+});
+
 describe('placeholders', () => {
   it('names the params and tags of ICU and MF2 messages', () => {
     expect(names('{name} has {count, plural, one {# item} other {# items}}')).toStrictEqual([

@@ -12,7 +12,7 @@ import { defineConfig } from '@x18n/cli';
 export default defineConfig({
   sourceLocale: 'en',
   locales: ['en', 'it'],
-  // Parla's keys are dotted paths inside a namespace.
+  // x18n then names keys `checkout:cart.items`: with its default `.`, a dotted namespace blurs into the key.
   namespace: { separator: ':' },
   plugins: [parla()],
   usage: { include: ['src/**/*.{ts,tsx}'], exclude: ['src/parla/**'] },
@@ -23,6 +23,9 @@ export default defineConfig({
 | --------- | -------------------------- | ------------------------------------------------------- |
 | `callees` | `['useParla']`             | Hooks that take a list of namespaces and return `{ t }` |
 | `configs` | every `**/parla.config.ts` | Configs to read, relative to x18n's root                |
+
+In `.vue`, `.svelte` and `.astro` files it reads the scripts (Astro's frontmatter) and the
+template's expressions, so `{t.ns.key()}` in markup counts; add them to `usage.include`.
 
 A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A select
 whose branches need different params is left to TypeScript, which checks it per branch. A catalog
