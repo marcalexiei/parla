@@ -1,0 +1,9 @@
+{
+  "extends": ["../tsconfig.base.json"],
+  "include": ["src/examples", "src/parla", "parla.config.ts"],
+  "compilerOptions": {
+    // `vite/client` types the CSS import; `node` the config
+    "types": ["node", "vite/client"],
+    "jsx": "react-jsx"
+  }
+}

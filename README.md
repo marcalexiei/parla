@@ -39,7 +39,7 @@ t.checkout.terms({ link: (c) => <a href="/terms">{c}</a> });
 ## Development
 
 ```sh
-pnpm install && pnpm check-all
+pnpm install && pnpm validate
 ```
 
 Parla is built with the help of AI coding tools.

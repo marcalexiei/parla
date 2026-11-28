@@ -1,0 +1,45 @@
+---
+description: setLocale loads what is loaded so far, then switches and notifies.
+showAskAi: false
+---
+
+import { HomeDemo } from '../../examples/HomeDemo.tsx';
+
+# Switching locale
+
+```ts
+parla.subscribe(() => render(parla.locale));
+await parla.setLocale('it');
+```
+
+`setLocale(next)` loads every loaded namespace for `next`, then switches and notifies listeners. The
+old text stays until then: no flash. Live, through the [React adapter](/adapters/react#switching-locale):
+
+<HomeDemo />
+
+| `setLocale`                                                         |
+| ------------------------------------------------------------------- |
+| Rejects for a locale not in the catalog                             |
+| A failed download rejects and keeps the current locale              |
+| Two calls in a row: the last one wins                               |
+| Namespaces first loaded during the switch are loaded for `next` too |
+
+## The first locale
+
+`matchLocale` picks the best supported locale:
+
+```ts
+const parla = createParla({
+  catalog,
+  locale: matchLocale(navigator.languages, catalog.locales, catalog.sourceLocale),
+});
+```
+
+| Requested | Supported            | Picks                                     |
+| --------- | -------------------- | ----------------------------------------- |
+| `de-AT`   | `en`, `de`           | `de`: same language                       |
+| `zh-TW`   | `zh-Hans`, `zh-Hant` | `zh-Hant`: the script outranks the region |
+| `it_IT`   | `en`, `it`           | `it`: Android's `_` is read as `-`        |
+| `fr`      | `en`, `de`           | the fallback                              |
+
+A server-rendered page starts in the locale it rendered, then switches.
