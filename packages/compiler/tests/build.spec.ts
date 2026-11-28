@@ -725,6 +725,35 @@ export const fr: Locale = 'fr';
   });
 });
 
+describe('formats', () => {
+  const dir = join(tmp, 'build-test-formats');
+
+  it("come from the config, which a namespace's format names", async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      `const shout = (source: string) => ({
+  type: 'message',
+  declarations: [],
+  pattern: [source.toUpperCase()],
+});
+export default {
+  locales: ['en'],
+  formats: { shout: { name: 'shout', parse: shout } },
+  namespaces: { app: { format: 'shout', path: 'locales/{locale}/app.json' } },
+};
+`,
+    );
+    put(dir, 'locales/en/app.json', { hi: 'hi there' });
+    const { diagnostics } = await build({ cwd: dir });
+    expect(diagnostics).toStrictEqual([]);
+    const { catalog, ns } = await imported(dir, 'app');
+    const t = await createParla({ catalog }).load([ns]);
+    expect((t['app'] as { hi: () => string }).hi()).toBe('HI THERE');
+  });
+});
+
 describe('diagnostics', () => {
   const dir = join(tmp, 'build-test-diagnostics');
 
