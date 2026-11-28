@@ -41,7 +41,8 @@ export default defineConfig({
   `number`, `date`); `createParla({ functions })` must implement each.
 - `markup`: tags a call may leave out; `createParla({ markup })` must render each.
 - `formats`: message syntaxes beyond `icu` and `mf2`, each a `FormatAdapter` parsing one message
-  into the MF2 data model; a namespace's `format` names one.
+  into the MF2 data model; a namespace's `format` names one. Its `parseFile` reads catalogs that
+  are not JSON, such as `.po` or `.ftl`, into `{ key: message | group }`.
 - `runtime`: the module the types import and augment; defaults to `@parlajs/react` if a dependency, else
   `@parlajs/core`.
 

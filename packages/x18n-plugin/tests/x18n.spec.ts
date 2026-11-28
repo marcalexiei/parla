@@ -196,7 +196,7 @@ describe('catalogs', () => {
       ['it', 'Ciao %nome%'],
     ] as const) {
       mkdirSync(join(root, `pct/locales/${locale}`), { recursive: true });
-      writeFileSync(join(root, `pct/locales/${locale}/pct.json`), JSON.stringify({ hi }));
+      writeFileSync(join(root, `pct/locales/${locale}/pct.properties`), `hi = ${hi}\n`);
     }
   });
 
@@ -245,7 +245,7 @@ function A() {
     ]);
   });
 
-  it("parses a message of a config's own format with it", async () => {
+  it("reads and parses the catalogs of a config's own format with it", async () => {
     // `%name%` is a param; ICU reads the same text as plain.
     writeFileSync(
       join(root, 'pct/parla.config.ts'),
@@ -256,10 +256,11 @@ function A() {
     .split(/%(\\w+)%/)
     .map((part, i) => (i % 2 ? { type: 'expression', arg: { type: 'variable', name: part } } : part)),
 });
+const parseFile = (text: string) => Object.fromEntries([text.trim().split(' = ')]);
 export default {
   locales: ['en', 'it'],
-  formats: { pct: { name: 'pct', parse } },
-  namespaces: { pct: { format: 'pct', path: 'locales/{locale}/pct.json' } },
+  formats: { pct: { name: 'pct', parse, parseFile } },
+  namespaces: { pct: { format: 'pct', path: 'locales/{locale}/pct.properties' } },
 };
 `,
     );

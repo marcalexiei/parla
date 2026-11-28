@@ -13,6 +13,8 @@ import type { FunctionKind } from './compile.ts';
 export interface FormatAdapter {
   readonly name: string;
   readonly parse: (source: string) => Model.Message;
+  /** Reads a catalog file into `{ key: message | group }`, for files that are not JSON. */
+  readonly parseFile?: ((text: string) => unknown) | undefined;
 }
 
 export const defaultFormats: Readonly<Record<string, FormatAdapter>> = { icu, mf2 };

@@ -752,6 +752,43 @@ export default {
     const t = await createParla({ catalog }).load([ns]);
     expect((t['app'] as { hi: () => string }).hi()).toBe('HI THERE');
   });
+
+  it('read catalog files that are not JSON', async () => {
+    // Its own folder: Node caches the modules the test above imported.
+    const files = join(tmp, 'build-test-files');
+    rmSync(files, { recursive: true, force: true });
+    put(
+      files,
+      'parla.config.ts',
+      `const plain = { name: 'props', parse: (source: string) => ({ type: 'message', declarations: [], pattern: [source] }) };
+// \`key = message\` per line; a line without \`=\` is an error.
+const parseFile = (text: string) =>
+  Object.fromEntries(
+    text.trim().split('\\n').map((line) => {
+      const at = line.indexOf('=');
+      if (at < 0) throw new Error(\`no "=" in "\${line}"\`);
+      return [line.slice(0, at).trim(), line.slice(at + 1).trim()];
+    }),
+  );
+export default {
+  locales: ['en', 'it'],
+  formats: { props: { ...plain, parseFile } },
+  namespaces: { app: { format: 'props', path: 'locales/{locale}/app.properties' } },
+};
+`,
+    );
+    put(files, 'locales/en/app.properties', 'hi = Hi\nbye = Bye\n');
+    put(files, 'locales/it/app.properties', 'hi = Ciao\nbye\n');
+    const { diagnostics } = await build({ cwd: files });
+    expect(diagnostics.map((d) => `${d.code}:${d.locale}:${d.message}`)).toStrictEqual([
+      'invalid-resource:it:no "=" in "bye"',
+      'missing-translation:it:using "en"',
+      'missing-translation:it:using "en"',
+    ]);
+    const { ns, catalog } = await imported(files, 'app');
+    const t = await createParla({ catalog }).load([ns]);
+    expect((t['app'] as { bye: () => string }).bye()).toBe('Bye');
+  });
 });
 
 describe('diagnostics', () => {
