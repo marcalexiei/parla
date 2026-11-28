@@ -103,6 +103,8 @@ const describe = (value: unknown): string => {
 export interface Catalog {
   readonly locales: ReadonlyArray<Locale>;
   readonly sourceLocale: Locale;
+  /** Each locale's fallback chain, which `Intl` also follows where it lacks the locale's data. */
+  readonly fallbacks?: Readonly<Partial<Record<string, ReadonlyArray<string>>>>;
 }
 
 /** Required, with every declared name, once the config declares any. */
@@ -178,7 +180,7 @@ g[INSTANCE] = marker;
 /** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
   const { wrapRich } = options;
-  const { locales, sourceLocale } = options.catalog;
+  const { locales, sourceLocale, fallbacks = {} } = options.catalog;
   const extensions = {
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
     markup: options.markup as Readonly<Record<string, (children: unknown) => unknown>> | undefined,
@@ -205,7 +207,12 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
   const runtime = (locale: string): MessageRuntime => {
     let rt = runtimes.get(locale);
     if (!rt) {
-      rt = createRuntime(locale, wrapRich as WrapRich<unknown> | undefined, extensions);
+      rt = createRuntime(
+        locale,
+        wrapRich as WrapRich<unknown> | undefined,
+        extensions,
+        fallbacks[locale],
+      );
       runtimes.set(locale, rt);
     }
     return rt;

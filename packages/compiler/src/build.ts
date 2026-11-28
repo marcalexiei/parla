@@ -441,7 +441,7 @@ export async function build(options: BuildOptions = {}): Promise<BuildResult> {
     ].join('');
     files.set(
       'catalog.js',
-      `${HEADER}export const catalog = {\n  locales: ${JSON.stringify(config.locales)},\n  sourceLocale: ${JSON.stringify(config.sourceLocale)},\n};\n`,
+      `${HEADER}export const catalog = {\n  locales: ${JSON.stringify(config.locales)},\n  sourceLocale: ${JSON.stringify(config.sourceLocale)},\n  fallbacks: ${JSON.stringify(Object.fromEntries(config.locales.map((l) => [l, fallbackChain(config, l)])))},\n};\n`,
     );
     files.set(
       'catalog.d.ts',

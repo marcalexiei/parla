@@ -143,6 +143,7 @@ describe(build, () => {
   it('runs end to end through the core runtime, with fallbacks', async () => {
     const { catalog, ns: checkout } = await imported(app, 'checkout');
     const { ns: common } = await imported(app, 'common');
+    expect(catalog.fallbacks).toStrictEqual({ en: [], it: ['en'], de: ['en'] });
     const parla = createParla({ catalog, locale: 'it' });
     const italian = await parla.load([checkout]);
     const t = italian['checkout'] as CheckoutMessages;
