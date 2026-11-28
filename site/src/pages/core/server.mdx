@@ -100,10 +100,14 @@ export default async function Checkout({ parla }: { parla: Parla }) {
 
 ## HTML emails
 
-String markup inserts params as they are. Escape each string param where text becomes HTML:
+A string instance inserts params as they are. For HTML, pass `escape`: it escapes every param, like
+i18next's `escapeValue`, and leaves translations and markup as written. React escapes on its own, so
+`@parlajs/react` takes no `escape`.
 
 ```ts
-const html = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+import { createParla, escapeHtml } from '@parlajs/core';
 
-t.emails.welcome({ name: html(user.name), b: (c) => `<b>${c}</b>` });
+const mail = createParla({ catalog, locale, escape: escapeHtml });
+const t = await mail.load([emails]);
+t.emails.welcome({ name: user.name, b: (c) => `<b>${c}</b>` }); // <b>&lt;i&gt;Ann…</b>
 ```

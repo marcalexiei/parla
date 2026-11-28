@@ -359,3 +359,32 @@ describe('@parlajs/react', () => {
     expect(() => render(<Offline />)).toThrow(/ParlaProvider/);
   });
 });
+
+describe('params holding HTML', () => {
+  it('render as text, also inside markup: React escapes them', async () => {
+    interface GreetKind extends NamespaceKind {
+      readonly messages: {
+        hi: (params: { name: string; b: (children: ReactNode) => ReactNode }) => ReactNode;
+      };
+    }
+    const greet: Namespace<'greet', GreetKind, 'en' | 'it'> = {
+      name: 'greet',
+      load: {
+        en: async () =>
+          Promise.resolve({
+            default: ($) => ({
+              hi: (p: Record<string, unknown>) =>
+                $.rich(['Hi ', $.tag(p, 'b', [$.str(p['name'])]), ', ', $.str(p['name'])]),
+            }),
+          }),
+        it: offline,
+      },
+    };
+    const payload = '<img src=x onerror="alert(1)">';
+    const t = await createParla({ catalog }).load([greet]);
+    const { container } = render(<p>{t.greet.hi({ name: payload, b: (c) => <b>{c}</b> })}</p>);
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('b')?.textContent).toBe(payload);
+    expect(container.textContent).toBe(`Hi ${payload}, ${payload}`);
+  });
+});
