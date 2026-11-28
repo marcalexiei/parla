@@ -43,7 +43,8 @@ export default defineConfig({
 A name is letters, digits, `_`, `-` or inner dots: it names files. Make it an identifier, see
 [Names](/guides/namespaces#names).
 
-A catalog is JSON: a message per key, or a group of them.
+A catalog is JSON, or whatever its format's [`parseFile`](#formats) reads: a message per key, or a
+group of them.
 
 ## `functions`
 
@@ -63,17 +64,38 @@ Message syntaxes beyond `icu` and `mf2`. A `FormatAdapter` parses one message in
 compiler reads; a namespace's `format` names one. The CLI, the Vite plugin and
 [x18n](/reference/x18n) read it from here.
 
+| `FormatAdapter` |                                                                                 |
+| --------------- | ------------------------------------------------------------------------------- |
+| `name`          | The adapter's name                                                              |
+| `parse`         | `(source) => Model.Message`: one message into the MF2 data model                |
+| `parseFile`     | Optional. `(text) => { key: message \| group }`, for catalogs that are not JSON |
+
+Without `parseFile`, catalogs are read as JSON. With it, a namespace's catalogs can be `.po`, `.ftl`,
+`.properties` or anything else; a `parseFile` that throws is an `invalid-resource` diagnostic for that
+file.
+
 ```ts
 import { defineConfig, type FormatAdapter } from '@parlajs/compiler';
 
-// Every message as plain text: no params, no markup.
-const text: FormatAdapter = {
-  name: 'text',
+// Plain-text messages in `key = message` lines.
+const properties: FormatAdapter = {
+  name: 'properties',
   parse: (source) => ({ type: 'message', declarations: [], pattern: [source] }),
+  parseFile: (text) =>
+    Object.fromEntries(
+      text
+        .trim()
+        .split('\n')
+        .map((line) => {
+          const at = line.indexOf('=');
+          if (at < 0) throw new Error(`no "=" in "${line}"`);
+          return [line.slice(0, at).trim(), line.slice(at + 1).trim()];
+        }),
+    ),
 };
 
 export default defineConfig({
-  formats: { text },
-  namespaces: { legal: { format: 'text', path: 'locales/{locale}/legal.json' } },
+  formats: { properties },
+  namespaces: { legal: { format: 'properties', path: 'locales/{locale}/legal.properties' } },
 });
 ```

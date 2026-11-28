@@ -35,7 +35,9 @@ export default defineConfig({
 | Custom formats    | A namespace's messages through its own adapter, from the config's `formats`                    |
 | Selects           | Branches that need different params are left to TypeScript, which checks each one              |
 
-A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it.
+A namespace counts only when imported from its `namespaces/{ns}.js`, as Parla writes it. A catalog
+that is not JSON, read through its adapter's [`parseFile`](/reference/config#formats), needs an x18n
+format for its extension too: x18n reads and writes it.
 
 ## Options
 
