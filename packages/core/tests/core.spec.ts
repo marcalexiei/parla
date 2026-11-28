@@ -94,6 +94,26 @@ describe(createParla, () => {
     expect(calls).toStrictEqual(['en/checkout', 'en/common']);
   });
 
+  it("formats dates in its timeZone, not the host's", async () => {
+    const dates = {
+      name: 'dates',
+      load: {
+        en: async (): Promise<MessageModule> =>
+          Promise.resolve({
+            default: (rt) => ({ day: (d: Date) => rt.f('date', d, { day: 'numeric' }) }),
+          }),
+        it: async (): Promise<MessageModule> => Promise.reject(new Error('unused')),
+      },
+    };
+    const late = new Date(Date.UTC(2026, 10, 28, 3));
+    const day = async (timeZone: string): Promise<string> => {
+      const t = await createParla({ catalog, timeZone }).load([dates]);
+      return (t['dates'] as unknown as { day: (d: Date) => string }).day(late);
+    };
+    await expect(day('Europe/Rome')).resolves.toBe('28');
+    await expect(day('America/Los_Angeles')).resolves.toBe('27');
+  });
+
   it('loads where Array#toSorted is missing, as on Hermes', async () => {
     const { toSorted } = Array.prototype;
     // oxlint-disable-next-line no-extend-native -- stands in for an engine without it

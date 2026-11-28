@@ -41,6 +41,9 @@ createParla({
 });
 ```
 
+`timeZone` formats dates in an IANA zone instead of the host's, unless a message sets its own:
+a server's zone is rarely the reader's.
+
 Rich text is a `string` here and a `ReactNode` through `@parlajs/react`, so one namespace serves
 both, e.g. emails beside the app. Another adapter passes `wrapRich` and types `Parla<Node>`.
 

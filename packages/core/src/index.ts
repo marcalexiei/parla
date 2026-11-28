@@ -117,6 +117,11 @@ export type ParlaOptions<Node = string> = {
   catalog: Catalog;
   /** Initial locale. Defaults to the source locale. */
   locale?: Locale;
+  /**
+   * IANA zone for `:date`, `:time` and `:datetime` unless a message sets `timeZone`. Defaults to the
+   * host's, which on a server is rarely the reader's.
+   */
+  timeZone?: string;
   /** Turns message parts with markup into one node. Set by framework adapters. */
   wrapRich?: WrapRich<Node>;
 } & Declared<'functions', FunctionName, MessageFunction> &
@@ -179,7 +184,7 @@ g[INSTANCE] = marker;
 
 /** Rich text is a `string` unless `wrapRich` says otherwise: every part is then text. */
 export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<Node> {
-  const { wrapRich } = options;
+  const { wrapRich, timeZone } = options;
   const { locales, sourceLocale, fallbacks = {} } = options.catalog;
   const extensions = {
     functions: options.functions as Readonly<Record<string, MessageFunction>> | undefined,
@@ -212,6 +217,7 @@ export function createParla<Node = string>(options: ParlaOptions<Node>): Parla<N
         wrapRich as WrapRich<unknown> | undefined,
         extensions,
         fallbacks[locale],
+        timeZone,
       );
       runtimes.set(locale, rt);
     }
