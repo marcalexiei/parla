@@ -127,6 +127,7 @@ oxlint (type-aware) and oxfmt, from `@marcalexiei/oxlint-config` and `@marcalexi
 
 - **Each override carries its reason in `oxlint.config.ts`**; an inline disable, after `--`.
 - **Read the diff after `oxlint --fix`**, then typecheck and test.
+- **knip passes on a clean checkout**, with no `build/` or generated catalogs: CI runs it first.
 
 ## Dependencies
 

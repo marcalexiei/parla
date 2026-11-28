@@ -78,14 +78,15 @@ jobs:
       - name: Install Dependencies
         uses: marcalexiei/github-actions/setup-node-and-pnpm@2c28f768b03ce332a96804ae076f15c84f239684 # v4.0.2
 
+      # First, before anything builds or generates: knip must pass on a clean checkout.
+      - name: Lint (knip)
+        run: pnpm run lint:knip
+
       - name: Format
         run: pnpm run format:check
 
       - name: Lint
         run: pnpm run lint:ci
-
-      - name: Lint (knip)
-        run: pnpm run lint:knip
 
       - name: Typecheck
         run: pnpm run typecheck
