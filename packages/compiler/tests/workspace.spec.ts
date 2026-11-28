@@ -160,7 +160,7 @@ import { checkout } from '@utils/i18n/namespaces/checkout.js';
 
 const parla = createParla({
   catalog,
-  functions: { shout: (value) => String(value).toUpperCase() },
+  functions: { shout: ({ value }) => String(value).toUpperCase() },
   markup: { strong: (children) => children },
 });
 const t = await parla.load([checkout]);

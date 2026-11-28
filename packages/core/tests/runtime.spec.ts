@@ -56,7 +56,7 @@ describe(createRuntime, () => {
   it('formats dates in its time zone unless a message sets its own', () => {
     // Nov 28 in Rome, still Nov 27 in Los Angeles
     const late = new Date(Date.UTC(2026, 10, 28, 3));
-    const rome = createRuntime('en', undefined, {}, [], 'Europe/Rome');
+    const rome = createRuntime('en', { timeZone: 'Europe/Rome' });
     const inZone = (timeZone: string, options: Intl.DateTimeFormatOptions = {}): string =>
       new Intl.DateTimeFormat('en', { ...options, timeZone }).format(late);
     expect(rome.f('date', late)).toBe(inZone('Europe/Rome', { dateStyle: 'medium' }));
@@ -112,7 +112,7 @@ describe(createRuntime, () => {
 
   it('joins text parts, and wraps every part once one is not text', () => {
     const node = { node: true };
-    const wrapped = createRuntime('en', (parts) => ({ wrapped: parts }));
+    const wrapped = createRuntime('en', { wrapRich: (parts) => ({ wrapped: parts }) });
     expect(wrapped.rich(['a', 'b'])).toBe('ab');
     expect(wrapped.rich(['a ', node, ' b'])).toStrictEqual({ wrapped: ['a ', node, ' b'] });
   });
@@ -122,9 +122,9 @@ describe(createRuntime, () => {
   });
 
   it('calls custom functions after the built-in ones, with the options and locale', () => {
-    const ext = createRuntime('it', undefined, {
+    const ext = createRuntime('it', {
       functions: {
-        shout: (value, options, locale) =>
+        shout: ({ value, options, locale }) =>
           `${String(value).toUpperCase()}${typeof options['mark'] === 'string' ? options['mark'] : ''}@${locale}`,
         number: () => 'never',
       },
@@ -136,14 +136,25 @@ describe(createRuntime, () => {
 
   it('formats with the first fallback Intl has data for', () => {
     // `qaa` is a private-use code: no engine has data for it.
-    const fur = createRuntime('qaa', undefined, {}, ['it', 'en']);
+    const fur = createRuntime('qaa', { fallbacks: ['it', 'en'] });
     expect(fur.str(12_345.5)).toBe('12.345,5');
     expect(fur.f('currency', 2, { currency: 'EUR' })).toBe('2,00\u00A0€');
     expect(fur.sn(1_000_000)).toStrictEqual({ n: 1_000_000, cat: 'many' });
   });
 
+  it('passes custom functions the fallback chain', () => {
+    const ext = createRuntime('qaa', {
+      functions: {
+        ago: ({ value, locales }) =>
+          new Intl.RelativeTimeFormat(locales).format(Number(value), 'day'),
+      },
+      fallbacks: ['it', 'en'],
+    });
+    expect(ext.f('ago', -1)).toBe('1 giorno fa');
+  });
+
   it('renders default markup unless the call passes its own', () => {
-    const ext = createRuntime('en', undefined, { markup: { b: (c) => `*${String(c)}*` } });
+    const ext = createRuntime('en', { markup: { b: (c) => `*${String(c)}*` } });
     expect(ext.tag({}, 'b', ['bold'])).toBe('*bold*');
     expect(ext.tag({ b: (c: unknown) => `_${String(c)}_` }, 'b', ['bold'])).toBe('_bold_');
     expect(ext.tag({}, 'i', ['plain'])).toBe('plain');
