@@ -4,10 +4,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { createParla } from '@parlajs/core';
 import type { Catalog, Namespace } from '@parlajs/core';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { build, formatDiagnostic } from '../src/build.ts';
-import type { BuildResult } from '../src/build.ts';
+import { build, formatDiagnostic, formatDiagnostics, unreported } from '../src/build.ts';
+import type { BuildResult, Diagnostic } from '../src/build.ts';
 
 import { typecheck } from './typecheck.ts';
 
@@ -783,8 +783,6 @@ export default {
     const { diagnostics } = await build({ cwd: files });
     expect(diagnostics.map((d) => `${d.code}:${d.locale}:${d.message}`)).toStrictEqual([
       'invalid-resource:it:no "=" in "bye"',
-      'missing-translation:it:using "en"',
-      'missing-translation:it:using "en"',
     ]);
     const { ns, catalog } = await imported(files, 'app');
     const t = await createParla({ catalog }).load([ns]);
@@ -827,6 +825,159 @@ describe('diagnostics', () => {
     expect(formatDiagnostic({ level: 'warning', code: 'unknown-key', message: 'm' })).toBe(
       'warning [unknown-key] : m',
     );
+  });
+});
+
+/** A warning on `key`. */
+const at = (key: string): Diagnostic => ({
+  level: 'warning',
+  code: 'missing-translation',
+  key,
+  message: 'm',
+});
+
+describe('warnings', () => {
+  const dir = join(tmp, 'build-test-warnings');
+
+  it('report each problem once, on one line', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'en-GB', 'pt', 'pt-BR', 'it'],
+        fallbacks: { 'pt-BR': ['pt'] },
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    const keys = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    put(dir, 'locales/en/app.json', Object.fromEntries(keys.map((k) => [k, k.toUpperCase()])));
+    put(dir, 'locales/pt/app.json', { a: 'A', bad: '{oops' });
+    put(dir, 'locales/it/app.json', { a: '{oops', b: 'B' });
+    // en-GB has no file and pt-BR no keys: their parents report the gaps
+    put(dir, 'locales/pt-BR/app.json', {});
+    const { diagnostics, config } = await build({ cwd: dir, write: false });
+    const reports = formatDiagnostics(diagnostics, config.root);
+    // a key that fails to parse is not also untranslated
+    expect(
+      reports.filter((r) => r.level === 'error').map((r) => r.line.split(':')[0]),
+    ).toStrictEqual([
+      'error   [invalid-syntax] app › pt › bad',
+      'error   [invalid-syntax] app › it › a',
+    ]);
+    expect(reports.filter((r) => r.level === 'warning').map((r) => r.line)).toStrictEqual([
+      'warning [missing-translation] app › pt › b, c, d, e, f and 2 more: untranslated, using "en" (locales/pt/app.json)',
+      'warning [missing-translation] app › it › c, d, e, f, g, h: untranslated, using "en" (locales/it/app.json)',
+    ]);
+  });
+
+  it('repeat on a rebuild only when new', () => {
+    const fresh = unreported();
+    expect(fresh([at('a')])).toStrictEqual([at('a')]);
+    expect(fresh([at('a')])).toStrictEqual([]);
+    expect(fresh([at('a'), at('b')])).toStrictEqual([at('b')]);
+    expect(fresh([at('b')])).toStrictEqual([]);
+    expect(fresh([at('a'), at('b')])).toStrictEqual([at('a')]);
+  });
+});
+
+describe('a translation against its source', () => {
+  const dir = join(tmp, 'build-test-against');
+
+  it('reports params and markup the source does not have', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'it'],
+        namespaces: {
+          app: { format: 'icu', path: 'locales/{locale}/app.json' },
+          mf: { format: 'mf2', path: 'locales/{locale}/mf.json' },
+        },
+      }),
+    );
+    put(dir, 'locales/en/app.json', {
+      count: '{n, number} items',
+      hi: 'Hi',
+      plain: 'Hello',
+      part: '{kind, select, part {Part {part}} other {None}}',
+      size: 5,
+    });
+    put(dir, 'locales/it/app.json', {
+      count: '{n, date} articoli',
+      hi: '<b>Ciao</b>',
+      plain: 'Ciao {name}',
+      part: 'Parte {part}',
+    });
+    put(dir, 'locales/en/mf.json', { x: '{$x :nope}' });
+    put(dir, 'locales/it/mf.json', { x: '{$x}' });
+    const { diagnostics } = await build({ cwd: dir, write: false });
+    expect(
+      diagnostics.map((d) => `${d.code}:${d.namespace}:${d.locale}:${d.key}:${d.message}`),
+    ).toStrictEqual([
+      'invalid-resource:app:en:size:expected a string or an object, got number',
+      'param-mismatch:app:it:count:$n is Date | number here but number in the source',
+      'param-mismatch:app:it:hi:uses markup "b", which the source message does not have',
+      'param-mismatch:app:it:plain:uses $name, which the source message does not have',
+      'param-mismatch:app:it:part:needs $part when $kind is another value, but the source does not',
+      // the source's error only: there is nothing to compare the translation with
+      expect.stringMatching(/^invalid-syntax:mf:en:x:/),
+    ]);
+  });
+});
+
+describe('a build', () => {
+  const dir = join(tmp, 'build-test-edges');
+
+  it('fails without the source catalog', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(
+      dir,
+      'parla.config.ts',
+      configModule({
+        locales: ['en', 'it'],
+        namespaces: { app: { format: 'icu', path: 'locales/{locale}/app.json' } },
+      }),
+    );
+    put(dir, 'locales/it/app.json', { hi: 'Ciao' });
+    const { diagnostics } = await build({ cwd: dir, write: false });
+    expect(diagnostics.map((d) => `${d.level}:${d.code}:${d.locale}:${d.key ?? ''}`)).toStrictEqual(
+      ['error:missing-file:en:', 'warning:unknown-key:it:hi'],
+    );
+  });
+
+  it('runs in the working folder, and writes only the catalog without namespaces', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    put(dir, 'parla.config.ts', configModule({ locales: ['en'] }));
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(dir);
+    try {
+      const { written } = await build();
+      expect(written.map((f) => f.slice(dir.length + 1)).toSorted()).toStrictEqual([
+        'src/parla/catalog.d.ts',
+        'src/parla/catalog.js',
+      ]);
+    } finally {
+      cwd.mockRestore();
+    }
+  });
+});
+
+describe(formatDiagnostics, () => {
+  it('names up to six keys, and a diagnostic without one', () => {
+    const six = ['a', 'b', 'c', 'd', 'e', 'f'].map((key) => at(key));
+    expect(formatDiagnostics(six).map((r) => r.line)).toStrictEqual([
+      'warning [missing-translation] a, b, c, d, e, f: m',
+    ]);
+    expect(
+      formatDiagnostics([
+        { level: 'warning', code: 'namespace-name', namespace: 'my-app', message: 'm' },
+        { level: 'error', code: 'unknown-format', namespace: 'x', message: 'n' },
+      ]),
+    ).toStrictEqual([
+      { level: 'warning', line: 'warning [namespace-name] my-app: m' },
+      { level: 'error', line: 'error   [unknown-format] x: n' },
+    ]);
   });
 });
 

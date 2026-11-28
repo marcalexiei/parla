@@ -1,8 +1,8 @@
 import { resolve } from 'node:path';
 
-import type { Plugin, ViteDevServer } from 'vite';
+import type { Logger, Plugin, ViteDevServer } from 'vite';
 
-import { build, formatDiagnostic } from './build.ts';
+import { build, formatDiagnostics, unreported } from './build.ts';
 import type { BuildOptions, BuildResult } from './build.ts';
 
 export interface ParlaViteOptions extends Pick<BuildOptions, 'config'> {
@@ -15,12 +15,18 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
   let root = process.cwd();
   let watchFiles = new Set<string>();
   let isBuild = false;
+  let logger: Logger | undefined;
+  // One plugin serves every environment and rebuild: each would repeat the same warnings.
+  const fresh = unreported();
 
-  const run = async (log: (msg: string) => void): Promise<BuildResult> => {
+  const run = async (): Promise<BuildResult> => {
     const result = await build({ cwd: root, config: options.config });
     watchFiles = new Set(result.config.watchFiles.map((f) => resolve(f)));
-    for (const d of result.diagnostics) {
-      log(formatDiagnostic(d, result.config.root));
+    for (const { level, line } of formatDiagnostics(
+      fresh(result.diagnostics),
+      result.config.root,
+    )) {
+      logger?.[level === 'error' ? 'error' : 'warn'](`[parla] ${line}`);
     }
     return result;
   };
@@ -31,11 +37,10 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
     configResolved(config) {
       root = options.root ? resolve(config.root, options.root) : config.root;
       isBuild = config.command === 'build';
+      ({ logger } = config);
     },
     async buildStart() {
-      const result = await run((m) => {
-        this.warn(m);
-      });
+      const result = await run();
       for (const f of watchFiles) {
         this.addWatchFile(f);
       }
@@ -45,20 +50,25 @@ export function parla(options: ParlaViteOptions = {}): Plugin {
     },
     configureServer(server: ViteDevServer) {
       server.watcher.add([...watchFiles]);
+      // a save that leaves the config as broken as before repeats nothing
+      let failure: string | undefined;
       const onChange = async (file: string): Promise<void> => {
         if (!watchFiles.has(resolve(file))) {
           return;
         }
         try {
-          const result = await run((m) => {
-            server.config.logger.warn(m);
-          });
+          const result = await run();
+          failure = undefined;
           server.watcher.add([...watchFiles]);
           if (result.written.length > 0) {
             server.ws.send({ type: 'full-reload' });
           }
         } catch (error) {
-          server.config.logger.error(`parla: ${(error as Error).message}`);
+          const line = `parla: ${(error as Error).message}`;
+          if (line !== failure) {
+            server.config.logger.error(line);
+          }
+          failure = line;
         }
       };
       for (const event of ['change', 'add', 'unlink'] as const) {

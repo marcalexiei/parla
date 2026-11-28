@@ -71,4 +71,14 @@ describe(loadConfig, () => {
     writeFileSync(join(dir, 'parla.config.ts'), 'export const locales = ["en"];\n');
     await expect(loadConfig(dir)).rejects.toThrow(/must `export default defineConfig/);
   });
+
+  it('names a config that throws, as a ConfigError', async () => {
+    rmSync(dir, { recursive: true, force: true });
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, 'parla.config.ts');
+    writeFileSync(file, 'throw new Error("boom");\n');
+    const failed = loadConfig(dir);
+    await expect(failed).rejects.toThrow(`Cannot load ${file}: boom`);
+    await expect(failed).rejects.toBeInstanceOf(ConfigError);
+  });
 });
